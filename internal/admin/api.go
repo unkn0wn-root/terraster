@@ -5,18 +5,21 @@ import (
 	"net/http"
 
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
+	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
 	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
 )
 
 type AdminAPI struct {
 	serverPool *pool.ServerPool
 	mux        *http.ServeMux
+	config     *config.Config
 }
 
-func NewAdminAPI(pool *pool.ServerPool) *AdminAPI {
+func NewAdminAPI(pool *pool.ServerPool, cfg *config.Config) *AdminAPI {
 	api := &AdminAPI{
 		serverPool: pool,
 		mux:        http.NewServeMux(),
+		config:     cfg,
 	}
 	api.registerRoutes()
 	return api
@@ -30,7 +33,23 @@ func (a *AdminAPI) registerRoutes() {
 }
 
 func (a *AdminAPI) Handler() http.Handler {
-	return a.mux
+	var middlewares []middleware.Middleware
+
+	if a.config.Auth.Enabled {
+		middlewares = append(middlewares, middleware.NewAuthMiddleware(config.AuthConfig{
+			APIKey: a.config.Auth.APIKey,
+		}))
+	}
+
+	middlewares = append(middlewares,
+		NewAdminAccessLogMiddleware(),
+		middleware.NewRateLimiterMiddleware(
+			a.config.AdminAPI.RateLimit.RequestsPerSecond,
+			a.config.AdminAPI.RateLimit.Burst),
+	)
+
+	chain := middleware.NewMiddlewareChain(middlewares...)
+	return chain.Then(a.mux)
 }
 
 func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {

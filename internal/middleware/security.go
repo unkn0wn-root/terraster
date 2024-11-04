@@ -18,7 +18,6 @@ type SecurityConfig struct {
 func SecurityMiddleware(config SecurityConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// HSTS
 			if config.HSTS {
 				value := fmt.Sprintf("max-age=%d", config.HSTSMaxAge)
 				if config.HSTSIncludeSubDomains {
@@ -30,17 +29,14 @@ func SecurityMiddleware(config SecurityConfig) func(http.Handler) http.Handler {
 				w.Header().Set("Strict-Transport-Security", value)
 			}
 
-			// Frame Options
 			if config.FrameOptions != "" {
 				w.Header().Set("X-Frame-Options", config.FrameOptions)
 			}
 
-			// Content Type Options
 			if config.ContentTypeOptions {
 				w.Header().Set("X-Content-Type-Options", "nosniff")
 			}
 
-			// XSS Protection
 			if config.XSSProtection {
 				w.Header().Set("X-XSS-Protection", "1; mode=block")
 			}

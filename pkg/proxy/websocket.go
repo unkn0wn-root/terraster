@@ -27,7 +27,6 @@ func NewWebSocketProxy(backend *url.URL) *WebSocketProxy {
 }
 
 func (wp *WebSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Connect to backend
 	backendURL := *wp.backend
 	backendURL.Scheme = strings.Replace(backendURL.Scheme, "http", "ws", 1)
 	backendConn, _, err := websocket.DefaultDialer.Dial(backendURL.String(), nil)
@@ -37,7 +36,6 @@ func (wp *WebSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer backendConn.Close()
 
-	// Upgrade client connection
 	clientConn, err := wp.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return

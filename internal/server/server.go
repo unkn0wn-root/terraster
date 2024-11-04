@@ -47,7 +47,7 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 	}
 
 	// Initialize admin API
-	srv.adminAPI = admin.NewAdminAPI(serverPool)
+	srv.adminAPI = admin.NewAdminAPI(serverPool, cfg)
 
 	// Add backends
 	for _, backend := range cfg.Backends {
