@@ -1,15 +1,28 @@
 port: 8080
 admin_port: 8081
-algorithm: round-robin
+algorithm: least-response-time
 
-backends:
-  - url: http://localhost:8081
-    weight: 5
-    max_connections: 1000
+services:
+  - name: api1
+    path: "/api1/"
+    backends:
+      - url: http://localhost:8081
+        weight: 5
+        max_connections: 1000
 
-  - url: http://localhost:8082
-    weight: 3
-    max_connections: 800
+      - url: http://localhost:8082
+        weight: 3
+        max_connections: 800
+  - name: api2
+    path: "/api2/"
+    backends:
+      - url: http://localhost:8083
+        weight: 5
+        max_connections: 1000
+
+      - url: http://localhost:8084
+        weight: 3
+        max_connections: 800
 
 health_check:
   interval: 10s

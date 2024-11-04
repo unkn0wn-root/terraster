@@ -79,7 +79,7 @@ func (lrt *LeastResponseTime) periodicCleanup() {
 	ticker := time.NewTicker(lrt.updateInterval)
 	for range ticker.C {
 		lrt.mu.Lock()
-		for server, _ := range lrt.responseTimes {
+		for server := range lrt.responseTimes {
 			// Remove stale entries
 			if _, exists := lrt.responseTimes[server]; !exists {
 				delete(lrt.responseTimes, server)

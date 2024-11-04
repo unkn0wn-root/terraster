@@ -18,6 +18,7 @@ type Config struct {
 	ConnPool    PoolConfig      `yaml:"connection_pool"`
 	Auth        AuthConfig      `yaml:"auth"`
 	AdminAPI    AdminAPIConfig  `yaml:"admin_api"`
+	Services    []Service       `yaml:"services"`
 }
 
 type TLSConfig struct {
@@ -67,6 +68,12 @@ type AuthConfig struct {
 
 type AdminAPIConfig struct {
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
+}
+
+type Service struct {
+	Name     string          `yaml:"name"`
+	Path     string          `yaml:"path"`
+	Backends []BackendConfig `yaml:"backends"`
 }
 
 func Load(path string) (*Config, error) {
