@@ -48,7 +48,6 @@ func main() {
 	go func() {
 		if err := srv.Start(ctx); err != nil {
 			errChan <- err
-			cancel()
 		}
 	}()
 
