@@ -25,6 +25,8 @@ type Server struct {
 	server        *http.Server
 	adminServer   *http.Server
 	mu            sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Server, error) {
@@ -37,12 +39,16 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 		cfg.HealthCheck.Timeout,
 	)
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	// Create server instance
 	srv := &Server{
 		config:        cfg,
 		serverPool:    serverPool,
 		algorithm:     createAlgorithm(cfg.Algorithm),
 		healthChecker: healthChecker,
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 
 	// Initialize admin API
@@ -75,9 +81,9 @@ func createAlgorithm(name string) algorithm.Algorithm {
 	}
 }
 
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) Start(errorChan chan<- error) error {
 	// Start health checker
-	go s.healthChecker.Start(ctx)
+	go s.healthChecker.Start(s.ctx)
 
 	// Create main handler with middleware chain
 	mainHandler := s.setupMiddleware()
@@ -101,7 +107,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start admin server
 	go func() {
 		if err := s.adminServer.ListenAndServe(); err != http.ErrServerClosed {
+			defer s.cancel()
 			log.Printf("Admin server error: %v", err)
+			errorChan <- err
 		}
 	}()
 
@@ -166,13 +174,9 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	// Stop health checker
 	s.healthChecker.Stop()
 
-	// Create wait group for graceful shutdown
 	var wg sync.WaitGroup
-
-	// Shutdown main server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -181,7 +185,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}()
 
-	// Shutdown admin server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -27,7 +27,7 @@ func main() {
 
 	srv, err := server.New(ctx, cfg)
 	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
+		log.Fatalf("Failed to initialize server %v", err)
 	}
 
 	configWatcher, err := config.NewConfigWatcher(*configPath, func(newCfg *config.Config) {
@@ -36,7 +36,7 @@ func main() {
 		}
 	})
 	if err != nil {
-		log.Printf("Failed to start config watcher: %v", err)
+		log.Printf("Could not start config watcher: %v", err)
 	}
 	defer configWatcher.Close()
 
@@ -46,7 +46,7 @@ func main() {
 
 	errChan := make(chan error, 1)
 	go func() {
-		if err := srv.Start(ctx); err != nil {
+		if err := srv.Start(errChan); err != nil {
 			errChan <- err
 		}
 	}()
