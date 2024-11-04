@@ -1,0 +1,26 @@
+port: 8080
+admin_port: 8081
+algorithm: round-robin
+
+backends:
+  - url: http://localhost:8081
+    weight: 5
+    max_connections: 1000
+
+  - url: http://localhost:8082
+    weight: 3
+    max_connections: 800
+
+health_check:
+  interval: 10s
+  timeout: 2s
+  path: /health
+
+rate_limit:
+  requests_per_second: 100
+  burst: 150
+
+connection_pool:
+  max_idle: 100
+  max_open: 1000
+  idle_timeout: 90s

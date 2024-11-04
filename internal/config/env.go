@@ -21,7 +21,6 @@ func (e *EnvConfig) Load() *Config {
 	e.loadBasicConfig()
 	e.loadTLSConfig()
 	e.loadHealthCheck()
-	e.loadMetrics()
 	e.loadRateLimit()
 	e.loadConnectionPool()
 	e.loadBackends()
@@ -55,13 +54,6 @@ func (e *EnvConfig) loadHealthCheck() {
 			Healthy:   getEnvInt("LB_HEALTH_CHECK_HEALTHY_THRESHOLD", 2),
 			Unhealthy: getEnvInt("LB_HEALTH_CHECK_UNHEALTHY_THRESHOLD", 3),
 		},
-	}
-}
-
-func (e *EnvConfig) loadMetrics() {
-	e.config.Metrics = MetricsConfig{
-		Enabled: getEnvBool("LB_METRICS_ENABLED", true),
-		Port:    getEnvInt("LB_METRICS_PORT", 9090),
 	}
 }
 

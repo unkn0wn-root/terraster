@@ -14,8 +14,6 @@ type Config struct {
 	Algorithm   string          `yaml:"algorithm"`
 	Backends    []BackendConfig `yaml:"backends"`
 	HealthCheck HealthCheck     `yaml:"health_check"`
-	Metrics     MetricsConfig   `yaml:"metrics"`
-	Tracing     TracingConfig   `yaml:"tracing"`
 	RateLimit   RateLimitConfig `yaml:"rate_limit"`
 	ConnPool    PoolConfig      `yaml:"connection_pool"`
 }
@@ -47,17 +45,6 @@ type HealthCheck struct {
 type Thresholds struct {
 	Healthy   int `yaml:"healthy"`
 	Unhealthy int `yaml:"unhealthy"`
-}
-
-type MetricsConfig struct {
-	Enabled bool `yaml:"enabled"`
-	Port    int  `yaml:"port"`
-}
-
-type TracingConfig struct {
-	Enabled        bool   `yaml:"enabled"`
-	ServiceName    string `yaml:"service_name"`
-	JaegerEndpoint string `yaml:"jaeger_endpoint"`
 }
 
 type RateLimitConfig struct {

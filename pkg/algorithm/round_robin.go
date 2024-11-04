@@ -2,7 +2,6 @@ package algorithm
 
 import (
 	"net/http"
-	"sync/atomic"
 )
 
 type RoundRobin struct{}
@@ -17,7 +16,9 @@ func (rr *RoundRobin) NextServer(pool ServerPool, _ *http.Request) *Server {
 		return nil
 	}
 
-	next := atomic.AddUint64(&pool.GetCurrentIndex(), 1)
+	currentIdx := pool.GetCurrentIndex()
+	next := currentIdx + 1
+	pool.SetCurrentIndex(next)
 	idx := next % uint64(len(servers))
 
 	l := uint64(len(servers))

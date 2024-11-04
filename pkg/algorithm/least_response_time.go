@@ -44,7 +44,7 @@ func (lrt *LeastResponseTime) NextServer(pool ServerPool, _ *http.Request) *Serv
 			continue
 		}
 
-		responseTime, exists := lrt.responseTimes[server.URL.String()]
+		responseTime, exists := lrt.responseTimes[server.URL]
 		if !exists {
 			return server // Prefer untested servers
 		}
