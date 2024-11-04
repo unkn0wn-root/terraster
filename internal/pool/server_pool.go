@@ -32,8 +32,14 @@ func (s *ServerPool) UpdateConfig(update ConfigUpdate) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.algorithm = update.Algorithm
-	s.maxConnections = update.MaxConns
+	if update.MaxConns != 0 {
+		s.maxConnections = update.MaxConns
+	}
+
+	if update.Algorithm != "" {
+		s.algorithm = update.Algorithm
+	}
+
 	return nil
 }
 

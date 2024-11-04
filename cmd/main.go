@@ -31,9 +31,7 @@ func main() {
 	}
 
 	configWatcher, err := config.NewConfigWatcher(*configPath, func(newCfg *config.Config) {
-		if err := srv.UpdateConfig(newCfg); err != nil {
-			log.Printf("Failed to update config: %v", err)
-		}
+		srv.UpdateConfig(newCfg)
 	})
 	if err != nil {
 		log.Printf("Could not start config watcher: %v", err)

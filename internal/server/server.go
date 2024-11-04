@@ -33,8 +33,7 @@ type Server struct {
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Server, error) {
-	serverPool := pool.NewServerPool()
-	serviceManager := service.NewManager(serverPool, cfg)
+	serviceManager := service.NewManager(cfg)
 
 	// Initialize health checker
 	healthChecker := health.NewChecker(
@@ -48,7 +47,6 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 	srv := &Server{
 		config:         cfg,
 		serviceManager: serviceManager,
-		serverPool:     serverPool,
 		algorithm:      createAlgorithm(cfg.Algorithm),
 		healthChecker:  healthChecker,
 		ctx:            ctx,
@@ -222,22 +220,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *Server) UpdateConfig(cfg *config.Config) error {
+func (s *Server) UpdateConfig(cfg *config.Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// Update configuration
 	s.config = cfg
-
-	// Update algorithm if changed
-	if s.algorithm.Name() != cfg.Algorithm {
-		s.algorithm = createAlgorithm(cfg.Algorithm)
-	}
-
-	// Update backends
-	if err := s.serverPool.UpdateBackends(cfg.Backends); err != nil {
-		return fmt.Errorf("failed to update backends: %v", err)
-	}
-
-	return nil
 }

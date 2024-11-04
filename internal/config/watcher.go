@@ -46,6 +46,7 @@ func (cw *ConfigWatcher) watch() {
 			}
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				if config, err := Load(cw.configPath); err == nil {
+					log.Printf("Reloading config")
 					cw.onChange(config)
 				} else {
 					log.Printf("Error reloading config: %v", err)

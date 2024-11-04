@@ -19,11 +19,12 @@ type ServiceInfo struct {
 	ServerPool *pool.ServerPool
 }
 
-func NewManager(serverPool *pool.ServerPool, cfg *config.Config) *Manager {
+func NewManager(cfg *config.Config) *Manager {
 	m := &Manager{
 		services: make(map[string]*ServiceInfo),
 	}
 
+	serverPool := pool.NewServerPool()
 	// If no services are defined in config, create a default service
 	if len(cfg.Services) == 0 && len(cfg.Backends) > 0 {
 		// Create default service
@@ -39,13 +40,15 @@ func NewManager(serverPool *pool.ServerPool, cfg *config.Config) *Manager {
 		}
 	} else {
 		for _, svc := range cfg.Services {
-			m.AddService(serverPool, svc)
+			m.AddService(svc)
 		}
 	}
+
 	return m
 }
 
-func (m *Manager) AddService(serverPool *pool.ServerPool, service config.Service) error {
+func (m *Manager) AddService(service config.Service) error {
+	serverPool := pool.NewServerPool()
 	for _, backend := range service.Backends {
 		if err := serverPool.AddBackend(backend); err != nil {
 			return err

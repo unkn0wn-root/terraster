@@ -6,7 +6,7 @@ services:
   - name: api1
     path: "/api1/"
     backends:
-      - url: http://localhost:8081
+      - url: http://localhost:8085
         weight: 5
         max_connections: 1000
 
