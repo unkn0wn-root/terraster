@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/server"
@@ -45,8 +46,7 @@ func main() {
 
 	errChan := make(chan error, 1)
 	go func() {
-		if err := srv.Start(); err != nil {
-			log.Printf("Server error: %v", err)
+		if err := srv.Start(ctx); err != nil {
 			errChan <- err
 			cancel()
 		}
@@ -62,7 +62,10 @@ func main() {
 		log.Println("Context cancelled")
 	}
 
-	if err := srv.Shutdown(ctx); err != nil && err != context.Canceled {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
 		log.Printf("Error during shutdown: %v", err)
 	} else {
 		log.Println("Shutdown completed")

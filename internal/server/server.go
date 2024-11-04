@@ -75,9 +75,9 @@ func createAlgorithm(name string) algorithm.Algorithm {
 	}
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	// Start health checker
-	go s.healthChecker.Start(context.Background())
+	go s.healthChecker.Start(ctx)
 
 	// Create main handler with middleware chain
 	mainHandler := s.setupMiddleware()
