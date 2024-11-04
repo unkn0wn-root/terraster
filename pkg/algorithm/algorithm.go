@@ -20,7 +20,7 @@ type Server struct {
 	URL              string
 	Weight           int
 	CurrentWeight    int
-	ConnectionCount  int
+	ConnectionCount  int32
 	Alive            bool
 	LastResponseTime time.Duration
 }

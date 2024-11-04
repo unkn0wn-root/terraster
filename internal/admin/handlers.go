@@ -3,17 +3,14 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
 )
 
 type BackendStatus struct {
 	URL         string `json:"url"`
 	Alive       bool   `json:"alive"`
 	Connections int32  `json:"connections"`
-}
-
-type ConfigUpdate struct {
-	Algorithm string `json:"algorithm"`
-	MaxConns  int    `json:"max_connections"`
 }
 
 func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +20,7 @@ func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(cfg)
 
 	case http.MethodPut:
-		var update ConfigUpdate
+		var update pool.ConfigUpdate
 		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

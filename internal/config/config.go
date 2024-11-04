@@ -25,6 +25,8 @@ type TLSConfig struct {
 	Domains  []string `yaml:"domains"`
 	CertDir  string   `yaml:"cert_dir"`
 	AutoCert bool     `yaml:"auto_cert"`
+	CertFile string   `yaml:"cert_file"`
+	KeyFile  string   `yaml:"key_file"`
 }
 
 type BackendConfig struct {

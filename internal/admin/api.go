@@ -9,13 +9,13 @@ import (
 )
 
 type AdminAPI struct {
-	serverPool pool.ServerPool
+	serverPool *pool.ServerPool
 	mux        *http.ServeMux
 }
 
 func NewAdminAPI(pool *pool.ServerPool) *AdminAPI {
 	api := &AdminAPI{
-		serverPool: *pool,
+		serverPool: pool,
 		mux:        http.NewServeMux(),
 	}
 	api.registerRoutes()
@@ -80,7 +80,7 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	backends := a.serverPool.GetBackends()
 
 	for _, backend := range backends {
-		health[backend.URL.String()] = map[string]interface{}{
+		health[backend.URL] = map[string]interface{}{
 			"alive":       backend.Alive,
 			"connections": backend.ConnectionCount,
 		}

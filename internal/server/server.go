@@ -18,7 +18,7 @@ import (
 
 type Server struct {
 	config        *config.Config
-	serverPool    pool.ServerPool
+	serverPool    *pool.ServerPool
 	algorithm     algorithm.Algorithm
 	healthChecker *health.Checker
 	adminAPI      *admin.AdminAPI
@@ -135,9 +135,15 @@ func (s *Server) setupMiddleware() http.Handler {
 }
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	backend := s.algorithm.NextServer(s.serverPool, r)
-	if backend == nil {
+	backendAlgo := s.algorithm.NextServer(s.serverPool, r)
+	if backendAlgo == nil {
 		http.Error(w, "No available backends", http.StatusServiceUnavailable)
+		return
+	}
+
+	backend := s.serverPool.GetBackendByURL(backendAlgo.URL)
+	if backend == nil {
+		http.Error(w, "Selected backend not found", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -148,9 +154,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Track active connections
 	backend.IncrementConnections()
 	defer backend.DecrementConnections()
-
-	// Update metrics
-	s.metrics.SetConnectionCount(backend.URL.String(), int(backend.ConnectionCount))
 
 	start := time.Now()
 	proxy := backend.ReverseProxy

@@ -40,6 +40,8 @@ func (e *EnvConfig) loadTLSConfig() {
 		Domains:  getEnvStringSlice("LB_TLS_DOMAINS", []string{}),
 		CertDir:  getEnv("LB_TLS_CERT_DIR", "/etc/certs"),
 		AutoCert: getEnvBool("LB_TLS_AUTO_CERT", false),
+		CertFile: getEnv("LB_TLS_CERT_FILE", ""),
+		KeyFile:  getEnv("LB_TLS_KEY_FILE", ""),
 	}
 }
 

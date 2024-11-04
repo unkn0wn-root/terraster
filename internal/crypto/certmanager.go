@@ -21,9 +21,9 @@ type CertManager struct {
 }
 
 type CertCache interface {
-	Get(key string) ([]byte, error)
-	Put(key string, data []byte) error
-	Delete(key string) error
+	Get(ctx context.Context, s string) ([]byte, error)
+	Put(ctx context.Context, s string, data []byte) error
+	Delete(context.Context, string) error
 }
 
 func NewCertManager(domains []string, certDir string, cache CertCache) *CertManager {
