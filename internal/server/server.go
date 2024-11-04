@@ -24,7 +24,6 @@ type Server struct {
 	adminAPI      *admin.AdminAPI
 	server        *http.Server
 	adminServer   *http.Server
-	metricsServer *http.Server
 	mu            sync.RWMutex
 }
 
@@ -191,28 +190,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}()
 
-	// Shutdown metrics server if enabled
-	if s.metricsServer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := s.metricsServer.Shutdown(ctx); err != nil {
-				log.Printf("Metrics server shutdown error: %v", err)
-			}
-		}()
-	}
-
 	// Wait for all servers to shutdown
-	waitChan := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
 		wg.Wait()
-		close(waitChan)
+		close(done)
 	}()
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-waitChan:
+	case <-done:
+		log.Println("All servers shutdown successfully")
 		return nil
 	}
 }

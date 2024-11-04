@@ -43,21 +43,28 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	errChan := make(chan error, 1)
 	go func() {
 		if err := srv.Start(); err != nil {
 			log.Printf("Server error: %v", err)
+			errChan <- err
 			cancel()
 		}
 	}()
 
 	select {
 	case <-sigChan:
-		log.Println("Shutdown signal received")
+		log.Println("Shutdown signal received, starting graceful shutdown")
+		cancel()
+	case err := <-errChan:
+		log.Printf("Server error triggered shutdown: %v", err)
 	case <-ctx.Done():
 		log.Println("Context cancelled")
 	}
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(ctx); err != nil && err != context.Canceled {
 		log.Printf("Error during shutdown: %v", err)
+	} else {
+		log.Println("Shutdown completed")
 	}
 }
