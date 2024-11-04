@@ -1,6 +1,6 @@
-# Not So Production Ready Load Balancer
+# Maybe Production Ready Load Balancer
 
-A low-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
+A ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
 
 ## Features
 
