@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,26 +13,28 @@ import (
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
 	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
+	"github.com/unkn0wn-root/go-load-balancer/internal/service"
 	"github.com/unkn0wn-root/go-load-balancer/pkg/algorithm"
 	"github.com/unkn0wn-root/go-load-balancer/pkg/health"
 )
 
 type Server struct {
-	config        *config.Config
-	serverPool    *pool.ServerPool
-	algorithm     algorithm.Algorithm
-	healthChecker *health.Checker
-	adminAPI      *admin.AdminAPI
-	server        *http.Server
-	adminServer   *http.Server
-	mu            sync.RWMutex
-	ctx           context.Context
-	cancel        context.CancelFunc
+	config         *config.Config
+	algorithm      algorithm.Algorithm
+	healthChecker  *health.Checker
+	adminAPI       *admin.AdminAPI
+	server         *http.Server
+	adminServer    *http.Server
+	serviceManager *service.Manager
+	serverPool     *pool.ServerPool
+	mu             sync.RWMutex
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Server, error) {
-	// Create server pool
 	serverPool := pool.NewServerPool()
+	serviceManager := service.NewManager(serverPool, cfg)
 
 	// Initialize health checker
 	healthChecker := health.NewChecker(
@@ -43,23 +46,17 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 
 	// Create server instance
 	srv := &Server{
-		config:        cfg,
-		serverPool:    serverPool,
-		algorithm:     createAlgorithm(cfg.Algorithm),
-		healthChecker: healthChecker,
-		ctx:           ctx,
-		cancel:        cancel,
+		config:         cfg,
+		serviceManager: serviceManager,
+		serverPool:     serverPool,
+		algorithm:      createAlgorithm(cfg.Algorithm),
+		healthChecker:  healthChecker,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 
 	// Initialize admin API
-	srv.adminAPI = admin.NewAdminAPI(serverPool, cfg)
-
-	// Add backends
-	for _, backend := range cfg.Backends {
-		if err := serverPool.AddBackend(backend); err != nil {
-			return nil, fmt.Errorf("failed to add backend %s: %v", backend.URL, err)
-		}
-	}
+	srv.adminAPI = admin.NewAdminAPI(serviceManager, cfg)
 
 	return srv, nil
 }
@@ -142,16 +139,32 @@ func (s *Server) setupMiddleware() http.Handler {
 }
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	backendAlgo := s.algorithm.NextServer(s.serverPool, r)
+	// Find the appropriate service for this path
+	serviceInfo := s.serviceManager.GetServiceForPath(r.URL.Path)
+	if serviceInfo == nil {
+		http.Error(w, "Service not found", http.StatusNotFound)
+		return
+	}
+
+	// Get backend for the service's server pool
+	backendAlgo := s.algorithm.NextServer(serviceInfo.ServerPool, r)
 	if backendAlgo == nil {
 		http.Error(w, "No available backends", http.StatusServiceUnavailable)
 		return
 	}
 
-	backend := s.serverPool.GetBackendByURL(backendAlgo.URL)
+	backend := serviceInfo.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
 		http.Error(w, "Selected backend not found", http.StatusServiceUnavailable)
 		return
+	}
+
+	// Strip the service path prefix if needed
+	if strings.HasPrefix(r.URL.Path, serviceInfo.Path) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, serviceInfo.Path)
+		if !strings.HasPrefix(r.URL.Path, "/") {
+			r.URL.Path = "/" + r.URL.Path
+		}
 	}
 
 	// Add backend to context
