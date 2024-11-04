@@ -91,7 +91,6 @@ type Backend struct {
 	mu              sync.RWMutex
 }
 
-// Implement algorithm.Server interface for Backend
 func (b *Backend) GetURL() string {
 	return b.URL.String()
 }
@@ -165,7 +164,6 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 	return nil
 }
 
-// Add the RemoveBackend method
 func (s *ServerPool) RemoveBackend(backendURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -233,10 +231,8 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Create new backends slice
 	newBackends := make([]*Backend, 0)
 
-	// Add or update backends
 	for _, cfg := range configs {
 		url, err := url.Parse(cfg.URL)
 		if err != nil {
@@ -257,7 +253,6 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 			existing.Weight = cfg.Weight
 			newBackends = append(newBackends, existing)
 		} else {
-			// Create new backend
 			proxy := httputil.NewSingleHostReverseProxy(url)
 			backend := &Backend{
 				URL:          url,
@@ -269,12 +264,10 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 		}
 	}
 
-	// Replace backends slice
 	s.backends = newBackends
 	return nil
 }
 
-// Add method to get next proxy
 func (s *ServerPool) GetNextProxy(r *http.Request) *httputil.ReverseProxy {
 	if backend := s.GetNextPeer(); backend != nil {
 		atomic.AddInt32(&backend.ConnectionCount, 1)
@@ -295,7 +288,6 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 	return nil
 }
 
-// Add method to increment/decrement connection count
 func (b *Backend) IncrementConnections() {
 	atomic.AddInt32(&b.ConnectionCount, 1)
 }

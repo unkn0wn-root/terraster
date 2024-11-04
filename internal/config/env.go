@@ -24,6 +24,7 @@ func (e *EnvConfig) Load() *Config {
 	e.loadRateLimit()
 	e.loadConnectionPool()
 	e.loadBackends()
+	e.loadAuthBasicConfig()
 	return e.config
 }
 
@@ -96,6 +97,22 @@ func (e *EnvConfig) loadBackends() {
 		}
 
 		e.config.Backends = append(e.config.Backends, backend)
+	}
+}
+
+func (e *EnvConfig) loadAuthBasicConfig() {
+	e.config.Auth = AuthConfig{
+		Enabled: getEnvBool("LB_AUTH_ENABLED", true),
+		APIKey:  getEnv("LB_AUTH_API_KEY", "default-api-key"),
+	}
+}
+
+func (e *EnvConfig) loadAdminConfig() {
+	e.config.AdminAPI = AdminAPIConfig{
+		RateLimit: RateLimitConfig{
+			RequestsPerSecond: getEnvFloat("LB_ADMIN_RATE_LIMIT_RPS", 5.0),
+			Burst:             getEnvInt("LB_ADMIN_RATE_LIMIT_BURST", 10),
+		},
 	}
 }
 

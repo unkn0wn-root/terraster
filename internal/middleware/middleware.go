@@ -7,12 +7,10 @@ import (
 	"net/http"
 )
 
-// Middleware interface
 type Middleware interface {
 	Middleware(next http.Handler) http.Handler
 }
 
-// statusWriter implementation
 type statusWriter struct {
 	http.ResponseWriter
 	status int

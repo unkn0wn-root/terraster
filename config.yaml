@@ -16,6 +16,15 @@ health_check:
   timeout: 2s
   path: /health
 
+auth:
+  enabled: true
+  api_key: mySecretKey
+
+admin_api:
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
 rate_limit:
   requests_per_second: 100
   burst: 150
