@@ -39,14 +39,36 @@ go build -o load-balancer cmd/main.go
 
 2. Create a configuration file or use provided in repo (config.yaml):
 ```yaml
-port: 8080
-admin_port: 8081
+port: 443
+admin_port: 4433
 algorithm: round-robin
+
+services:
+  - name: backend-api
+    path: "/api/"
+    backends:
+      - url: http://internal-api1.local.com:8455
+        weight: 5
+        max_connections: 1000
+
+      - url: http://internal-api2.local.com:8455
+        weight: 3
+        max_connections: 800
+  - name: frontend
+    path: ""
+    backends:
+      - url: http://frontend-1.local.com:3000
+        weight: 5
+        max_connections: 1000
+
+      - url: http://frontend-2.local.com:3000
+        weight: 3
+        max_connections: 800
 
 tls:
   enabled: true
   domains:
-    - example.com
+    - local.com
   cert_dir: /etc/certs
   auto_cert: true
 
@@ -57,14 +79,6 @@ health_check:
   thresholds:
     healthy: 2
     unhealthy: 3
-
-backends:
-  - url: http://backend1:8081
-    weight: 5
-  - url: http://backend2:8082
-    weight: 3
-  - url: http://backend3:8083
-    weight: 2
 ```
 
 3. Run the load balancer:
