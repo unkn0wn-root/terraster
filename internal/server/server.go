@@ -119,6 +119,9 @@ func (s *Server) Start(errorChan chan<- error) error {
 
 func (s *Server) setupMiddleware() http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
+	// @toDo: get it from config
+	logger := middleware.NewLoggingMiddleware("/var/log/lb/access.log")
+	defer logger.Shutdown()
 
 	chain := middleware.NewMiddlewareChain(
 		middleware.NewCircuitBreaker(5, 30*time.Second),
@@ -126,8 +129,8 @@ func (s *Server) setupMiddleware() http.Handler {
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
 		),
-		middleware.NewLoggingMiddleware("/var/log/lb/access.log"),
 		middleware.NewServerHostMiddleware(),
+		logger,
 	)
 
 	return chain.Then(baseHandler)
