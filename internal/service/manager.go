@@ -77,20 +77,22 @@ func (m *Manager) GetService(host, path string) *ServiceInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// If there's only one service with empty path, return it
-	if len(m.services) == 1 {
-		for _, service := range m.services {
-			return service
-		}
-	}
-
-	// Find the most specific path match
 	var matchedService *ServiceInfo
 	var matchedLen int
 
 	for _, service := range m.services {
-		if service.Host != "" && !matchHost(service.Host, host) {
-			continue
+		// check if host is set
+		if service.Host != "" {
+			// skip if host is set but does not match
+			if !matchHost(service.Host, host) {
+				continue
+			}
+
+			// if matchedLen is not 0, then we found some matching service
+			// which means we should skip to the path matching
+			if service.Path == "" && matchedLen == 0 {
+				return service
+			}
 		}
 
 		if strings.HasPrefix(path, service.Path) && len(service.Path) > matchedLen {
