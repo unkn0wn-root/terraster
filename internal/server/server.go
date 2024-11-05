@@ -46,7 +46,6 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	// Create server instance
 	srv := &Server{
 		config:         cfg,
 		serviceManager: serviceManager,
@@ -55,7 +54,7 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 		ctx:            ctx,
 		cancel:         cancel,
 	}
-	// Initialize admin API
+
 	srv.adminAPI = admin.NewAdminAPI(serviceManager, cfg)
 
 	return srv, nil
@@ -79,13 +78,10 @@ func createAlgorithm(name string) algorithm.Algorithm {
 }
 
 func (s *Server) Start(errorChan chan<- error) error {
-	// Start health checker
 	go s.healthChecker.Start(s.ctx)
 
-	// Create main handler with middleware chain
 	mainHandler := s.setupMiddleware()
 
-	// Create main server
 	s.server = &http.Server{
 		Addr:           fmt.Sprintf(":%d", s.config.Port),
 		Handler:        mainHandler,
@@ -95,13 +91,12 @@ func (s *Server) Start(errorChan chan<- error) error {
 		MaxHeaderBytes: 1 << 20, // 1MB
 	}
 
-	// Create admin server
+	// admin server
 	s.adminServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.config.AdminPort),
 		Handler: s.adminAPI.Handler(),
 	}
 
-	// Start admin server
 	go func() {
 		if err := s.adminServer.ListenAndServe(); err != http.ErrServerClosed {
 			defer s.cancel()
@@ -110,7 +105,7 @@ func (s *Server) Start(errorChan chan<- error) error {
 		}
 	}()
 
-	// Start main server
+	// main server
 	log.Printf("Load balancer started on port %d", s.config.Port)
 	if s.config.TLS.Enabled {
 		return s.server.ListenAndServeTLS(
@@ -118,35 +113,34 @@ func (s *Server) Start(errorChan chan<- error) error {
 			s.config.TLS.KeyFile,
 		)
 	}
+
 	return s.server.ListenAndServe()
 }
 
 func (s *Server) setupMiddleware() http.Handler {
-	// Create base handler
 	baseHandler := http.HandlerFunc(s.handleRequest)
 
-	// Create middleware chain
 	chain := middleware.NewMiddlewareChain(
 		middleware.NewLoggingMiddleware(nil),
 		middleware.NewRateLimiterMiddleware(
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
 		),
-		middleware.NewCircuitBreaker(5, time.Minute),
+		middleware.NewCircuitBreaker(5, 30*time.Second),
 	)
 
 	return chain.Then(baseHandler)
 }
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	// Find the appropriate service for this path
+	// find the appropriate service for this path
 	serviceInfo := s.serviceManager.GetServiceForPath(r.URL.Path)
 	if serviceInfo == nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return
 	}
 
-	// Get backend for the service's server pool
+	// get backend for the service's server pool
 	backendAlgo := s.algorithm.NextServer(serviceInfo.ServerPool, r)
 	if backendAlgo == nil {
 		http.Error(w, "No available backends", http.StatusServiceUnavailable)
@@ -159,7 +153,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Strip the service path prefix if needed
+	// strip the service path prefix if needed
 	if strings.HasPrefix(r.URL.Path, serviceInfo.Path) {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, serviceInfo.Path)
 		if !strings.HasPrefix(r.URL.Path, "/") {
@@ -167,11 +161,9 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add backend to context
 	ctx := context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())
 	r = r.WithContext(ctx)
 
-	// Track active connections
 	backend.IncrementConnections()
 	defer backend.DecrementConnections()
 
@@ -180,7 +172,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 	duration := time.Since(start)
 
-	// Record response time for least-response-time algorithm
+	// record response time for least-response-time algorithm
 	if lrt, ok := s.algorithm.(*algorithm.LeastResponseTime); ok {
 		lrt.UpdateResponseTime(backend.URL.String(), duration)
 	}
@@ -206,7 +198,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}()
 
-	// Wait for all servers to shutdown
+	// wait for all servers to shutdown
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()

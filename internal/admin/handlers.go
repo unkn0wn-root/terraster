@@ -45,7 +45,7 @@ func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(cfg)
 
 	case http.MethodPut:
-		var update pool.ConfigUpdate
+		var update pool.Config
 		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
