@@ -86,7 +86,7 @@ func (m *Manager) GetServiceForPath(path string) *ServiceInfo {
 	var matchedLen int
 
 	for servicePath, service := range m.services {
-		if strings.HasPrefix(path, servicePath) && len(servicePath) >= matchedLen {
+		if strings.HasPrefix(path, servicePath) && len(servicePath) > matchedLen {
 			matchedService = service
 			matchedLen = len(servicePath)
 		}
