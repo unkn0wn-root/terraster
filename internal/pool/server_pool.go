@@ -89,6 +89,14 @@ func (s *ServerPool) SetMaxConnections(maxConns int) error {
 	return nil
 }
 
+func (s *ServerPool) GetCurrentIndex() uint64 {
+	return atomic.LoadUint64(&s.current)
+}
+
+func (s *ServerPool) SetCurrentIndex(idx uint64) {
+	atomic.StoreUint64(&s.current, idx)
+}
+
 func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
@@ -325,14 +333,6 @@ func (b *Backend) IncrementConnections() {
 
 func (b *Backend) DecrementConnections() {
 	atomic.AddInt32(&b.ConnectionCount, -1)
-}
-
-func (s *ServerPool) GetCurrentIndex() uint64 {
-	return atomic.LoadUint64(&s.current)
-}
-
-func (s *ServerPool) SetCurrentIndex(idx uint64) {
-	atomic.StoreUint64(&s.current, idx)
 }
 
 // Helper function for retry context
