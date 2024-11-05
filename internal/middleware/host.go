@@ -6,9 +6,7 @@ import (
 	"net/http"
 )
 
-type ctxKey string
-
-const TargetHost ctxKey = "target_host"
+const TargetHost string = "target_host"
 
 type ServerHostMiddleware struct{}
 
