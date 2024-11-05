@@ -1,31 +1,26 @@
-port: 8080
-admin_port: 8081
-algorithm: least-response-time
+port: 443
+admin_port: 4433
+algorithm: round-robin
 
 services:
-  - name: Desktops
-    host: desktop.krogsveen.org
+  - name: backend-api
+    path: "/api/"
+    backends:
+      - url: http://internal-api1.local.com:8455
+        weight: 5
+        max_connections: 1000
+
+      - url: http://internal-api2.local.com:8455
+        weight: 3
+        max_connections: 800
+  - name: frontend
     path: ""
     backends:
-      - url: http://193.75.49.222
+      - url: http://frontend-1.local.com:3000
         weight: 5
         max_connections: 1000
 
-  - name: SEQ
-    path: "/api"
-    backends:
-      - url: http://193.75.49.178
-        weight: 5
-        max_connections: 1000
-
-  - name: api2
-    path: "/api3/"
-    backends:
-      - url: http://localhost:8088
-        weight: 5
-        max_connections: 1000
-
-      - url: http://localhost:8089
+      - url: http://frontend-2.local.com:3000
         weight: 3
         max_connections: 800
 
