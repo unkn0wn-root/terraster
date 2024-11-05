@@ -1,12 +1,15 @@
 package service
 
 import (
+	"errors"
 	"strings"
 	"sync"
 
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
 )
+
+var ErrServiceAlreadyExists = errors.New("service already exists")
 
 type Manager struct {
 	services map[string]*ServiceInfo
@@ -19,40 +22,41 @@ type ServiceInfo struct {
 	ServerPool *pool.ServerPool
 }
 
-func NewManager(cfg *config.Config) *Manager {
+func NewManager(cfg *config.Config) (*Manager, error) {
 	m := &Manager{
 		services: make(map[string]*ServiceInfo),
 	}
 
-	serverPool := pool.NewServerPool()
 	// If no services are defined in config, create a default service
 	if len(cfg.Services) == 0 && len(cfg.Backends) > 0 {
 		// Create default service
-		for _, backend := range cfg.Backends {
-			serverPool.AddBackend(backend)
+		defaultService := config.Service{
+			Name:     "default",
+			Path:     "",
+			Backends: cfg.Backends,
 		}
-
-		// Add as default service with empty path
-		m.services[""] = &ServiceInfo{
-			Name:       "default",
-			Path:       "",
-			ServerPool: serverPool,
+		if err := m.AddService(defaultService); err != nil {
+			return nil, err
 		}
 	} else {
 		for _, svc := range cfg.Services {
-			m.AddService(svc)
+			if err := m.AddService(svc); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	return m
+	return m, nil
 }
 
 func (m *Manager) AddService(service config.Service) error {
-	serverPool := pool.NewServerPool()
-	for _, backend := range service.Backends {
-		if err := serverPool.AddBackend(backend); err != nil {
-			return err
-		}
+	serverPool, err := m.createServerPool(service.Backends)
+	if err != nil {
+		return err
+	}
+
+	if _, exist := m.services[service.Path]; exist {
+		return ErrServiceAlreadyExists
 	}
 
 	m.mu.Lock()
@@ -82,15 +86,27 @@ func (m *Manager) GetServiceForPath(path string) *ServiceInfo {
 	var matchedLen int
 
 	for servicePath, service := range m.services {
-		if strings.HasPrefix(path, servicePath) {
-			if len(servicePath) > matchedLen {
-				matchedService = service
-				matchedLen = len(servicePath)
-			}
+		if strings.HasPrefix(path, servicePath) && len(servicePath) >= matchedLen {
+			matchedService = service
+			matchedLen = len(servicePath)
 		}
 	}
 
 	return matchedService
+}
+
+func (m *Manager) GetServiceByName(name string) []*ServiceInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	services := make([]*ServiceInfo, 0, len(m.services))
+
+	for _, service := range m.services {
+		if service.Name == name {
+			services = append(services, service)
+		}
+	}
+	return services
 }
 
 func (m *Manager) GetServices() []*ServiceInfo {
@@ -102,4 +118,14 @@ func (m *Manager) GetServices() []*ServiceInfo {
 		services = append(services, service)
 	}
 	return services
+}
+
+func (m *Manager) createServerPool(backends []config.BackendConfig) (*pool.ServerPool, error) {
+	serverPool := pool.NewServerPool()
+	for _, backend := range backends {
+		if err := serverPool.AddBackend(backend); err != nil {
+			return nil, err
+		}
+	}
+	return serverPool, nil
 }

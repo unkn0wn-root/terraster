@@ -23,12 +23,7 @@ type Config struct {
 	MaxConns  int    `json:"max_connections"`
 }
 
-type ConfigUpdate struct {
-	Algorithm string `json:"algorithm"`
-	MaxConns  int    `json:"max_connections"`
-}
-
-func (s *ServerPool) UpdateConfig(update ConfigUpdate) error {
+func (s *ServerPool) UpdateConfig(update Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -61,6 +56,14 @@ type ServerPool struct {
 	mu             sync.RWMutex
 }
 
+func NewServerPool() *ServerPool {
+	return &ServerPool{
+		backends:       make([]*Backend, 0),
+		algorithm:      "round-robin", // default algorithm
+		maxConnections: 1000,          // default max connections
+	}
+}
+
 func (s *ServerPool) GetAlgorithm() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -85,50 +88,6 @@ func (s *ServerPool) SetMaxConnections(maxConns int) error {
 	defer s.mu.Unlock()
 	s.maxConnections = maxConns
 	return nil
-}
-
-type Backend struct {
-	URL             *url.URL
-	Alive           bool
-	Weight          int
-	CurrentWeight   int
-	ReverseProxy    *httputil.ReverseProxy
-	ConnectionCount int32
-	mu              sync.RWMutex
-}
-
-func (b *Backend) GetURL() string {
-	return b.URL.String()
-}
-
-func (b *Backend) GetWeight() int {
-	return b.Weight
-}
-
-func (b *Backend) GetCurrentWeight() int {
-	return b.CurrentWeight
-}
-
-func (b *Backend) SetCurrentWeight(weight int) {
-	b.CurrentWeight = weight
-}
-
-func (b *Backend) GetConnectionCount() int {
-	return int(atomic.LoadInt32(&b.ConnectionCount))
-}
-
-func (b *Backend) IsAlive() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.Alive
-}
-
-func NewServerPool() *ServerPool {
-	return &ServerPool{
-		backends:       make([]*Backend, 0),
-		algorithm:      "round-robin", // default algorithm
-		maxConnections: 1000,          // default max connections
-	}
 }
 
 func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
@@ -292,6 +251,42 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 		}
 	}
 	return nil
+}
+
+type Backend struct {
+	URL             *url.URL
+	Alive           bool
+	Weight          int
+	CurrentWeight   int
+	ReverseProxy    *httputil.ReverseProxy
+	ConnectionCount int32
+	mu              sync.RWMutex
+}
+
+func (b *Backend) GetURL() string {
+	return b.URL.String()
+}
+
+func (b *Backend) GetWeight() int {
+	return b.Weight
+}
+
+func (b *Backend) GetCurrentWeight() int {
+	return b.CurrentWeight
+}
+
+func (b *Backend) SetCurrentWeight(weight int) {
+	b.CurrentWeight = weight
+}
+
+func (b *Backend) GetConnectionCount() int {
+	return int(atomic.LoadInt32(&b.ConnectionCount))
+}
+
+func (b *Backend) IsAlive() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.Alive
 }
 
 func (b *Backend) IncrementConnections() {

@@ -35,7 +35,6 @@ func (a *AdminAPI) registerRoutes() {
 
 func (a *AdminAPI) Handler() http.Handler {
 	var middlewares []middleware.Middleware
-
 	if a.config.Auth.Enabled {
 		middlewares = append(middlewares, middleware.NewAuthMiddleware(config.AuthConfig{
 			APIKey: a.config.Auth.APIKey,
@@ -56,9 +55,20 @@ func (a *AdminAPI) Handler() http.Handler {
 func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		// get service by name
+		serviceName := r.URL.Query().Get("serviceName")
+		if serviceName != "" {
+			service := a.serviceManager.GetServiceByName(serviceName)
+			if service == nil {
+				http.Error(w, "Service not found", http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(service)
+			return
+		}
+		// else get all services
 		services := a.serviceManager.GetServices()
 		json.NewEncoder(w).Encode(services)
-
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -81,19 +91,18 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		backends := service.ServerPool.GetBackends()
 		json.NewEncoder(w).Encode(backends)
-
 	case http.MethodPost:
 		var backend config.BackendConfig
 		if err := json.NewDecoder(r.Body).Decode(&backend); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
 		if err := service.ServerPool.AddBackend(backend); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-
 	case http.MethodDelete:
 		var backend struct {
 			URL string `json:"url"`
@@ -102,12 +111,12 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
 		if err := service.ServerPool.RemoveBackend(backend.URL); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -121,7 +130,6 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	healthStatus := make(map[string]interface{})
 	services := a.serviceManager.GetServices()
-
 	for _, service := range services {
 		backends := service.ServerPool.GetBackends()
 		serviceHealth := make(map[string]interface{})
@@ -151,14 +159,12 @@ func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 		backends := service.ServerPool.GetBackends()
 		totalConnections := 0
 		activeBackends := 0
-
 		for _, backend := range backends {
 			if backend.Alive {
 				activeBackends++
 			}
 			totalConnections += int(backend.ConnectionCount)
 		}
-
 		stats[service.Name] = map[string]interface{}{
 			"total_backends":    len(backends),
 			"active_backends":   activeBackends,

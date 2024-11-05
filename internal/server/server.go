@@ -33,7 +33,10 @@ type Server struct {
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Server, error) {
-	serviceManager := service.NewManager(cfg)
+	serviceManager, err := service.NewManager(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	// Initialize health checker
 	healthChecker := health.NewChecker(
@@ -52,7 +55,6 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 		ctx:            ctx,
 		cancel:         cancel,
 	}
-
 	// Initialize admin API
 	srv.adminAPI = admin.NewAdminAPI(serviceManager, cfg)
 
