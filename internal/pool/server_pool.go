@@ -95,12 +95,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		return err
 	}
 
-	proxy := &httputil.ReverseProxy{}
-	proxy.Director = func(req *http.Request) {
-		req.URL.Scheme = url.Scheme
-		req.URL.Host = url.Host
-	}
-
+	proxy := httputil.NewSingleHostReverseProxy(url)
 	proxy.ModifyResponse = func(r *http.Response) error {
 		r.Header.Del("Server")
 		r.Header.Del("X-Powered-By")

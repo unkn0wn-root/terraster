@@ -121,12 +121,12 @@ func (s *Server) setupMiddleware() http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
 
 	chain := middleware.NewMiddlewareChain(
-		middleware.NewLoggingMiddleware(nil),
+		middleware.NewCircuitBreaker(5, 30*time.Second),
 		middleware.NewRateLimiterMiddleware(
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
 		),
-		middleware.NewCircuitBreaker(5, 30*time.Second),
+		middleware.NewLoggingMiddleware(nil),
 		middleware.NewServerHostMiddleware(),
 	)
 
@@ -134,8 +134,9 @@ func (s *Server) setupMiddleware() http.Handler {
 }
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+	host := middleware.GetTargetHost(r)
 	// find the appropriate service for this path
-	serviceInfo := s.serviceManager.GetService(r.Host, r.URL.Path)
+	serviceInfo := s.serviceManager.GetService(host, r.URL.Path)
 	if serviceInfo == nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return

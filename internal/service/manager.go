@@ -104,18 +104,17 @@ func (m *Manager) GetService(host, path string) *ServiceInfo {
 	return matchedService
 }
 
-func (m *Manager) GetServiceByName(name string) []*ServiceInfo {
+func (m *Manager) GetServiceByName(name string) *ServiceInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	services := make([]*ServiceInfo, 0, len(m.services))
-
 	for _, service := range m.services {
 		if service.Name == name {
-			services = append(services, service)
+			return service
 		}
 	}
-	return services
+
+	return nil
 }
 
 func (m *Manager) GetServices() []*ServiceInfo {

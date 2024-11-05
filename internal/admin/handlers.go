@@ -15,10 +15,10 @@ type BackendStatus struct {
 }
 
 func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
-	servicePath := r.URL.Query().Get("service")
+	serviceName := r.URL.Query().Get("service_name")
 	var service *service.ServiceInfo
 
-	if servicePath == "" {
+	if serviceName == "" {
 		// Get default service
 		services := a.serviceManager.GetServices()
 		switch len(services) {
@@ -28,11 +28,11 @@ func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "No services configured", http.StatusNotFound)
 			return
 		default:
-			http.Error(w, "Multiple services exist, please specify service path", http.StatusBadRequest)
+			http.Error(w, "Multiple services exist, please specify service name", http.StatusBadRequest)
 			return
 		}
 	} else {
-		service = a.serviceManager.GetService(r.Host, servicePath)
+		service = a.serviceManager.GetServiceByName(serviceName)
 		if service == nil {
 			http.Error(w, "Service not found", http.StatusNotFound)
 			return

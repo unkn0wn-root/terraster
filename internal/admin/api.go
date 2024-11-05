@@ -57,7 +57,7 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		// get service by name
-		serviceName := r.URL.Query().Get("serviceName")
+		serviceName := r.URL.Query().Get("service_name")
 		if serviceName != "" {
 			service := a.serviceManager.GetServiceByName(serviceName)
 			if service == nil {
@@ -76,13 +76,13 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
-	servicePath := r.URL.Query().Get("service")
-	if servicePath == "" {
-		http.Error(w, "Service path is required", http.StatusBadRequest)
+	serviceName := r.URL.Query().Get("service_name")
+	if serviceName == "" {
+		http.Error(w, "service_name is required", http.StatusBadRequest)
 		return
 	}
 
-	service := a.serviceManager.GetService(r.Host, servicePath)
+	service := a.serviceManager.GetServiceByName(serviceName)
 	if service == nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return
