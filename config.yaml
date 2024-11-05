@@ -4,7 +4,7 @@ algorithm: least-response-time
 
 services:
   - name: api1
-    path: "/api1/"
+    path: "/api-citrix/"
     backends:
       - url: http://193.75.49.222
         weight: 5

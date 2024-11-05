@@ -153,8 +153,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// strip the service path prefix if needed
-	if strings.HasPrefix(r.URL.Path, serviceInfo.Path) {
+	// strip the service path prefix if it exists
+	if serviceInfo.Path != "" {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, serviceInfo.Path)
 		if !strings.HasPrefix(r.URL.Path, "/") {
 			r.URL.Path = "/" + r.URL.Path

@@ -96,7 +96,23 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		return err
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(url)
+	proxy := &httputil.ReverseProxy{}
+	proxy.Director = func(req *http.Request) {
+		req.URL.Scheme = url.Scheme
+		req.URL.Host = url.Host
+	}
+
+	proxy.ModifyResponse = func(r *http.Response) error {
+		r.Header.Del("Server")
+		r.Header.Del("X-Powered-By")
+
+		r.Header.Set("X-Proxy-By", "go-load-balancer")
+
+		return nil
+	}
+
+	proxy.BufferPool = NewBufferPool()
+
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
@@ -110,10 +126,29 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 					proxy.ServeHTTP(w, r)
 					return
 				}
-				http.Error(w, "Service not available", http.StatusServiceUnavailable)
+				http.Error(w, "No proxy server available right now", http.StatusServiceUnavailable)
 			}
 		}
 	}
+
+	// Custom transport with timeouts and connection pooling
+	// proxy.Transport = &http.Transport{
+	//     Proxy: http.ProxyFromEnvironment,
+	//     DialContext: (&net.Dialer{
+	//         Timeout:   30 * time.Second,
+	//         KeepAlive: 30 * time.Second,
+	//     }).DialContext,
+	//     ForceAttemptHTTP2:     true,
+	//     MaxIdleConns:          100,
+	//     IdleConnTimeout:       90 * time.Second,
+	//     TLSHandshakeTimeout:   10 * time.Second,
+	//     ExpectContinueTimeout: 1 * time.Second,
+	//     MaxConnsPerHost:       10,
+	//     MaxIdleConnsPerHost:   10,
+	//     TLSClientConfig: &tls.Config{
+	//         InsecureSkipVerify: false, // set to true if you need to skip SSL verification
+	//     },
+	// },
 
 	backend := &Backend{
 		URL:          url,
