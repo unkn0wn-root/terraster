@@ -4,17 +4,35 @@ algorithm: least-response-time
 
 services:
   - name: api1
-    path: "/api-citrix/"
+    path: "/api1/"
     backends:
-      - url: http://193.75.49.222
+      - url: http://localhost:8085
         weight: 5
         max_connections: 1000
+
+      - url: http://localhost:8082
+        weight: 3
+        max_connections: 800
   - name: api2
     path: "/api2/"
     backends:
-      - url: http://193.75.49.178
-        weight: 1
+      - url: http://localhost:8083
+        weight: 5
         max_connections: 1000
+
+      - url: http://localhost:8084
+        weight: 3
+        max_connections: 800
+  - name: api2
+    path: "/api3/"
+    backends:
+      - url: http://localhost:8088
+        weight: 5
+        max_connections: 1000
+
+      - url: http://localhost:8089
+        weight: 3
+        max_connections: 800
 
 health_check:
   interval: 10s
