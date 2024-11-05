@@ -1,4 +1,4 @@
-# Maybe Production Ready Load Balancer
+# Uncomplicated Load Balancer
 
 A ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
 
