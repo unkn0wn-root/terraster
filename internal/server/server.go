@@ -127,6 +127,7 @@ func (s *Server) setupMiddleware() http.Handler {
 			s.config.RateLimit.Burst,
 		),
 		middleware.NewCircuitBreaker(5, 30*time.Second),
+		middleware.NewServerHostMiddleware(),
 	)
 
 	return chain.Then(baseHandler)
@@ -134,7 +135,7 @@ func (s *Server) setupMiddleware() http.Handler {
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// find the appropriate service for this path
-	serviceInfo := s.serviceManager.GetServiceForPath(r.URL.Path)
+	serviceInfo := s.serviceManager.GetService(r.Host, r.URL.Path)
 	if serviceInfo == nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return
@@ -143,13 +144,13 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// get backend for the service's server pool
 	backendAlgo := s.algorithm.NextServer(serviceInfo.ServerPool, r)
 	if backendAlgo == nil {
-		http.Error(w, "No available backends", http.StatusServiceUnavailable)
+		http.Error(w, "No service available right now", http.StatusServiceUnavailable)
 		return
 	}
 
 	backend := serviceInfo.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
-		http.Error(w, "Selected backend not found", http.StatusServiceUnavailable)
+		http.Error(w, "No peers available", http.StatusServiceUnavailable)
 		return
 	}
 

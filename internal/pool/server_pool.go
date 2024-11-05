@@ -23,6 +23,22 @@ type Config struct {
 	MaxConns  int    `json:"max_connections"`
 }
 
+type ServerPool struct {
+	backends       []*Backend
+	current        uint64
+	algorithm      string
+	maxConnections int
+	mu             sync.RWMutex
+}
+
+func NewServerPool() *ServerPool {
+	return &ServerPool{
+		backends:       make([]*Backend, 0),
+		algorithm:      "round-robin", // default algorithm
+		maxConnections: 1000,          // default max connections
+	}
+}
+
 func (s *ServerPool) UpdateConfig(update Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -47,23 +63,6 @@ func (s *ServerPool) GetConfig() Config {
 		MaxConns:  s.maxConnections,
 	}
 }
-
-type ServerPool struct {
-	backends       []*Backend
-	current        uint64
-	algorithm      string
-	maxConnections int
-	mu             sync.RWMutex
-}
-
-func NewServerPool() *ServerPool {
-	return &ServerPool{
-		backends:       make([]*Backend, 0),
-		algorithm:      "round-robin", // default algorithm
-		maxConnections: 1000,          // default max connections
-	}
-}
-
 func (s *ServerPool) GetAlgorithm() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -290,6 +289,7 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 
 type Backend struct {
 	URL             *url.URL
+	Host            string
 	Alive           bool
 	Weight          int
 	CurrentWeight   int

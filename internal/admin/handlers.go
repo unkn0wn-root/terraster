@@ -32,7 +32,7 @@ func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		service = a.serviceManager.GetServiceForPath(servicePath)
+		service = a.serviceManager.GetService(r.Host, servicePath)
 		if service == nil {
 			http.Error(w, "Service not found", http.StatusNotFound)
 			return

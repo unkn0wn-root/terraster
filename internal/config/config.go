@@ -72,6 +72,7 @@ type AdminAPIConfig struct {
 
 type Service struct {
 	Name     string          `yaml:"name"`
+	Host     string          `yaml:"host"`
 	Path     string          `yaml:"path"`
 	Backends []BackendConfig `yaml:"backends"`
 }

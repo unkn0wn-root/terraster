@@ -46,6 +46,7 @@ func (a *AdminAPI) Handler() http.Handler {
 		middleware.NewRateLimiterMiddleware(
 			a.config.AdminAPI.RateLimit.RequestsPerSecond,
 			a.config.AdminAPI.RateLimit.Burst),
+		middleware.NewServerHostMiddleware(),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)
@@ -81,7 +82,7 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := a.serviceManager.GetServiceForPath(servicePath)
+	service := a.serviceManager.GetService(r.Host, servicePath)
 	if service == nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return

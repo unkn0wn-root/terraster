@@ -18,6 +18,7 @@ type Manager struct {
 
 type ServiceInfo struct {
 	Name       string
+	Host       string
 	Path       string
 	ServerPool *pool.ServerPool
 }
@@ -32,6 +33,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		// Create default service
 		defaultService := config.Service{
 			Name:     "default",
+			Host:     "",
 			Path:     "",
 			Backends: cfg.Backends,
 		}
@@ -62,6 +64,7 @@ func (m *Manager) AddService(service config.Service) error {
 	m.mu.Lock()
 	m.services[service.Path] = &ServiceInfo{
 		Name:       service.Name,
+		Host:       service.Host,
 		Path:       service.Path,
 		ServerPool: serverPool,
 	}
@@ -70,7 +73,7 @@ func (m *Manager) AddService(service config.Service) error {
 	return nil
 }
 
-func (m *Manager) GetServiceForPath(path string) *ServiceInfo {
+func (m *Manager) GetService(host, path string) *ServiceInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -85,10 +88,14 @@ func (m *Manager) GetServiceForPath(path string) *ServiceInfo {
 	var matchedService *ServiceInfo
 	var matchedLen int
 
-	for servicePath, service := range m.services {
-		if strings.HasPrefix(path, servicePath) && len(servicePath) > matchedLen {
+	for _, service := range m.services {
+		if service.Host != "" && !matchHost(service.Host, host) {
+			continue
+		}
+
+		if strings.HasPrefix(path, service.Path) && len(service.Path) > matchedLen {
 			matchedService = service
-			matchedLen = len(servicePath)
+			matchedLen = len(service.Path)
 		}
 	}
 
@@ -128,4 +135,21 @@ func (m *Manager) createServerPool(backends []config.BackendConfig) (*pool.Serve
 		}
 	}
 	return serverPool, nil
+}
+
+func matchHost(pattern, host string) bool {
+	if !strings.Contains(pattern, "*") {
+		return pattern == host
+	}
+
+	if pattern == "*" {
+		return true
+	}
+
+	if strings.HasPrefix(pattern, "*.") {
+		suffix := pattern[1:] // Remove *
+		return strings.HasSuffix(host, suffix)
+	}
+
+	return false
 }
