@@ -154,11 +154,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// strip the service path prefix if it exists
-	if serviceInfo.Path != "" {
+	if serviceInfo.Path != "" && strings.HasPrefix(r.URL.Path, serviceInfo.Path) {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, serviceInfo.Path)
-		if !strings.HasPrefix(r.URL.Path, "/") {
-			r.URL.Path = "/" + r.URL.Path
-		}
 	}
 
 	ctx := context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())
