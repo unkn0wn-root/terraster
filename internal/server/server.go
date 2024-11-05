@@ -126,7 +126,7 @@ func (s *Server) setupMiddleware() http.Handler {
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
 		),
-		middleware.NewLoggingMiddleware(nil),
+		middleware.NewLoggingMiddleware("/var/log/lb/access.log"),
 		middleware.NewServerHostMiddleware(),
 	)
 
