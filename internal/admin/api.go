@@ -9,12 +9,15 @@ import (
 	"github.com/unkn0wn-root/go-load-balancer/internal/service"
 )
 
+// AdminAPI represents the administrative API for managing the load balancer.
 type AdminAPI struct {
 	serviceManager *service.Manager
 	mux            *http.ServeMux
 	config         *config.Config
 }
 
+// NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
+// It initializes the HTTP mux and registers all API routes.
 func NewAdminAPI(manager *service.Manager, cfg *config.Config) *AdminAPI {
 	api := &AdminAPI{
 		serviceManager: manager,
@@ -25,6 +28,7 @@ func NewAdminAPI(manager *service.Manager, cfg *config.Config) *AdminAPI {
 	return api
 }
 
+// registerRoutes sets up the HTTP handlers for various administrative endpoints.
 func (a *AdminAPI) registerRoutes() {
 	a.mux.HandleFunc("/api/backends", a.handleBackends)
 	a.mux.HandleFunc("/api/health", a.handleHealth)
@@ -34,8 +38,10 @@ func (a *AdminAPI) registerRoutes() {
 	a.mux.HandleFunc("/api/locations", a.handleLocations)
 }
 
+// Handler returns the HTTP handler for the AdminAPI, wrapped with necessary middleware.
 func (a *AdminAPI) Handler() http.Handler {
 	var middlewares []middleware.Middleware
+	// If authentication is enabled in the config, add the Auth middleware
 	if a.config.Auth.Enabled {
 		middlewares = append(middlewares, middleware.NewAuthMiddleware(config.AuthConfig{
 			APIKey: a.config.Auth.APIKey,
@@ -54,7 +60,8 @@ func (a *AdminAPI) Handler() http.Handler {
 	return chain.Then(a.mux)
 }
 
-// service API handlers
+// handleServices handles HTTP requests related to services.
+// Supports retrieving all services or a specific service by name.
 func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -77,7 +84,8 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handle underlying backends
+// handleBackends manages the backends for a specific service and location.
+// Supports GET, POST, and DELETE methods to retrieve, add, or remove backends.
 func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.URL.Query().Get("service_name")
 	serviceLocation := r.URL.Query().Get("path")
@@ -148,7 +156,8 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handle path locations
+// handleLocations handles HTTP GET requests to retrieve locations for a specific service.
+// It returns information about each location, including path, algorithm, and backend count
 func (a *AdminAPI) handleLocations(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -185,7 +194,8 @@ func (a *AdminAPI) handleLocations(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(locations)
 }
 
-// health check handler
+// handleHealth provides a health check endpoint that reports the status of all services and their backends.
+// It returns whether each backend is alive and the number of active connections.
 func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -211,7 +221,8 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(healthStatus)
 }
 
-// services stats handler
+// handleStats provides statistical information about services, including backend counts and connection metrics.
+// It returns total backends, active backends, and total connections per service.
 func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
