@@ -151,6 +151,8 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 	var maxConnections int32
 	if cfg.MaxConnections == 0 {
 		maxConnections = s.GetMaxConnections()
+	} else {
+		maxConnections = cfg.MaxConnections
 	}
 	backend := &Backend{
 		URL:            url,
