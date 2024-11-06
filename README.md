@@ -1,6 +1,6 @@
 # Uncomplicated Load Balancer
 
-A ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
+A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
 
 ## Features
 
