@@ -33,9 +33,11 @@ type ServiceInfo struct {
 // LocationInfo contains information about a path location
 // e.g. /api, /v1, /v2
 type LocationInfo struct {
-	Path       string
-	Algorithm  algorithm.Algorithm
-	ServerPool *pool.ServerPool
+	Path         string
+	TLS          *config.TLSConfig
+	HTTPRedirect bool
+	Algorithm    algorithm.Algorithm
+	ServerPool   *pool.ServerPool
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {

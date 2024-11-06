@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -64,13 +65,52 @@ func (s *Server) Start(errorChan chan<- error) error {
 
 	mainHandler := s.setupMiddleware()
 
+	tlsConfig := &tls.Config{
+		GetCertificate: s.getCertificateForHost,
+	}
+
 	s.server = &http.Server{
 		Addr:           fmt.Sprintf(":%d", s.config.Port),
 		Handler:        mainHandler,
+		TLSConfig:      tlsConfig,
 		ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		IdleTimeout:    60 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1MB
+	}
+
+	// This only runs if there are services with http redirects
+	if s.hasHTTPSRedirects() {
+		httpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host := middleware.GetTargetHost(r)
+			service, err := s.serviceManager.GetService(host, r.URL.Path)
+			if service == nil || err != nil {
+				http.Error(w, "Service not found", http.StatusNotFound)
+				return
+			}
+
+			if service.HTTPRedirect {
+				target := fmt.Sprintf("%s://%s%s", "https", r.Host, r.RequestURI)
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				return
+			}
+
+			mainHandler.ServeHTTP(w, r)
+		})
+
+		redirectHandler := &http.Server{
+			Addr:    fmt.Sprintf(":%d", s.config.HTTPSPort),
+			Handler: httpHandler,
+		}
+
+		// start http redirect server in a separate goroutine
+		go func() {
+			if err := redirectHandler.ListenAndServe(); err != http.ErrServerClosed {
+				defer s.cancel()
+				log.Printf("Redirect server error: %v", err)
+				errorChan <- err
+			}
+		}()
 	}
 
 	// admin server
@@ -79,6 +119,7 @@ func (s *Server) Start(errorChan chan<- error) error {
 		Handler: s.adminAPI.Handler(),
 	}
 
+	// start admin server in a separate goroutine
 	go func() {
 		if err := s.adminServer.ListenAndServe(); err != http.ErrServerClosed {
 			defer s.cancel()
@@ -169,6 +210,33 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if lrt, ok := service.Algorithm.(*algorithm.LeastResponseTime); ok {
 		lrt.UpdateResponseTime(backend.URL.String(), duration)
 	}
+}
+
+func (s *Server) getCertificateForHost(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	service, _ := s.serviceManager.GetService(info.ServerName, "") // we only need to match host
+	if service == nil || service.TLS == nil {
+		return nil, fmt.Errorf("no certificate configured for host: %s", info.ServerName)
+	}
+
+	// load certificate
+	cert, err := tls.LoadX509KeyPair(service.TLS.CertFile, service.TLS.KeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load certificate for host %s: %v", info.ServerName, err)
+	}
+
+	return &cert, nil
+}
+
+func (s *Server) hasHTTPSRedirects() bool {
+	services := s.serviceManager.GetServices()
+	for _, service := range services {
+		for _, location := range service.Locations {
+			if location.HTTPRedirect {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

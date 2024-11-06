@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Port        int             `yaml:"port"`
+	HTTPSPort   int             `yaml:"https_port"`
 	AdminPort   int             `yaml:"admin_port"`
 	TLS         TLSConfig       `yaml:"tls"`
 	Algorithm   string          `yaml:"algorithm"`
@@ -22,12 +23,9 @@ type Config struct {
 }
 
 type TLSConfig struct {
-	Enabled  bool     `yaml:"enabled"`
-	Domains  []string `yaml:"domains"`
-	CertDir  string   `yaml:"cert_dir"`
-	AutoCert bool     `yaml:"auto_cert"`
-	CertFile string   `yaml:"cert_file"`
-	KeyFile  string   `yaml:"key_file"`
+	Enabled  bool   `yaml:"enabled"`
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
 }
 
 type BackendConfig struct {
@@ -73,11 +71,13 @@ type AdminAPIConfig struct {
 type Service struct {
 	Name      string     `yaml:"name"`
 	Host      string     `yaml:"host"`
+	TLS       *TLSConfig `yaml:"tls"`
 	Locations []Location `yaml:"locations"`
 }
 
 type Location struct {
 	Path         string          `yaml:"path"`
+	HTTPRedirect bool            `yaml:"http_redirect"`
 	LoadBalancer string          `yaml:"lb_policy"`
 	Backends     []BackendConfig `yaml:"backends"`
 }

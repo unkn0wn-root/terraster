@@ -101,7 +101,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		return err
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(url)
+	proxy := NewProxy(url)
 	proxy.ModifyResponse = func(r *http.Response) error {
 		r.Header.Del("Server")
 		r.Header.Del("X-Powered-By")
@@ -111,7 +111,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		return nil
 	}
 
-	proxy.BufferPool = NewBufferPool()
+	//proxy.BufferPool = NewBufferPool()
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
@@ -354,4 +354,22 @@ func GetRetryFromContext(r *http.Request) int {
 		return retry
 	}
 	return 0
+}
+
+func NewProxy(url *url.URL) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		Director: func(r *http.Request) {
+			r.URL.Scheme = url.Scheme
+			r.URL.Host = url.Host
+			r.Host = url.Host
+
+			if r.Header.Get("X-Forwarded-Host") == "" {
+				r.Header.Set("X-Forwarded-Host", r.Host)
+			}
+
+			if r.Header.Get("X-Real-IP") == "" {
+				r.Header.Set("X-Real-IP", r.RemoteAddr)
+			}
+		},
+	}
 }
