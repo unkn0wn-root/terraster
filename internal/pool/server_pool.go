@@ -18,28 +18,28 @@ const (
 	RetryKey contextKey = iota
 )
 
-type Config struct {
+type PoolConfig struct {
 	Algorithm string `json:"algorithm"`
-	MaxConns  int    `json:"max_connections"`
+	MaxConns  int32  `json:"max_connections"`
 }
 
 type ServerPool struct {
 	backends       []*Backend
 	current        uint64
-	algorithm      string
-	maxConnections int
+	algorithm      algorithm.Algorithm
+	maxConnections int32
 	mu             sync.RWMutex
 }
 
 func NewServerPool() *ServerPool {
 	return &ServerPool{
 		backends:       make([]*Backend, 0),
-		algorithm:      "round-robin", // default algorithm
-		maxConnections: 1000,          // default max connections
+		algorithm:      algorithm.CreateAlgorithm("round-robin"), // default algorithm
+		maxConnections: 1000,                                     // default max connections
 	}
 }
 
-func (s *ServerPool) UpdateConfig(update Config) error {
+func (s *ServerPool) UpdateConfig(update PoolConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -48,41 +48,39 @@ func (s *ServerPool) UpdateConfig(update Config) error {
 	}
 
 	if update.Algorithm != "" {
-		s.algorithm = update.Algorithm
+		s.algorithm = algorithm.CreateAlgorithm(update.Algorithm)
 	}
-
-	return nil
 }
 
-func (s *ServerPool) GetConfig() Config {
+func (s *ServerPool) GetConfig() PoolConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return Config{
-		Algorithm: s.algorithm,
+	return PoolConfig{
+		Algorithm: s.algorithm.Name(),
 		MaxConns:  s.maxConnections,
 	}
 }
-func (s *ServerPool) GetAlgorithm() string {
+func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.algorithm
 }
 
-func (s *ServerPool) SetAlgorithm(algorithm string) error {
+func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.algorithm = algorithm
 	return nil
 }
 
-func (s *ServerPool) GetMaxConnections() int {
+func (s *ServerPool) GetMaxConnections() int32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.maxConnections
 }
 
-func (s *ServerPool) SetMaxConnections(maxConns int) error {
+func (s *ServerPool) SetMaxConnections(maxConns int32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.maxConnections = maxConns
@@ -103,7 +101,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		return err
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(url)
+	proxy := NewProxy(url)
 	proxy.ModifyResponse = func(r *http.Response) error {
 		r.Header.Del("Server")
 		r.Header.Del("X-Powered-By")
@@ -113,8 +111,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		return nil
 	}
 
-	proxy.BufferPool = NewBufferPool()
-
+	//proxy.BufferPool = NewBufferPool()
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
@@ -151,12 +148,18 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 	//         InsecureSkipVerify: false, // set to true if you need to skip SSL verification
 	//     },
 	// },
-
+	var maxConnections int32
+	if cfg.MaxConnections == 0 {
+		maxConnections = s.GetMaxConnections()
+	} else {
+		maxConnections = cfg.MaxConnections
+	}
 	backend := &Backend{
-		URL:          url,
-		Alive:        true,
-		Weight:       cfg.Weight,
-		ReverseProxy: proxy,
+		URL:            url,
+		Alive:          true,
+		Weight:         cfg.Weight,
+		MaxConnections: maxConnections,
+		ReverseProxy:   proxy,
 	}
 
 	s.mu.Lock()
@@ -222,6 +225,7 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 			Weight:          backend.Weight,
 			CurrentWeight:   backend.CurrentWeight,
 			ConnectionCount: backend.ConnectionCount,
+			MaxConnections:  backend.MaxConnections,
 			Alive:           backend.Alive,
 		}
 	}
@@ -298,6 +302,7 @@ type Backend struct {
 	CurrentWeight   int
 	ReverseProxy    *httputil.ReverseProxy
 	ConnectionCount int32
+	MaxConnections  int32
 	mu              sync.RWMutex
 }
 
@@ -327,18 +332,53 @@ func (b *Backend) IsAlive() bool {
 	return b.Alive
 }
 
-func (b *Backend) IncrementConnections() {
-	atomic.AddInt32(&b.ConnectionCount, 1)
+func (b *Backend) IncrementConnections() bool {
+	for {
+		current := atomic.LoadInt32(&b.ConnectionCount)
+		if current >= int32(b.MaxConnections) {
+			return false
+		}
+		if atomic.CompareAndSwapInt32(&b.ConnectionCount, current, current+1) {
+			return true
+		}
+	}
 }
 
 func (b *Backend) DecrementConnections() {
 	atomic.AddInt32(&b.ConnectionCount, -1)
 }
 
-// Helper function for retry context
+// helper function for retry context
 func GetRetryFromContext(r *http.Request) int {
 	if retry, ok := r.Context().Value(RetryKey).(int); ok {
 		return retry
 	}
 	return 0
+}
+
+func NewProxy(url *url.URL) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		Director: func(r *http.Request) {
+			r.URL.Scheme = url.Scheme
+			r.URL.Host = url.Host
+			r.Host = url.Host
+			r.URL.Path, r.URL.RawPath = joinURLPath(url, r.URL)
+
+			// merge the target's query parameters with the incoming request's query parameters
+			if url.RawQuery == "" || r.URL.RawQuery == "" {
+				r.URL.RawQuery = url.RawQuery + r.URL.RawQuery
+			} else {
+				r.URL.RawQuery = url.RawQuery + "&" + r.URL.RawQuery
+			}
+
+			// set headers for the request
+			if r.Header.Get("X-Forwarded-Host") == "" {
+				r.Header.Set("X-Forwarded-Host", r.Host)
+			}
+
+			if r.Header.Get("X-Real-IP") == "" {
+				r.Header.Set("X-Real-IP", r.RemoteAddr)
+			}
+		},
+	}
 }

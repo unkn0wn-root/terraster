@@ -16,14 +16,14 @@ type BackendStatus struct {
 
 func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.URL.Query().Get("service_name")
-	var service *service.ServiceInfo
+	pathName := r.URL.Query().Get("path")
 
+	var srvc *service.ServiceInfo
 	if serviceName == "" {
-		// Get default service
 		services := a.serviceManager.GetServices()
 		switch len(services) {
 		case 1:
-			service = services[0]
+			srvc = services[0]
 		case 0:
 			http.Error(w, "No services configured", http.StatusNotFound)
 			return
@@ -32,30 +32,44 @@ func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		service = a.serviceManager.GetServiceByName(serviceName)
-		if service == nil {
+		srvc = a.serviceManager.GetServiceByName(serviceName)
+		if srvc == nil {
 			http.Error(w, "Service not found", http.StatusNotFound)
 			return
 		}
 	}
 
+	if pathName == "" {
+		http.Error(w, "Path cannot be empty", http.StatusNotFound)
+		return
+	}
+
+	var location *service.LocationInfo
+	for _, loc := range srvc.Locations {
+		if loc.Path == pathName {
+			location = loc
+			break
+		}
+	}
+
+	if location == nil {
+		http.Error(w, "Location not found", http.StatusNotFound)
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
-		cfg := service.ServerPool.GetConfig()
+		cfg := location.ServerPool.GetConfig()
 		json.NewEncoder(w).Encode(cfg)
-
 	case http.MethodPut:
-		var update pool.Config
+		var update pool.PoolConfig
 		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := service.ServerPool.UpdateConfig(update); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
 
+		location.ServerPool.UpdateConfig(update)
+		w.WriteHeader(http.StatusOK)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}

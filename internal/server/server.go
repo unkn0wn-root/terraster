@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +22,6 @@ import (
 
 type Server struct {
 	config         *config.Config
-	algorithm      algorithm.Algorithm
 	healthChecker  *health.Checker
 	adminAPI       *admin.AdminAPI
 	server         *http.Server
@@ -49,7 +50,6 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 	srv := &Server{
 		config:         cfg,
 		serviceManager: serviceManager,
-		algorithm:      createAlgorithm(cfg.Algorithm),
 		healthChecker:  healthChecker,
 		ctx:            ctx,
 		cancel:         cancel,
@@ -60,35 +60,57 @@ func New(ctx context.Context, cfg *config.Config) (*Server, error) {
 	return srv, nil
 }
 
-func createAlgorithm(name string) algorithm.Algorithm {
-	switch name {
-	case "round-robin":
-		return &algorithm.RoundRobin{}
-	case "weighted-round-robin":
-		return &algorithm.WeightedRoundRobin{}
-	case "least-connections":
-		return &algorithm.LeastConnections{}
-	case "ip-hash":
-		return &algorithm.IPHash{}
-	case "least-response-time":
-		return algorithm.NewLeastResponseTime()
-	default:
-		return &algorithm.RoundRobin{} // default algorithm
-	}
-}
-
 func (s *Server) Start(errorChan chan<- error) error {
 	go s.healthChecker.Start(s.ctx)
 
 	mainHandler := s.setupMiddleware()
 
+	tlsConfig := &tls.Config{
+		GetCertificate: s.getCertificateForHost,
+	}
+
 	s.server = &http.Server{
 		Addr:           fmt.Sprintf(":%d", s.config.Port),
 		Handler:        mainHandler,
+		TLSConfig:      tlsConfig,
 		ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		IdleTimeout:    60 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1MB
+	}
+
+	// This only runs if there are services with http redirects
+	if s.hasHTTPSRedirects() {
+		httpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host := middleware.GetTargetHost(r)
+			service, err := s.serviceManager.GetService(host, r.URL.Path)
+			if service == nil || err != nil {
+				http.Error(w, "Service not found", http.StatusNotFound)
+				return
+			}
+
+			if service.HTTPRedirect {
+				target := fmt.Sprintf("%s://%s%s", "https", r.Host, r.RequestURI)
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				return
+			}
+
+			mainHandler.ServeHTTP(w, r)
+		})
+
+		redirectHandler := &http.Server{
+			Addr:    fmt.Sprintf(":%d", s.config.HTTPSPort),
+			Handler: httpHandler,
+		}
+
+		// start http redirect server in a separate goroutine
+		go func() {
+			if err := redirectHandler.ListenAndServe(); err != http.ErrServerClosed {
+				defer s.cancel()
+				log.Printf("Redirect server error: %v", err)
+				errorChan <- err
+			}
+		}()
 	}
 
 	// admin server
@@ -97,6 +119,7 @@ func (s *Server) Start(errorChan chan<- error) error {
 		Handler: s.adminAPI.Handler(),
 	}
 
+	// start admin server in a separate goroutine
 	go func() {
 		if err := s.adminServer.ListenAndServe(); err != http.ErrServerClosed {
 			defer s.cancel()
@@ -119,9 +142,15 @@ func (s *Server) Start(errorChan chan<- error) error {
 
 func (s *Server) setupMiddleware() http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
+	log := log.New(os.Stdout, "", log.LstdFlags)
 	// @toDo: get it from config
-	logger := middleware.NewLoggingMiddleware("/var/log/lb/access.log")
-	defer logger.Shutdown()
+	logger := middleware.NewLoggingMiddleware(
+		log,
+		middleware.WithLogLevel(middleware.INFO),
+		middleware.WithHeaders(),
+		middleware.WithQueryParams(),
+		middleware.WithExcludePaths([]string{"/health"}), // exclude health check from logs
+	)
 
 	chain := middleware.NewMiddlewareChain(
 		middleware.NewCircuitBreaker(5, 30*time.Second),
@@ -139,34 +168,37 @@ func (s *Server) setupMiddleware() http.Handler {
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	host := middleware.GetTargetHost(r)
 	// find the appropriate service for this path
-	serviceInfo := s.serviceManager.GetService(host, r.URL.Path)
-	if serviceInfo == nil {
+	service, err := s.serviceManager.GetService(host, r.URL.Path)
+	if err != nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return
 	}
 
 	// get backend for the service's server pool
-	backendAlgo := s.algorithm.NextServer(serviceInfo.ServerPool, r)
+	backendAlgo := service.Algorithm.NextServer(service.ServerPool, r)
 	if backendAlgo == nil {
 		http.Error(w, "No service available right now", http.StatusServiceUnavailable)
 		return
 	}
 
-	backend := serviceInfo.ServerPool.GetBackendByURL(backendAlgo.URL)
+	backend := service.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
 		http.Error(w, "No peers available", http.StatusServiceUnavailable)
 		return
 	}
 
 	// strip the service path prefix if it exists
-	if serviceInfo.Path != "" && strings.HasPrefix(r.URL.Path, serviceInfo.Path) {
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, serviceInfo.Path)
+	if service.Path != "" && strings.HasPrefix(r.URL.Path, service.Path) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, service.Path)
 	}
 
 	ctx := context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())
 	r = r.WithContext(ctx)
 
-	backend.IncrementConnections()
+	if !backend.IncrementConnections() {
+		http.Error(w, "Server at max capacity", http.StatusServiceUnavailable)
+		return
+	}
 	defer backend.DecrementConnections()
 
 	start := time.Now()
@@ -175,9 +207,36 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	duration := time.Since(start)
 
 	// record response time for least-response-time algorithm
-	if lrt, ok := s.algorithm.(*algorithm.LeastResponseTime); ok {
+	if lrt, ok := service.Algorithm.(*algorithm.LeastResponseTime); ok {
 		lrt.UpdateResponseTime(backend.URL.String(), duration)
 	}
+}
+
+func (s *Server) getCertificateForHost(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	service, _ := s.serviceManager.GetService(info.ServerName, "") // we only need to match host
+	if service == nil || service.TLS == nil {
+		return nil, fmt.Errorf("no certificate configured for host: %s", info.ServerName)
+	}
+
+	// load certificate
+	cert, err := tls.LoadX509KeyPair(service.TLS.CertFile, service.TLS.KeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load certificate for host %s: %v", info.ServerName, err)
+	}
+
+	return &cert, nil
+}
+
+func (s *Server) hasHTTPSRedirects() bool {
+	services := s.serviceManager.GetServices()
+	for _, service := range services {
+		for _, location := range service.Locations {
+			if location.HTTPRedirect {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

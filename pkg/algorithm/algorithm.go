@@ -2,6 +2,7 @@ package algorithm
 
 import (
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,28 @@ type Server struct {
 	Weight           int
 	CurrentWeight    int
 	ConnectionCount  int32
+	MaxConnections   int32
 	Alive            bool
 	LastResponseTime time.Duration
+}
+
+func CreateAlgorithm(name string) Algorithm {
+	switch name {
+	case "round-robin":
+		return &RoundRobin{}
+	case "weighted-round-robin":
+		return &WeightedRoundRobin{}
+	case "least-connections":
+		return &LeastConnections{}
+	case "ip-hash":
+		return &IPHash{}
+	case "least-response-time":
+		return NewLeastResponseTime()
+	default:
+		return &RoundRobin{} // default algorithm
+	}
+}
+
+func (b *Server) CanAcceptConnection() bool {
+	return atomic.LoadInt32(&b.ConnectionCount) < int32(b.MaxConnections)
 }
