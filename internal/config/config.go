@@ -78,7 +78,7 @@ type Service struct {
 
 type Location struct {
 	Path         string          `yaml:"path"`
-	LoadBalancer string          `yaml:"lb_algorithm"`
+	LoadBalancer string          `yaml:"lb_policy"`
 	Backends     []BackendConfig `yaml:"backends"`
 }
 
