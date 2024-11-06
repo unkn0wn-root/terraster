@@ -348,7 +348,7 @@ func (b *Backend) DecrementConnections() {
 	atomic.AddInt32(&b.ConnectionCount, -1)
 }
 
-// Helper function for retry context
+// helper function for retry context
 func GetRetryFromContext(r *http.Request) int {
 	if retry, ok := r.Context().Value(RetryKey).(int); ok {
 		return retry
@@ -362,7 +362,16 @@ func NewProxy(url *url.URL) *httputil.ReverseProxy {
 			r.URL.Scheme = url.Scheme
 			r.URL.Host = url.Host
 			r.Host = url.Host
+			r.URL.Path, r.URL.RawPath = joinURLPath(url, r.URL)
 
+			// merge the target's query parameters with the incoming request's query parameters
+			if url.RawQuery == "" || r.URL.RawQuery == "" {
+				r.URL.RawQuery = url.RawQuery + r.URL.RawQuery
+			} else {
+				r.URL.RawQuery = url.RawQuery + "&" + r.URL.RawQuery
+			}
+
+			// set headers for the request
 			if r.Header.Get("X-Forwarded-Host") == "" {
 				r.Header.Set("X-Forwarded-Host", r.Host)
 			}
