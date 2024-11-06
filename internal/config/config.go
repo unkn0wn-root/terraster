@@ -71,10 +71,15 @@ type AdminAPIConfig struct {
 }
 
 type Service struct {
-	Name     string          `yaml:"name"`
-	Host     string          `yaml:"host"`
-	Path     string          `yaml:"path"`
-	Backends []BackendConfig `yaml:"backends"`
+	Name      string     `yaml:"name"`
+	Host      string     `yaml:"host"`
+	Locations []Location `yaml:"locations"`
+}
+
+type Location struct {
+	Path         string          `yaml:"path"`
+	LoadBalancer string          `yaml:"lb_algorithm"`
+	Backends     []BackendConfig `yaml:"backends"`
 }
 
 func Load(path string) (*Config, error) {

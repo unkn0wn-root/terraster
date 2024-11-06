@@ -2,11 +2,13 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
+	"github.com/unkn0wn-root/go-load-balancer/pkg/algorithm"
 )
 
 var ErrServiceAlreadyExists = errors.New("service already exists")
@@ -17,9 +19,14 @@ type Manager struct {
 }
 
 type ServiceInfo struct {
-	Name       string
-	Host       string
+	Name      string
+	Host      string
+	Locations []*LocationInfo
+}
+
+type LocationInfo struct {
 	Path       string
+	Algorithm  algorithm.Algorithm
 	ServerPool *pool.ServerPool
 }
 
@@ -32,10 +39,15 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	if len(cfg.Services) == 0 && len(cfg.Backends) > 0 {
 		// Create default service
 		defaultService := config.Service{
-			Name:     "default",
-			Host:     "",
-			Path:     "",
-			Backends: cfg.Backends,
+			Name: "default",
+			Host: "",
+			Locations: []config.Location{
+				{
+					Path:         "",
+					LoadBalancer: "round-robin",
+					Backends:     cfg.Backends,
+				},
+			},
 		}
 		if err := m.AddService(defaultService); err != nil {
 			return nil, err
@@ -52,56 +64,92 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 }
 
 func (m *Manager) AddService(service config.Service) error {
-	serverPool, err := m.createServerPool(service.Backends)
-	if err != nil {
-		return err
+	// For each location in the service, create a server pool
+	locations := make([]*LocationInfo, 0, len(service.Locations))
+	locationPaths := make(map[string]bool)
+	for _, location := range service.Locations {
+		if location.Path == "" {
+			location.Path = "/"
+		}
+
+		if _, exist := locationPaths[location.Path]; exist {
+			return errors.New("duplicate location path")
+		}
+
+		if len(location.Backends) == 0 {
+			return fmt.Errorf("service %s, location %s: no backends defined",
+				service.Name, location.Path)
+		}
+
+		locationPaths[location.Path] = true
+
+		serverPool, err := m.createServerPool(location)
+		if err != nil {
+			return err
+		}
+
+		locations = append(locations, &LocationInfo{
+			Path:       location.Path,
+			Algorithm:  algorithm.CreateAlgorithm(location.LoadBalancer),
+			ServerPool: serverPool,
+		})
 	}
 
-	if _, exist := m.services[service.Path]; exist {
+	// Use host as key, if empty use service name
+	k := service.Host
+	if k == "" {
+		k = service.Name
+	}
+
+	if k == "" {
+		return fmt.Errorf("service must have either host or name defined")
+	}
+
+	if _, exist := m.services[k]; exist {
 		return ErrServiceAlreadyExists
 	}
 
 	m.mu.Lock()
-	m.services[service.Path] = &ServiceInfo{
-		Name:       service.Name,
-		Host:       service.Host,
-		Path:       service.Path,
-		ServerPool: serverPool,
+	m.services[k] = &ServiceInfo{
+		Name:      service.Name,
+		Host:      service.Host,
+		Locations: locations,
 	}
 	m.mu.Unlock()
 
 	return nil
 }
 
-func (m *Manager) GetService(host, path string) *ServiceInfo {
+func (m *Manager) GetService(host, path string) (*LocationInfo, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var matchedService *ServiceInfo
-	var matchedLen int
-
 	for _, service := range m.services {
-		// check if host is set
-		if service.Host != "" {
-			// skip if host is set but does not match
-			if !matchHost(service.Host, host) {
-				continue
-			}
-
-			// if matchedLen is not 0, then we found some matching service
-			// which means we should skip to the path matching
-			if service.Path == "" && matchedLen == 0 {
-				return service
-			}
-		}
-
-		if strings.HasPrefix(path, service.Path) && len(service.Path) > matchedLen {
+		if matchHost(service.Host, host) {
 			matchedService = service
-			matchedLen = len(service.Path)
+			break
 		}
 	}
 
-	return matchedService
+	if matchedService == nil {
+		return nil, fmt.Errorf("service not found for host %s", host)
+	}
+
+	var matchedLocation *LocationInfo
+	var matchedLen int
+	for _, location := range matchedService.Locations {
+		if strings.HasPrefix(path, location.Path) && len(location.Path) > matchedLen {
+			matchedLocation = location
+			matchedLen = len(location.Path)
+		}
+	}
+
+	if matchedLocation == nil {
+		return nil, fmt.Errorf("location not found for path %s", path)
+	}
+
+	return matchedLocation, nil
 }
 
 func (m *Manager) GetServiceByName(name string) *ServiceInfo {
@@ -128,9 +176,12 @@ func (m *Manager) GetServices() []*ServiceInfo {
 	return services
 }
 
-func (m *Manager) createServerPool(backends []config.BackendConfig) (*pool.ServerPool, error) {
+func (m *Manager) createServerPool(srvc config.Location) (*pool.ServerPool, error) {
 	serverPool := pool.NewServerPool()
-	for _, backend := range backends {
+	serverPool.UpdateConfig(pool.PoolConfig{
+		Algorithm: srvc.LoadBalancer,
+	})
+	for _, backend := range srvc.Backends {
 		if err := serverPool.AddBackend(backend); err != nil {
 			return nil, err
 		}

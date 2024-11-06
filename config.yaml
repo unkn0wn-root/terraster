@@ -1,28 +1,33 @@
 port: 443
 admin_port: 4433
-algorithm: round-robin
 
 services:
   - name: backend-api
-    path: "/api/"
-    backends:
-      - url: http://internal-api1.local.com:8455
-        weight: 5
-        max_connections: 1000
+    host: internal-api1.local.com
+    locations:
+      - path: "/api/"
+        lb_policy: round-robin
+        backends:
+          - url: http://internal-api1.local.com:8455
+            weight: 5
+            max_connections: 1000
+          - url: http://internal-api2.local.com:8455
+            weight: 3
+            max_connections: 800
 
-      - url: http://internal-api2.local.com:8455
-        weight: 3
-        max_connections: 800
   - name: frontend
-    path: ""
-    backends:
-      - url: http://frontend-1.local.com:3000
-        weight: 5
-        max_connections: 1000
+    host: frontend.local.com
+    locations:
+      - path: ""
+        lb_policy: least_connections
+        backends:
+          - url: http://frontend-1.local.com:3000
+            weight: 5
+            max_connections: 1000
 
-      - url: http://frontend-2.local.com:3000
-        weight: 3
-        max_connections: 800
+          - url: http://frontend-2.local.com:3000
+            weight: 3
+            max_connections: 800
 
 health_check:
   interval: 10s

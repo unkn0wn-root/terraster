@@ -18,7 +18,7 @@ const (
 	RetryKey contextKey = iota
 )
 
-type Config struct {
+type PoolConfig struct {
 	Algorithm string `json:"algorithm"`
 	MaxConns  int    `json:"max_connections"`
 }
@@ -26,7 +26,7 @@ type Config struct {
 type ServerPool struct {
 	backends       []*Backend
 	current        uint64
-	algorithm      string
+	algorithm      algorithm.Algorithm
 	maxConnections int
 	mu             sync.RWMutex
 }
@@ -34,12 +34,12 @@ type ServerPool struct {
 func NewServerPool() *ServerPool {
 	return &ServerPool{
 		backends:       make([]*Backend, 0),
-		algorithm:      "round-robin", // default algorithm
-		maxConnections: 1000,          // default max connections
+		algorithm:      algorithm.CreateAlgorithm("round-robin"), // default algorithm
+		maxConnections: 1000,                                     // default max connections
 	}
 }
 
-func (s *ServerPool) UpdateConfig(update Config) error {
+func (s *ServerPool) UpdateConfig(update PoolConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -48,28 +48,26 @@ func (s *ServerPool) UpdateConfig(update Config) error {
 	}
 
 	if update.Algorithm != "" {
-		s.algorithm = update.Algorithm
+		s.algorithm = algorithm.CreateAlgorithm(update.Algorithm)
 	}
-
-	return nil
 }
 
-func (s *ServerPool) GetConfig() Config {
+func (s *ServerPool) GetConfig() PoolConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return Config{
-		Algorithm: s.algorithm,
+	return PoolConfig{
+		Algorithm: s.algorithm.Name(),
 		MaxConns:  s.maxConnections,
 	}
 }
-func (s *ServerPool) GetAlgorithm() string {
+func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.algorithm
 }
 
-func (s *ServerPool) SetAlgorithm(algorithm string) error {
+func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.algorithm = algorithm

@@ -31,6 +31,7 @@ func (a *AdminAPI) registerRoutes() {
 	a.mux.HandleFunc("/api/stats", a.handleStats)
 	a.mux.HandleFunc("/api/config", a.handleConfig)
 	a.mux.HandleFunc("/api/services", a.handleServices)
+	a.mux.HandleFunc("/api/locations", a.handleLocations)
 }
 
 func (a *AdminAPI) Handler() http.Handler {
@@ -53,6 +54,7 @@ func (a *AdminAPI) Handler() http.Handler {
 	return chain.Then(a.mux)
 }
 
+// service API handlers
 func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -75,22 +77,45 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handle underlying backends
 func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.URL.Query().Get("service_name")
+	serviceLocation := r.URL.Query().Get("path")
 	if serviceName == "" {
 		http.Error(w, "service_name is required", http.StatusBadRequest)
 		return
 	}
 
-	service := a.serviceManager.GetServiceByName(serviceName)
-	if service == nil {
+	srvc := a.serviceManager.GetServiceByName(serviceName)
+	if srvc == nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
+		return
+	}
+
+	var location *service.LocationInfo
+	for _, loc := range srvc.Locations {
+		if loc.Path == serviceLocation {
+			location = loc
+			break
+		}
+	}
+
+	if location == nil && serviceLocation == "" {
+		if len(srvc.Locations) == 1 {
+			location = srvc.Locations[0]
+		} else {
+			http.Error(w, "location parameter is required for services with multiple locations",
+				http.StatusBadRequest)
+			return
+		}
+	} else {
+		http.Error(w, "Location not found", http.StatusNotFound)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
-		backends := service.ServerPool.GetBackends()
+		backends := location.ServerPool.GetBackends()
 		json.NewEncoder(w).Encode(backends)
 	case http.MethodPost:
 		var backend config.BackendConfig
@@ -99,7 +124,7 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := service.ServerPool.AddBackend(backend); err != nil {
+		if err := location.ServerPool.AddBackend(backend); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -113,7 +138,7 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := service.ServerPool.RemoveBackend(backend.URL); err != nil {
+		if err := location.ServerPool.RemoveBackend(backend.URL); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -123,6 +148,44 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handle path locations
+func (a *AdminAPI) handleLocations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	serviceName := r.URL.Query().Get("service_name")
+	if serviceName == "" {
+		http.Error(w, "service_name is required", http.StatusBadRequest)
+		return
+	}
+
+	service := a.serviceManager.GetServiceByName(serviceName)
+	if service == nil {
+		http.Error(w, "Service not found", http.StatusNotFound)
+		return
+	}
+
+	type LocationResponse struct {
+		Path      string `json:"path"`
+		Algorithm string `json:"algorithm"`
+		Backends  int    `json:"backends_count"`
+	}
+
+	locations := make([]LocationResponse, 0, len(service.Locations))
+	for _, loc := range service.Locations {
+		locations = append(locations, LocationResponse{
+			Path:      loc.Path,
+			Algorithm: loc.Algorithm.Name(),
+			Backends:  len(loc.ServerPool.GetBackends()),
+		})
+	}
+
+	json.NewEncoder(w).Encode(locations)
+}
+
+// health check handler
 func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -132,21 +195,23 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	healthStatus := make(map[string]interface{})
 	services := a.serviceManager.GetServices()
 	for _, service := range services {
-		backends := service.ServerPool.GetBackends()
-		serviceHealth := make(map[string]interface{})
-		for _, backend := range backends {
-			serviceHealth[backend.URL] = map[string]interface{}{
-				"alive":       backend.Alive,
-				"connections": backend.ConnectionCount,
+		for _, loc := range service.Locations {
+			backends := loc.ServerPool.GetBackends()
+			serviceHealth := make(map[string]interface{})
+			for _, backend := range backends {
+				serviceHealth[backend.URL] = map[string]interface{}{
+					"alive":       backend.Alive,
+					"connections": backend.ConnectionCount,
+				}
 			}
+			healthStatus[service.Name] = serviceHealth
 		}
-
-		healthStatus[service.Name] = serviceHealth
 	}
 
 	json.NewEncoder(w).Encode(healthStatus)
 }
 
+// services stats handler
 func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -157,19 +222,21 @@ func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	services := a.serviceManager.GetServices()
 
 	for _, service := range services {
-		backends := service.ServerPool.GetBackends()
-		totalConnections := 0
-		activeBackends := 0
-		for _, backend := range backends {
-			if backend.Alive {
-				activeBackends++
+		for _, loc := range service.Locations {
+			backends := loc.ServerPool.GetBackends()
+			totalConnections := 0
+			activeBackends := 0
+			for _, backend := range backends {
+				if backend.Alive {
+					activeBackends++
+				}
+				totalConnections += int(backend.ConnectionCount)
 			}
-			totalConnections += int(backend.ConnectionCount)
-		}
-		stats[service.Name] = map[string]interface{}{
-			"total_backends":    len(backends),
-			"active_backends":   activeBackends,
-			"total_connections": totalConnections,
+			stats[service.Name] = map[string]interface{}{
+				"total_backends":    len(backends),
+				"active_backends":   activeBackends,
+				"total_connections": totalConnections,
+			}
 		}
 	}
 

@@ -24,3 +24,20 @@ type Server struct {
 	Alive            bool
 	LastResponseTime time.Duration
 }
+
+func CreateAlgorithm(name string) Algorithm {
+	switch name {
+	case "round-robin":
+		return &RoundRobin{}
+	case "weighted-round-robin":
+		return &WeightedRoundRobin{}
+	case "least-connections":
+		return &LeastConnections{}
+	case "ip-hash":
+		return &IPHash{}
+	case "least-response-time":
+		return NewLeastResponseTime()
+	default:
+		return &RoundRobin{} // default algorithm
+	}
+}
