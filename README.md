@@ -1,4 +1,4 @@
-# Uncomplicated Load Balancer
+# GLB - Uncomplicated Load Balancer
 
 A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
 
