@@ -359,26 +359,19 @@ func GetRetryFromContext(r *http.Request) int {
 func NewProxy(url *url.URL) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			r.URL.Scheme = url.Scheme
-			r.URL.Host = url.Host
-			r.Host = url.Host
-			r.URL.Path, r.URL.RawPath = joinURLPath(url, r.URL)
-
-			// merge the target's query parameters with the incoming request's query parameters
-			if url.RawQuery == "" || r.URL.RawQuery == "" {
-				r.URL.RawQuery = url.RawQuery + r.URL.RawQuery
-			} else {
-				r.URL.RawQuery = url.RawQuery + "&" + r.URL.RawQuery
-			}
-
-			// set headers for the request
-			if r.Header.Get("X-Forwarded-Host") == "" {
-				r.Header.Set("X-Forwarded-Host", r.Host)
-			}
-
-			if r.Header.Get("X-Real-IP") == "" {
-				r.Header.Set("X-Real-IP", r.RemoteAddr)
-			}
+			rewriteRequestURL(r, url)
 		},
+	}
+}
+
+func rewriteRequestURL(req *http.Request, target *url.URL) {
+	targetQuery := target.RawQuery
+	req.URL.Scheme = target.Scheme
+	req.URL.Host = target.Host
+	req.URL.Path, req.URL.RawPath = joinURLPath(target, req.URL)
+	if targetQuery == "" || req.URL.RawQuery == "" {
+		req.URL.RawQuery = targetQuery + req.URL.RawQuery
+	} else {
+		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
 	}
 }

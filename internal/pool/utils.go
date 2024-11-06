@@ -5,28 +5,36 @@ import (
 	"strings"
 )
 
+func singleJoiningSlash(a, b string) string {
+	aslash := strings.HasSuffix(a, "/")
+	bslash := strings.HasPrefix(b, "/")
+	switch {
+	case aslash && bslash:
+		return a + b[1:]
+	case !aslash && !bslash:
+		return a + "/" + b
+	}
+	return a + b
+}
+
 // helper function to concatenate the target path with the request path.
-// ensures that there are no duplicate slashes.
-func joinURLPath(parsedUrl, reqUrl *url.URL) (path, rawpath string) {
-	// parsedUrl from service
-	p := parsedUrl.EscapedPath()
-	if p == "" {
-		p = "/"
+func joinURLPath(a, b *url.URL) (path, rawpath string) {
+	if a.RawPath == "" && b.RawPath == "" {
+		return singleJoiningSlash(a.Path, b.Path), ""
 	}
+	// Same as singleJoiningSlash, but uses EscapedPath to determine
+	// whether a slash should be added
+	apath := a.EscapedPath()
+	bpath := b.EscapedPath()
 
-	// request URL
-	r := reqUrl.EscapedPath()
-	// ensure that there is exactly one '/' between the paths
-	if strings.HasSuffix(p, "/") && strings.HasPrefix(r, "/") {
-		path = p + r[1:]
-		rawpath = p + r[1:]
-	} else if !strings.HasSuffix(p, "/") && !strings.HasPrefix(r, "/") {
-		path = p + "/" + r
-		rawpath = p + "/" + r
-	} else {
-		path = p + r
-		rawpath = p + r
+	aslash := strings.HasSuffix(apath, "/")
+	bslash := strings.HasPrefix(bpath, "/")
+
+	switch {
+	case aslash && bslash:
+		return a.Path + b.Path[1:], apath + bpath[1:]
+	case !aslash && !bslash:
+		return a.Path + "/" + b.Path, apath + "/" + bpath
 	}
-
-	return
+	return a.Path + b.Path, apath + bpath
 }
