@@ -92,7 +92,7 @@ func (e *EnvConfig) loadBackends() {
 		backend := BackendConfig{
 			URL:            url,
 			Weight:         weight,
-			MaxConnections: maxConn,
+			MaxConnections: int32(maxConn),
 			HealthCheck:    e.config.HealthCheck, // Use default health check
 		}
 
