@@ -4,9 +4,13 @@ admin_port: 4433
 services:
   - name: backend-api
     host: internal-api1.local.com
+    tls:
+      cert_file: "/path/to/api-cert.pem"
+      key_file: "/path/to/api-key.pem"
     locations:
       - path: "/api/"
         lb_policy: round-robin
+        http_redirect: true
         backends:
           - url: http://internal-api1.local.com:8455
             weight: 5
@@ -20,6 +24,7 @@ services:
     locations:
       - path: ""
         lb_policy: least_connections
+        http_redirect: false
         backends:
           - url: http://frontend-1.local.com:3000
             weight: 5
