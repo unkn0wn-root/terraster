@@ -11,19 +11,27 @@ import (
 	"github.com/unkn0wn-root/go-load-balancer/pkg/algorithm"
 )
 
-var ErrServiceAlreadyExists = errors.New("service already exists")
+var (
+	ErrServiceAlreadyExists = errors.New("service already exists")
+	ErrDuplicateLocation    = errors.New("duplicate location path")
+	ErrNotDefined           = errors.New("service must have either host or name defined")
+)
 
 type Manager struct {
 	services map[string]*ServiceInfo
 	mu       sync.RWMutex
 }
 
+// ServiceInfo contains information about a service
+// e.g. name: api service, host: api.example.com
 type ServiceInfo struct {
 	Name      string
 	Host      string
 	Locations []*LocationInfo
 }
 
+// LocationInfo contains information about a path location
+// e.g. /api, /v1, /v2
 type LocationInfo struct {
 	Path       string
 	Algorithm  algorithm.Algorithm
@@ -73,7 +81,7 @@ func (m *Manager) AddService(service config.Service) error {
 		}
 
 		if _, exist := locationPaths[location.Path]; exist {
-			return errors.New("duplicate location path")
+			return ErrDuplicateLocation
 		}
 
 		if len(location.Backends) == 0 {
@@ -95,14 +103,14 @@ func (m *Manager) AddService(service config.Service) error {
 		})
 	}
 
-	// Use host as key, if empty use service name
+	//use host as key, if empty use service name
 	k := service.Host
 	if k == "" {
 		k = service.Name
 	}
 
 	if k == "" {
-		return fmt.Errorf("service must have either host or name defined")
+		return ErrNotDefined
 	}
 
 	if _, exist := m.services[k]; exist {

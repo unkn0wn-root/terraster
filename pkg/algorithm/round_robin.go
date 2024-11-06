@@ -24,7 +24,7 @@ func (rr *RoundRobin) NextServer(pool ServerPool, _ *http.Request) *Server {
 	l := uint64(len(servers))
 	for i := uint64(0); i < l; i++ {
 		serverIdx := (idx + i) % l
-		if servers[serverIdx].Alive {
+		if servers[serverIdx].Alive && servers[serverIdx].CanAcceptConnection() {
 			return servers[serverIdx]
 		}
 	}

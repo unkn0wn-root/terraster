@@ -33,7 +33,7 @@ type TLSConfig struct {
 type BackendConfig struct {
 	URL            string      `yaml:"url"`
 	Weight         int         `yaml:"weight"`
-	MaxConnections int         `yaml:"max_connections"`
+	MaxConnections int32       `yaml:"max_connections"`
 	HealthCheck    HealthCheck `yaml:"health_check"`
 }
 

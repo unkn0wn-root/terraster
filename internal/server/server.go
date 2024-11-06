@@ -154,7 +154,10 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())
 	r = r.WithContext(ctx)
 
-	backend.IncrementConnections()
+	if !backend.IncrementConnections() {
+		http.Error(w, "Server at max capacity", http.StatusServiceUnavailable)
+		return
+	}
 	defer backend.DecrementConnections()
 
 	start := time.Now()

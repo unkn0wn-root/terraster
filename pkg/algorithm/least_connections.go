@@ -20,7 +20,7 @@ func (lc *LeastConnections) NextServer(pool ServerPool, _ *http.Request) *Server
 	var minConn int32 = -1
 
 	for _, server := range servers {
-		if !server.Alive {
+		if !server.Alive || !server.CanAcceptConnection() {
 			continue
 		}
 

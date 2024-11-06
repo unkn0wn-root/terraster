@@ -20,14 +20,14 @@ const (
 
 type PoolConfig struct {
 	Algorithm string `json:"algorithm"`
-	MaxConns  int    `json:"max_connections"`
+	MaxConns  int32  `json:"max_connections"`
 }
 
 type ServerPool struct {
 	backends       []*Backend
 	current        uint64
 	algorithm      algorithm.Algorithm
-	maxConnections int
+	maxConnections int32
 	mu             sync.RWMutex
 }
 
@@ -74,13 +74,13 @@ func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) error {
 	return nil
 }
 
-func (s *ServerPool) GetMaxConnections() int {
+func (s *ServerPool) GetMaxConnections() int32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.maxConnections
 }
 
-func (s *ServerPool) SetMaxConnections(maxConns int) error {
+func (s *ServerPool) SetMaxConnections(maxConns int32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.maxConnections = maxConns
@@ -112,7 +112,6 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 	}
 
 	proxy.BufferPool = NewBufferPool()
-
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
@@ -149,12 +148,16 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 	//         InsecureSkipVerify: false, // set to true if you need to skip SSL verification
 	//     },
 	// },
-
+	var maxConnections int32
+	if cfg.MaxConnections == 0 {
+		maxConnections = s.GetMaxConnections()
+	}
 	backend := &Backend{
-		URL:          url,
-		Alive:        true,
-		Weight:       cfg.Weight,
-		ReverseProxy: proxy,
+		URL:            url,
+		Alive:          true,
+		Weight:         cfg.Weight,
+		MaxConnections: maxConnections,
+		ReverseProxy:   proxy,
 	}
 
 	s.mu.Lock()
@@ -220,6 +223,7 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 			Weight:          backend.Weight,
 			CurrentWeight:   backend.CurrentWeight,
 			ConnectionCount: backend.ConnectionCount,
+			MaxConnections:  backend.MaxConnections,
 			Alive:           backend.Alive,
 		}
 	}
@@ -296,6 +300,7 @@ type Backend struct {
 	CurrentWeight   int
 	ReverseProxy    *httputil.ReverseProxy
 	ConnectionCount int32
+	MaxConnections  int32
 	mu              sync.RWMutex
 }
 
@@ -325,8 +330,16 @@ func (b *Backend) IsAlive() bool {
 	return b.Alive
 }
 
-func (b *Backend) IncrementConnections() {
-	atomic.AddInt32(&b.ConnectionCount, 1)
+func (b *Backend) IncrementConnections() bool {
+	for {
+		current := atomic.LoadInt32(&b.ConnectionCount)
+		if current >= int32(b.MaxConnections) {
+			return false
+		}
+		if atomic.CompareAndSwapInt32(&b.ConnectionCount, current, current+1) {
+			return true
+		}
+	}
 }
 
 func (b *Backend) DecrementConnections() {
