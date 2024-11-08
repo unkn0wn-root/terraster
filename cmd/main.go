@@ -25,7 +25,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := server.New(ctx, cfg)
+	errChan := make(chan error, 1)
+	srv, err := server.NewServer(ctx, errChan, cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize server %v", err)
 	}
@@ -42,9 +43,8 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	errChan := make(chan error, 1)
 	go func() {
-		if err := srv.Start(errChan); err != nil {
+		if err := srv.Start(); err != nil {
 			errChan <- err
 		}
 	}()

@@ -25,19 +25,21 @@ type Manager struct {
 // ServiceInfo contains information about a service
 // e.g. name: api service, host: api.example.com
 type ServiceInfo struct {
-	Name      string
-	Host      string
-	Locations []*LocationInfo
+	Name         string
+	Host         string
+	Port         int
+	TLS          *config.TLSConfig
+	HTTPRedirect bool
+	Locations    []*LocationInfo
 }
 
 // LocationInfo contains information about a path location
 // e.g. /api, /v1, /v2
 type LocationInfo struct {
-	Path         string
-	TLS          *config.TLSConfig
-	HTTPRedirect bool
-	Algorithm    algorithm.Algorithm
-	ServerPool   *pool.ServerPool
+	Path       string
+	Rewrite    string
+	Algorithm  algorithm.Algorithm
+	ServerPool *pool.ServerPool
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -101,6 +103,7 @@ func (m *Manager) AddService(service config.Service) error {
 		locations = append(locations, &LocationInfo{
 			Path:       location.Path,
 			Algorithm:  algorithm.CreateAlgorithm(location.LoadBalancer),
+			Rewrite:    location.Rewrite,
 			ServerPool: serverPool,
 		})
 	}
@@ -121,29 +124,35 @@ func (m *Manager) AddService(service config.Service) error {
 
 	m.mu.Lock()
 	m.services[k] = &ServiceInfo{
-		Name:      service.Name,
-		Host:      service.Host,
-		Locations: locations,
+		Name:         service.Name,
+		Host:         service.Host,
+		Port:         service.Port,
+		TLS:          service.TLS,
+		HTTPRedirect: service.HTTPRedirect,
+		Locations:    locations,
 	}
 	m.mu.Unlock()
 
 	return nil
 }
 
-func (m *Manager) GetService(host, path string) (*LocationInfo, error) {
+func (m *Manager) GetService(host, path string, hostOnly bool) (*ServiceInfo, *LocationInfo, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var matchedService *ServiceInfo
 	for _, service := range m.services {
 		if matchHost(service.Host, host) {
+			if hostOnly {
+				return service, nil, nil
+			}
 			matchedService = service
 			break
 		}
 	}
 
 	if matchedService == nil {
-		return nil, fmt.Errorf("service not found for host %s", host)
+		return nil, nil, fmt.Errorf("service not found for host %s", host)
 	}
 
 	var matchedLocation *LocationInfo
@@ -156,10 +165,10 @@ func (m *Manager) GetService(host, path string) (*LocationInfo, error) {
 	}
 
 	if matchedLocation == nil {
-		return nil, fmt.Errorf("location not found for path %s", path)
+		return nil, nil, fmt.Errorf("location not found for path %s", path)
 	}
 
-	return matchedLocation, nil
+	return matchedService, matchedLocation, nil
 }
 
 func (m *Manager) GetServiceByName(name string) *ServiceInfo {
@@ -192,7 +201,11 @@ func (m *Manager) createServerPool(srvc config.Location) (*pool.ServerPool, erro
 		Algorithm: srvc.LoadBalancer,
 	})
 	for _, backend := range srvc.Backends {
-		if err := serverPool.AddBackend(backend); err != nil {
+		rc := pool.RouteConfig{
+			Path:       srvc.Path,
+			RewriteURL: srvc.Rewrite,
+		}
+		if err := serverPool.AddBackend(backend, rc); err != nil {
 			return nil, err
 		}
 	}

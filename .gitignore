@@ -22,3 +22,6 @@ go.work.sum
 .env
 
 load-balancer
+glb
+./tmp
+config.yaml

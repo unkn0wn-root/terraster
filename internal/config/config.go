@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Port        int             `yaml:"port"`
+	HTTPPort    int             `yaml:"http_port"`
 	HTTPSPort   int             `yaml:"https_port"`
 	AdminPort   int             `yaml:"admin_port"`
 	TLS         TLSConfig       `yaml:"tls"`
@@ -65,19 +66,22 @@ type AuthConfig struct {
 }
 
 type AdminAPIConfig struct {
+	Host      string          `yaml:"host"`
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 }
 
 type Service struct {
-	Name      string     `yaml:"name"`
-	Host      string     `yaml:"host"`
-	TLS       *TLSConfig `yaml:"tls"`
-	Locations []Location `yaml:"locations"`
+	Name         string     `yaml:"name"`
+	Host         string     `yaml:"host"`
+	Port         int        `yaml:"port"`
+	TLS          *TLSConfig `yaml:"tls"`
+	HTTPRedirect bool       `yaml:"http_redirect"`
+	Locations    []Location `yaml:"locations"`
 }
 
 type Location struct {
 	Path         string          `yaml:"path"`
-	HTTPRedirect bool            `yaml:"http_redirect"`
+	Rewrite      string          `yaml:"rewrite"`
 	LoadBalancer string          `yaml:"lb_policy"`
 	Backends     []BackendConfig `yaml:"backends"`
 }
