@@ -1,16 +1,38 @@
-port: 4431
+port: 443
 admin_port: 4433
 
 services:
   - name: backend-api
-    host: internal-api.local.com
+    host: internal-api1.local.com
+    tls:
+      cert_file: "/path/to/api-cert.pem"
+      key_file: "/path/to/api-key.pem"
     locations:
-      - path: "/api"
+      - path: "/api/"
         lb_policy: round-robin
+        http_redirect: true
         backends:
-          - url: http://193.75.49.222
+          - url: http://internal-api1.local.com:8455
             weight: 5
-            max_connections: 100000
+            max_connections: 1000
+          - url: http://internal-api2.local.com:8455
+            weight: 3
+            max_connections: 800
+
+  - name: frontend
+    host: frontend.local.com
+    locations:
+      - path: ""
+        lb_policy: least_connections
+        http_redirect: false
+        backends:
+          - url: http://frontend-1.local.com:3000
+            weight: 5
+            max_connections: 1000
+
+          - url: http://frontend-2.local.com:3000
+            weight: 3
+            max_connections: 800
 
 health_check:
   interval: 10s
@@ -27,8 +49,8 @@ admin_api:
     burst: 20
 
 rate_limit:
-  requests_per_second: 10000
-  burst: 15000
+  requests_per_second: 100
+  burst: 150
 
 connection_pool:
   max_idle: 100
