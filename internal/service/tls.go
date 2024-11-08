@@ -10,11 +10,8 @@ import (
 func (m *Manager) validateTLSConfig(service config.Service) error {
 	// check if any location requires HTTPS
 	requiresHTTPS := false
-	for _, loc := range service.Locations {
-		if loc.HTTPRedirect {
-			requiresHTTPS = true
-			break
-		}
+	if service.HTTPRedirect {
+		requiresHTTPS = true
 	}
 
 	// validate TLS configuration

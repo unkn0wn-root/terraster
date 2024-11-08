@@ -1,0 +1,36 @@
+port: 4431
+admin_port: 4433
+
+services:
+  - name: backend-api
+    host: internal-api.local.com
+    locations:
+      - path: "/api"
+        lb_policy: round-robin
+        backends:
+          - url: http://193.75.49.222
+            weight: 5
+            max_connections: 100000
+
+health_check:
+  interval: 10s
+  timeout: 2s
+  path: /health
+
+auth:
+  enabled: true
+  api_key: mySecretKey
+
+admin_api:
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
+rate_limit:
+  requests_per_second: 10000
+  burst: 15000
+
+connection_pool:
+  max_idle: 100
+  max_open: 1000
+  idle_timeout: 90s

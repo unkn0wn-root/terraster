@@ -95,24 +95,17 @@ func (s *ServerPool) SetCurrentIndex(idx uint64) {
 	atomic.StoreUint64(&s.current, idx)
 }
 
-func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
+func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
 		return err
 	}
-
-	proxy := NewProxy(url)
-	proxy.ModifyResponse = func(r *http.Response) error {
-		r.Header.Del("Server")
-		r.Header.Del("X-Powered-By")
-
-		r.Header.Set("X-Proxy-By", "go-load-balancer")
-
-		return nil
-	}
-
-	//proxy.BufferPool = NewBufferPool()
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+	// Create a new reverse proxy
+	// Register multiple backends
+	createProxy := &httputil.ReverseProxy{}
+	rp := NewReverseProxy(url, rc, createProxy)
+	rp.Proxy.BufferPool = NewBufferPool()
+	rp.Proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
 		if retries < 3 {
@@ -130,24 +123,6 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		}
 	}
 
-	// Custom transport with timeouts and connection pooling
-	// proxy.Transport = &http.Transport{
-	//     Proxy: http.ProxyFromEnvironment,
-	//     DialContext: (&net.Dialer{
-	//         Timeout:   30 * time.Second,
-	//         KeepAlive: 30 * time.Second,
-	//     }).DialContext,
-	//     ForceAttemptHTTP2:     true,
-	//     MaxIdleConns:          100,
-	//     IdleConnTimeout:       90 * time.Second,
-	//     TLSHandshakeTimeout:   10 * time.Second,
-	//     ExpectContinueTimeout: 1 * time.Second,
-	//     MaxConnsPerHost:       10,
-	//     MaxIdleConnsPerHost:   10,
-	//     TLSClientConfig: &tls.Config{
-	//         InsecureSkipVerify: false, // set to true if you need to skip SSL verification
-	//     },
-	// },
 	var maxConnections int32
 	if cfg.MaxConnections == 0 {
 		maxConnections = s.GetMaxConnections()
@@ -159,7 +134,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig) error {
 		Alive:          true,
 		Weight:         cfg.Weight,
 		MaxConnections: maxConnections,
-		ReverseProxy:   proxy,
+		ReverseProxy:   rp.Proxy,
 	}
 
 	s.mu.Lock()

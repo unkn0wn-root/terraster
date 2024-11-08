@@ -6,6 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
+	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
 	"github.com/unkn0wn-root/go-load-balancer/internal/service"
 )
 
@@ -132,7 +133,12 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := location.ServerPool.AddBackend(backend); err != nil {
+		rc := pool.RouteConfig{
+			Path:       location.Path,
+			RewriteURL: location.Rewrite,
+		}
+
+		if err := location.ServerPool.AddBackend(backend, rc); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
