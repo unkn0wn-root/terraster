@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -222,8 +221,8 @@ func (s *Server) setupMiddleware() http.Handler {
 	logger := middleware.NewLoggingMiddleware(
 		log,
 		middleware.WithLogLevel(middleware.INFO),
-		//middleware.WithHeaders(),
-		//middleware.WithQueryParams(),
+		middleware.WithHeaders(),
+		middleware.WithQueryParams(),
 		middleware.WithExcludePaths([]string{"/health"}), // exclude health check from logs
 	)
 
@@ -353,14 +352,4 @@ func (s *Server) servicePort(port int) int {
 	}
 
 	return DefaultHTTPPort
-}
-
-func ReplaceRewrite(url, path, rewrite string) string {
-	if path == "/" || path == "" {
-		return strings.Replace(url, path, "", 1)
-	}
-	result := strings.Replace(url, path, rewrite, 1)
-	result = strings.Replace(result, "//", "/", -1)
-
-	return result
 }
