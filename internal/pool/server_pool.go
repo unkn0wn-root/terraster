@@ -23,6 +23,18 @@ type PoolConfig struct {
 	MaxConns  int32  `json:"max_connections"`
 }
 
+type Backend struct {
+	URL             *url.URL
+	Host            string
+	Alive           bool
+	Weight          int
+	CurrentWeight   int
+	ReverseProxy    *httputil.ReverseProxy
+	ConnectionCount int32
+	MaxConnections  int32
+	mu              sync.RWMutex
+}
+
 type ServerPool struct {
 	backends       []*Backend
 	current        uint64
@@ -267,18 +279,6 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 		}
 	}
 	return nil
-}
-
-type Backend struct {
-	URL             *url.URL
-	Host            string
-	Alive           bool
-	Weight          int
-	CurrentWeight   int
-	ReverseProxy    *httputil.ReverseProxy
-	ConnectionCount int32
-	MaxConnections  int32
-	mu              sync.RWMutex
 }
 
 func (b *Backend) GetURL() string {
