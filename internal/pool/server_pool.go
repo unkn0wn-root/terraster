@@ -115,9 +115,9 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 	// Create a new reverse proxy
 	// Register multiple backends
 	createProxy := &httputil.ReverseProxy{}
-	rp := NewReverseProxy(url, rc, createProxy)
-	rp.Proxy.BufferPool = NewBufferPool()
-	rp.Proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+	rp := NewReverseProxy(url, rc, url.Host, createProxy)
+	rp.proxy.BufferPool = NewBufferPool()
+	rp.proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
 		if retries < 3 {
@@ -146,7 +146,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 		Alive:          true,
 		Weight:         cfg.Weight,
 		MaxConnections: maxConnections,
-		ReverseProxy:   rp.Proxy,
+		ReverseProxy:   rp.proxy,
 	}
 
 	s.mu.Lock()
