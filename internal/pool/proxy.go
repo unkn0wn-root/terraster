@@ -61,8 +61,14 @@ func WithLogger(logger *log.Logger) ProxyOption {
 	}
 }
 
-func NewReverseProxy(target *url.URL, config RouteConfig, frontendHost string, px *httputil.ReverseProxy, opts ...ProxyOption) *URLRewriteProxy {
-	proxy := &URLRewriteProxy{
+func NewReverseProxy(
+	target *url.URL,
+	config RouteConfig,
+	frontendHost string,
+	px *httputil.ReverseProxy,
+	opts ...ProxyOption,
+) *URLRewriteProxy {
+	prx := &URLRewriteProxy{
 		target:      target,
 		path:        config.Path,
 		rewriteURL:  config.RewriteURL,
@@ -72,26 +78,25 @@ func NewReverseProxy(target *url.URL, config RouteConfig, frontendHost string, p
 	}
 
 	for _, opt := range opts {
-		opt(proxy)
+		opt(prx)
 	}
 
-	proxy.logf("Creating proxy with target: %s, path: %s, rewriteURL: %s",
+	prx.logf("Creating proxy with target: %s, path: %s, rewriteURL: %s",
 		target.String(), config.Path, config.RewriteURL)
 
-	reverseProxy := proxy.proxy
-	reverseProxy.Director = proxy.director
-	reverseProxy.ModifyResponse = proxy.modifyResponse
-	reverseProxy.ErrorHandler = proxy.errorHandler
-	proxy.proxy = reverseProxy
+	reverseProxy := prx.proxy
+	reverseProxy.Director = prx.director
+	reverseProxy.ModifyResponse = prx.modifyResponse
+	prx.proxy = reverseProxy
 
-	return proxy
+	return prx
 }
 
 func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.logf("Incoming request: %s %s", r.Method, r.URL.Path) // @todo - should be in debug
 
 	if !strings.HasPrefix(r.URL.Path, p.path) {
-		p.logf("Path %s does not match prefix %s, returning 404", r.URL.Path, p.path)
+		p.logf("Path %s does not match prefix %s", r.URL.Path, p.path)
 		http.NotFound(w, r)
 		return
 	}
@@ -178,11 +183,6 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderServer)
 	resp.Header.Del(HeaderXPoweredBy)
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
-}
-
-func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	p.logf("Proxy error: %v", err)
-	http.Error(w, "Proxy Error", http.StatusBadGateway)
 }
 
 func (p *URLRewriteProxy) logf(format string, args ...interface{}) {
