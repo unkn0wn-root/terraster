@@ -45,12 +45,11 @@ type RouteConfig struct {
 }
 
 type URLRewriteProxy struct {
-	proxy       *httputil.ReverseProxy
-	target      *url.URL
-	path        string
-	rewriteURL  string
-	frontendURL string
-	logger      *log.Logger
+	proxy      *httputil.ReverseProxy
+	target     *url.URL
+	path       string
+	rewriteURL string
+	logger     *log.Logger
 }
 
 type ProxyOption func(*URLRewriteProxy)
@@ -64,17 +63,15 @@ func WithLogger(logger *log.Logger) ProxyOption {
 func NewReverseProxy(
 	target *url.URL,
 	config RouteConfig,
-	frontendHost string,
 	px *httputil.ReverseProxy,
 	opts ...ProxyOption,
 ) *URLRewriteProxy {
 	prx := &URLRewriteProxy{
-		target:      target,
-		path:        config.Path,
-		rewriteURL:  config.RewriteURL,
-		frontendURL: frontendHost,
-		logger:      log.Default(),
-		proxy:       px,
+		target:     target,
+		path:       config.Path,
+		rewriteURL: config.RewriteURL,
+		logger:     log.Default(),
+		proxy:      px,
 	}
 
 	for _, opt := range opts {
