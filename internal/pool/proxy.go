@@ -47,24 +47,15 @@ func NewReverseProxy(
 // createDirector creates a director function that handles path rewriting
 func (urp *URLRewriteProxy) createDirector(target *url.URL) func(*http.Request) {
 	return func(req *http.Request) {
+		urp.serverPrefix(target, req)
+		urp.modifyRequest(req)
 		rewriteRequestURL(req, target)
-
-		if urp.Path != "" && strings.HasPrefix(req.URL.Path, urp.Path) {
-			newPath := strings.TrimPrefix(req.URL.Path, urp.Path)
-
-			// Ensure path starts with /
-			if !strings.HasPrefix(newPath, "/") {
-				newPath = "/" + newPath
-			}
-
-			// Apply rewrite URL if configured
-			if urp.RewriteURL != "" {
-				newPath = ensurePrefix(newPath, urp.RewriteURL)
-			}
-
-			req.URL.Path = newPath
-		}
 	}
+}
+
+func (urp *URLRewriteProxy) modifyRequest(req *http.Request) error {
+	urp.modifyReqHeaders(req)
+	return nil
 }
 
 // modifyResponse handles the rewriting of response headers and redirects
@@ -75,7 +66,7 @@ func (urp *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 		}
 	}
 
-	urp.modifyHeaders(resp)
+	urp.modifyResHeaders(resp)
 	return nil
 }
 
@@ -99,10 +90,16 @@ func (urp *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 }
 
 // modifyHeaders updates response headers
-func (urp *URLRewriteProxy) modifyHeaders(resp *http.Response) {
+func (urp *URLRewriteProxy) modifyResHeaders(resp *http.Response) {
 	resp.Header.Del("Server")
 	resp.Header.Del("X-Powered-By")
 	resp.Header.Set("X-Proxy-By", "go-load-balancer")
+}
+
+func (urp *URLRewriteProxy) modifyReqHeaders(req *http.Request) {
+	req.Header.Set("X-Forwarded-For", req.RemoteAddr)
+	req.Header.Set("X-Forwarded-Host", req.Host)
+	req.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
 }
 
 // rewriteLocation handles rewriting of the Location header
@@ -209,4 +206,31 @@ func ensurePrefix(path, prefix string) string {
 	}
 
 	return prefix + path
+}
+
+func (urp *URLRewriteProxy) serverPrefix(target *url.URL, req *http.Request) {
+	if urp.Path != "" && strings.HasPrefix(req.URL.Path, urp.Path) {
+		newUrlPath := trimServicePrefix(req.URL.Path, urp.Path)
+		newRawPath := trimServicePrefix(req.URL.RawPath, urp.Path)
+
+		// Ensure path starts with /
+		if !strings.HasPrefix(newUrlPath, "/") {
+			newUrlPath = "/" + newUrlPath
+			// if URL.Path does not have prefix, we know that RawPath does not have either
+			newRawPath = "/" + newRawPath
+
+		}
+		// Apply rewrite URL if configured
+		if urp.RewriteURL != "" {
+			newUrlPath = ensurePrefix(newUrlPath, urp.RewriteURL)
+			newRawPath = ensurePrefix(newRawPath, urp.RewriteURL)
+		}
+
+		req.URL.Path = newUrlPath
+		req.URL.RawPath = newRawPath
+	}
+}
+
+func trimServicePrefix(urlPath, servicePath string) string {
+	return strings.TrimPrefix(urlPath, servicePath)
 }
