@@ -44,6 +44,14 @@ type RouteConfig struct {
 	RewriteURL string // The URL to rewrite to (e.g., "/v1")
 }
 
+type Transport struct {
+	transport http.RoundTripper
+}
+
+func NewTransport(transport http.RoundTripper) *Transport {
+	return &Transport{transport: transport}
+}
+
 type URLRewriteProxy struct {
 	proxy      *httputil.ReverseProxy
 	target     *url.URL
@@ -84,6 +92,7 @@ func NewReverseProxy(
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
 	reverseProxy.ModifyResponse = prx.modifyResponse
+	reverseProxy.Transport = NewTransport(http.DefaultTransport)
 	prx.proxy = reverseProxy
 
 	return prx
@@ -91,7 +100,6 @@ func NewReverseProxy(
 
 func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, p.path) {
-		p.logf("Path %s does not match prefix %s", r.URL.Path, p.path)
 		http.NotFound(w, r)
 		return
 	}
@@ -100,9 +108,12 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *URLRewriteProxy) director(req *http.Request) {
-	p.logf("Processing request: %s %s", req.Method, req.URL.Path) // debug...
 	p.updateRequestHeaders(req)
 	p.rewriteRequestURL(req)
+}
+
+func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.transport.RoundTrip(req)
 }
 
 func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
@@ -115,28 +126,26 @@ func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
 
 func (p *URLRewriteProxy) stripPathPrefix(req *http.Request) {
 	trimmed := strings.TrimPrefix(req.URL.Path, p.path)
-	if p.path == "/" && req.URL.Path == "/" && p.rewriteURL == "" {
-		return
-	}
 	if !strings.HasPrefix(trimmed, "/") {
 		trimmed = "/" + trimmed
 	}
+	if p.path == "/" && req.URL.Path == "/" && p.rewriteURL == "" {
+		return
+	}
 
-	// If p.rewrite is defined, append it to the trimmed path
-	if p.rewriteURL != "" {
-		rewritten := p.rewriteURL
-		if !strings.HasPrefix(rewritten, "/") {
-			rewritten = "/" + rewritten
+	if p.rewriteURL == "" {
+		req.URL.Path = trimmed
+	} else {
+		ru := p.rewriteURL
+		if !strings.HasPrefix(ru, "/") {
+			ru = "/" + ru
 		}
 
 		// Remove trailing "/" from p.rewrite unless it's just "/"
-		if len(rewritten) > 1 && strings.HasSuffix(rewritten, "/") {
-			rewritten = strings.TrimSuffix(rewritten, "/")
+		if len(ru) > 1 && strings.HasSuffix(ru, "/") {
+			ru = strings.TrimSuffix(ru, "/")
 		}
-		req.URL.Path = rewritten + trimmed
-		p.logf("Rewriting path to: %s", req.URL.Path)
-	} else {
-		req.URL.Path = trimmed
+		req.URL.Path = ru + trimmed
 	}
 }
 

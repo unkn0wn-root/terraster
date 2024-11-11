@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,9 +51,6 @@ type Server struct {
 
 // Start initializes and starts all servers.
 func (s *Server) Start() error {
-	log.Println("Starting server...")
-
-	// Start health checker
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -65,23 +63,22 @@ func (s *Server) Start() error {
 	services := s.serviceManager.GetServices()
 	for _, svc := range services {
 		if err := s.startServiceServer(svc, mainHandler); err != nil {
+			s.cancel()
 			return err
 		}
 	}
 
-	// Start admin server
 	if err := s.startAdminServer(); err != nil {
-		defer s.cancel()
+		s.cancel()
 		return err
 	}
 
-	log.Println("All servers started successfully")
+	log.Println("Starting server(s)...")
 	return nil
 }
 
 // startServiceServer sets up and starts HTTP and HTTPS servers for a service.
 func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handler) error {
-	// Load TLS certificate once if needed and start HTTPS server
 	var tlsCert tls.Certificate
 	var err error
 	if svc.TLS != nil {
@@ -94,8 +91,10 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 		if err != nil {
 			return fmt.Errorf("failed to create HTTPS server for service %s: %w", svc.Name, err)
 		}
+
 		s.wg.Add(1)
 		go s.runServer(httpsServer, s.errorChan, svc.Name, "https")
+
 		return nil
 	}
 
@@ -161,8 +160,8 @@ func (s *Server) createServer(svc *service.ServiceInfo, handler http.Handler, sc
 // runServer starts the server and handles errors.
 func (s *Server) runServer(server *http.Server, errorChan chan<- error, name, scheme string) {
 	defer s.wg.Done()
-
-	log.Printf("Starting %s server on %s", scheme, server.Addr)
+	n := strings.ToUpper(name)
+	log.Printf("Starting %s server on %s", n, server.Addr)
 
 	var err error
 	if scheme == "https" {
@@ -172,11 +171,11 @@ func (s *Server) runServer(server *http.Server, errorChan chan<- error, name, sc
 	}
 
 	if err != nil && err != http.ErrServerClosed {
-		log.Printf("Error starting %s server: %v", scheme, err)
+		log.Printf("Error starting %s server: %v", n, err)
 		defer s.cancel()
 		errorChan <- err
 	} else {
-		log.Printf("%s server stopped gracefully", scheme)
+		log.Printf("%s server stopped gracefully", n)
 	}
 }
 
@@ -264,7 +263,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())
 	r = r.WithContext(ctx)
-
 	if !backend.IncrementConnections() {
 		http.Error(w, "Server at max capacity", http.StatusServiceUnavailable)
 		return
