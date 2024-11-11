@@ -199,6 +199,7 @@ func NewServer(srvCtx context.Context, errChan chan<- error, cfg *config.Config)
 	ctx, cancel := context.WithCancel(srvCtx)
 	serviceManager, err := service.NewManager(cfg)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
