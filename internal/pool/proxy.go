@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -90,8 +91,6 @@ func NewReverseProxy(
 }
 
 func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p.logf("Incoming request: %s %s", r.Method, r.URL.Path) // @todo - should be in debug
-
 	if !strings.HasPrefix(r.URL.Path, p.path) {
 		p.logf("Path %s does not match prefix %s", r.URL.Path, p.path)
 		http.NotFound(w, r)
@@ -103,13 +102,8 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (p *URLRewriteProxy) director(req *http.Request) {
 	p.logf("Processing request: %s %s", req.Method, req.URL.Path) // debug...
-
-	originalPath := req.URL.Path
 	p.updateRequestHeaders(req)
 	p.rewriteRequestURL(req)
-
-	p.logf("Rewrote request: %s -> %s://%s%s",
-		originalPath, req.URL.Scheme, req.URL.Host, req.URL.Path)
 }
 
 func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
@@ -119,6 +113,14 @@ func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
 
 	if p.rewriteURL == "" {
 		p.stripPathPrefix(req)
+	} else {
+		// Keep the original path but replace the prefix with rewriteURL
+		originalPath := req.URL.Path
+		if strings.HasPrefix(originalPath, p.path) {
+			newPath := p.rewriteURL + strings.TrimPrefix(originalPath, p.path)
+			n := cleanPath(newPath)
+			req.URL.Path = n
+		}
 	}
 }
 
@@ -136,7 +138,7 @@ func (p *URLRewriteProxy) stripPathPrefix(req *http.Request) {
 func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	originalHost := req.Host
 	req.Header.Set(HeaderXForwardedHost, originalHost)
-	req.Header.Set(HeaderXForwardedFor, req.RemoteAddr)
+	req.Header.Set(HeaderXForwardedFor, originalHost)
 }
 
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
@@ -152,8 +154,6 @@ func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 
 func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 	location := resp.Header.Get(HeaderLocation)
-	p.logf("Processing redirect to: %s", location)
-
 	locURL, err := url.Parse(location)
 	if err != nil {
 		return &ProxyError{Op: "parse_redirect_url", Err: err}
@@ -172,8 +172,6 @@ func (p *URLRewriteProxy) rewriteRedirectURL(locURL *url.URL, resp *http.Respons
 	if p.rewriteURL == "" && !strings.HasPrefix(locURL.Path, p.path) {
 		locURL.Path = p.path + locURL.Path
 	}
-
-	p.logf("Rewrote redirect to: %s", locURL.String())
 }
 
 func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
@@ -194,4 +192,15 @@ func isRedirect(statusCode int) bool {
 	default:
 		return false
 	}
+}
+
+// cleanPath removes double slashes and ensures proper path format
+func cleanPath(p string) string {
+	if p == "" {
+		return "/"
+	}
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	return path.Clean(p)
 }
