@@ -2,6 +2,7 @@ package pool
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -111,6 +112,13 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
 		return err
+	}
+
+	// do not allow anything else then "" or /
+	// if your backend is at diffrent URI e.g. /v1/api
+	// use rewrite to rewrite from load balancer path to /v1/api
+	if url.Path != "" && url.Path != "/" {
+		return fmt.Errorf("Backend URL error. Only allowed root URL")
 	}
 	// Create a new reverse proxy
 	// Register multiple backends

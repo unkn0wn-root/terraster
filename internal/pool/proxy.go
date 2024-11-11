@@ -116,7 +116,6 @@ func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
 func (p *URLRewriteProxy) stripPathPrefix(req *http.Request) {
 	trimmed := strings.TrimPrefix(req.URL.Path, p.path)
 	if p.path == "/" && req.URL.Path == "/" && p.rewriteURL == "" {
-		req.URL.Path = "/"
 		return
 	}
 	if !strings.HasPrefix(trimmed, "/") {
