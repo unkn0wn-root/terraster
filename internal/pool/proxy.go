@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"path"
 	"strings"
 )
 
@@ -111,28 +110,35 @@ func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
 	req.URL.Host = p.target.Host
 	req.Host = p.target.Host
 
-	if p.rewriteURL == "" {
-		p.stripPathPrefix(req)
-	} else {
-		// Keep the original path but replace the prefix with rewriteURL
-		originalPath := req.URL.Path
-		if strings.HasPrefix(originalPath, p.path) {
-			newPath := p.rewriteURL + strings.TrimPrefix(originalPath, p.path)
-			n := cleanPath(newPath)
-			req.URL.Path = n
-		}
-	}
+	p.stripPathPrefix(req)
 }
 
 func (p *URLRewriteProxy) stripPathPrefix(req *http.Request) {
-	path := strings.TrimPrefix(req.URL.Path, p.path)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	trimmed := strings.TrimPrefix(req.URL.Path, p.path)
+	if p.path == "/" && req.URL.Path == "/" && p.rewriteURL == "" {
+		req.URL.Path = "/"
+		return
 	}
-	if path == "/" && len(strings.TrimPrefix(req.URL.Path, p.path)) == 0 {
-		path = "/"
+	if !strings.HasPrefix(trimmed, "/") {
+		trimmed = "/" + trimmed
 	}
-	req.URL.Path = path
+
+	// If p.rewrite is defined, append it to the trimmed path
+	if p.rewriteURL != "" {
+		rewritten := p.rewriteURL
+		if !strings.HasPrefix(rewritten, "/") {
+			rewritten = "/" + rewritten
+		}
+
+		// Remove trailing "/" from p.rewrite unless it's just "/"
+		if len(rewritten) > 1 && strings.HasSuffix(rewritten, "/") {
+			rewritten = strings.TrimSuffix(rewritten, "/")
+		}
+		req.URL.Path = rewritten + trimmed
+		p.logf("Rewriting path to: %s", req.URL.Path)
+	} else {
+		req.URL.Path = trimmed
+	}
 }
 
 func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
@@ -143,7 +149,6 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 	p.logf("Received response: %d", resp.StatusCode)
-
 	if isRedirect(resp.StatusCode) {
 		return p.handleRedirect(resp)
 	}
@@ -192,15 +197,4 @@ func isRedirect(statusCode int) bool {
 	default:
 		return false
 	}
-}
-
-// cleanPath removes double slashes and ensures proper path format
-func cleanPath(p string) string {
-	if p == "" {
-		return "/"
-	}
-	if p[0] != '/' {
-		p = "/" + p
-	}
-	return path.Clean(p)
 }
