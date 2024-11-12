@@ -82,6 +82,7 @@ type Service struct {
 type Location struct {
 	Path         string          `yaml:"path"`
 	Rewrite      string          `yaml:"rewrite"`
+	Redirect     string          `yaml:"redirect"`
 	LoadBalancer string          `yaml:"lb_policy"`
 	Backends     []BackendConfig `yaml:"backends"`
 }

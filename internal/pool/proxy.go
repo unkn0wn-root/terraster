@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 )
 
 const (
@@ -40,8 +39,9 @@ func (e *ProxyError) Error() string {
 }
 
 type RouteConfig struct {
-	Path       string // The route path (e.g., "/api")
-	RewriteURL string // The URL to rewrite to (e.g., "/v1")
+	Path       string // path is proxy path (upstream) (optional)
+	RewriteURL string // rewriteURL is the URL to rewrite to (downstream) (optional)
+	Redirect   string // URL to redirect to (optional)
 }
 
 type Transport struct {
@@ -53,20 +53,16 @@ func NewTransport(transport http.RoundTripper) *Transport {
 }
 
 type URLRewriteProxy struct {
-	proxy      *httputil.ReverseProxy
-	target     *url.URL
-	path       string
-	rewriteURL string
-	logger     *log.Logger
+	proxy       *httputil.ReverseProxy
+	target      *url.URL
+	path        string
+	rewriteURL  string
+	urlRewriter *URLRewriter
+	rConfig     RewriteConfig
+	logger      *log.Logger
 }
 
 type ProxyOption func(*URLRewriteProxy)
-
-func WithLogger(logger *log.Logger) ProxyOption {
-	return func(p *URLRewriteProxy) {
-		p.logger = logger
-	}
-}
 
 func NewReverseProxy(
 	target *url.URL,
@@ -74,16 +70,26 @@ func NewReverseProxy(
 	px *httputil.ReverseProxy,
 	opts ...ProxyOption,
 ) *URLRewriteProxy {
+	rewriteConfig := RewriteConfig{
+		ProxyPath:  config.Path,
+		RewriteURL: config.RewriteURL,
+		Redirect:   config.Redirect,
+	}
 	prx := &URLRewriteProxy{
 		target:     target,
 		path:       config.Path,
 		rewriteURL: config.RewriteURL,
+		rConfig:    rewriteConfig,
 		logger:     log.Default(),
 		proxy:      px,
 	}
 
 	for _, opt := range opts {
 		opt(prx)
+	}
+
+	if prx.urlRewriter == nil {
+		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
 	}
 
 	prx.logf("Creating proxy with target: %s, path: %s, rewriteURL: %s",
@@ -99,8 +105,14 @@ func NewReverseProxy(
 }
 
 func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasPrefix(r.URL.Path, p.path) {
-		http.NotFound(w, r)
+	// Check for redirect first
+	if shouldRedirect, redirectPath := p.urlRewriter.shouldRedirect(r); shouldRedirect {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		redirectURL := fmt.Sprintf("%s://%s%s", scheme, r.Host, redirectPath)
+		http.Redirect(w, r, redirectURL, http.StatusMovedPermanently)
 		return
 	}
 
@@ -109,50 +121,30 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (p *URLRewriteProxy) director(req *http.Request) {
 	p.updateRequestHeaders(req)
-	p.rewriteRequestURL(req)
+	p.urlRewriter.rewriteRequestURL(req, p.target)
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.transport.RoundTrip(req)
 }
 
-func (p *URLRewriteProxy) rewriteRequestURL(req *http.Request) {
-	req.URL.Scheme = p.target.Scheme
-	req.URL.Host = p.target.Host
-	req.Host = p.target.Host
-
-	p.stripPathPrefix(req)
-}
-
-func (p *URLRewriteProxy) stripPathPrefix(req *http.Request) {
-	trimmed := strings.TrimPrefix(req.URL.Path, p.path)
-	if !strings.HasPrefix(trimmed, "/") {
-		trimmed = "/" + trimmed
-	}
-	if p.path == "/" && req.URL.Path == "/" && p.rewriteURL == "" {
-		return
-	}
-
-	if p.rewriteURL == "" {
-		req.URL.Path = trimmed
-	} else {
-		ru := p.rewriteURL
-		if !strings.HasPrefix(ru, "/") {
-			ru = "/" + ru
-		}
-
-		// Remove trailing "/" from p.rewrite unless it's just "/"
-		if len(ru) > 1 && strings.HasSuffix(ru, "/") {
-			ru = strings.TrimSuffix(ru, "/")
-		}
-		req.URL.Path = ru + trimmed
-	}
-}
-
 func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	originalHost := req.Host
 	req.Header.Set(HeaderXForwardedHost, originalHost)
 	req.Header.Set(HeaderXForwardedFor, originalHost)
+}
+
+func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
+	location := resp.Header.Get(HeaderLocation)
+	locURL, err := url.Parse(location)
+	if err != nil {
+		return &ProxyError{Op: "parse_redirect_url", Err: err}
+	}
+
+	originalHost := resp.Request.Header.Get(HeaderXForwardedHost)
+	p.urlRewriter.rewriteRedirectURL(locURL, originalHost)
+	resp.Header.Set(HeaderLocation, locURL.String())
+	return nil
 }
 
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
@@ -163,28 +155,6 @@ func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 
 	p.updateResponseHeaders(resp)
 	return nil
-}
-
-func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
-	location := resp.Header.Get(HeaderLocation)
-	locURL, err := url.Parse(location)
-	if err != nil {
-		return &ProxyError{Op: "parse_redirect_url", Err: err}
-	}
-
-	p.rewriteRedirectURL(locURL, resp)
-	resp.Header.Set(HeaderLocation, locURL.String())
-	return nil
-}
-
-func (p *URLRewriteProxy) rewriteRedirectURL(locURL *url.URL, resp *http.Response) {
-	originalHost := resp.Request.Header.Get(HeaderXForwardedHost)
-	locURL.Host = originalHost
-	locURL.Scheme = DefaultScheme
-
-	if p.rewriteURL == "" && !strings.HasPrefix(locURL.Path, p.path) {
-		locURL.Path = p.path + locURL.Path
-	}
 }
 
 func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
