@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/go-load-balancer/internal/admin"
+	auth_service "github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
 	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
@@ -132,7 +133,12 @@ func (s *Server) startAdminServer() error {
 }
 
 // createServer constructs an HTTP or HTTPS server based on the scheme.
-func (s *Server) createServer(svc *service.ServiceInfo, handler http.Handler, scheme string, tlsCert *tls.Certificate) (*http.Server, error) {
+func (s *Server) createServer(
+	svc *service.ServiceInfo,
+	handler http.Handler,
+	scheme string,
+	tlsCert *tls.Certificate,
+) (*http.Server, error) {
 	finalHandler := handler
 	if scheme == "http" && svc.HTTPRedirect && svc.TLS != nil {
 		// For HTTP servers that need to redirect to HTTPS
@@ -194,7 +200,12 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // NewServer creates a new Server instance with the provided configurations.
-func NewServer(srvCtx context.Context, errChan chan<- error, cfg *config.Config) (*Server, error) {
+func NewServer(
+	srvCtx context.Context,
+	errChan chan<- error,
+	cfg *config.Config,
+	authSrvc *auth_service.AuthService,
+) (*Server, error) {
 	ctx, cancel := context.WithCancel(srvCtx)
 	serviceManager, err := service.NewManager(cfg)
 	if err != nil {
@@ -205,7 +216,7 @@ func NewServer(srvCtx context.Context, errChan chan<- error, cfg *config.Config)
 	return &Server{
 		config:         cfg,
 		healthChecker:  health.NewChecker(cfg.HealthCheck.Interval, cfg.HealthCheck.Timeout),
-		adminAPI:       admin.NewAdminAPI(serviceManager, cfg),
+		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
 		serviceManager: serviceManager,
 		ctx:            ctx,
 		cancel:         cancel,
