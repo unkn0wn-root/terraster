@@ -2,15 +2,17 @@ port: 443
 admin_port: 4433
 
 services:
-  - name: backend-api
-    host: internal-api1.local.com
+  - name: backend-api # service name
+    host: internal-api1.local.com # service listener hostname
+    port: 8455 # service listener port
     tls:
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
     locations:
-      - path: "/api/"
-        lb_policy: round-robin
-        http_redirect: true
+      - path: "/api/" # served path suffix so "https://internal-api1.local.com/api/"
+        lb_policy: round-robin # load balancing policy
+        http_redirect: true # http to https redirect
+        redirect: "/" # redirect e.q. from "/" to "/api/"
         backends:
           - url: http://internal-api1.local.com:8455
             weight: 5
@@ -22,9 +24,10 @@ services:
   - name: frontend
     host: frontend.local.com
     locations:
-      - path: ""
+      - path: "/"
         lb_policy: least_connections
         http_redirect: false
+        rewrite: "/frontend/" # rewrite e.q. from "/" to "/frontend/" in the backend service
         backends:
           - url: http://frontend-1.local.com:3000
             weight: 5
@@ -39,9 +42,12 @@ health_check:
   timeout: 2s
   path: /health
 
+# api authentication
 auth:
-  enabled: true
-  api_key: mySecretKey
+  jwt_secret: mySecretKey
+  db_path: ./auth.db
+  password_expiry_days: 7
+  password_history_size: 5
 
 admin_api:
   rate_limit:

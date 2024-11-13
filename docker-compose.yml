@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  glb:
+    build: .
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "9090:9090"
+    volumes:
+      - ./config.yaml:/root/config.yaml
+      - ./certs:/etc/certs
+    restart: unless-stopped

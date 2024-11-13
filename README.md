@@ -41,18 +41,19 @@ go build -o load-balancer cmd/main.go
 ```yaml
 port: 443
 admin_port: 4433
-algorithm: round-robin
 
 services:
-  - name: backend-api
-    host: internal-api1.local.com
+  - name: backend-api # service name
+    host: internal-api1.local.com # service listener hostname
+    port: 8455 # service listener port
     tls:
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
     locations:
-      - path: "/api/"
-        lb_policy: round-robin
-        http_redirect: true
+      - path: "/api/" # served path suffix so "https://internal-api1.local.com/api/"
+        lb_policy: round-robin # load balancing policy
+        http_redirect: true # http to https redirect
+        redirect: "/" # redirect e.q. from "/" to "/api/"
         backends:
           - url: http://internal-api1.local.com:8455
             weight: 5
@@ -64,9 +65,10 @@ services:
   - name: frontend
     host: frontend.local.com
     locations:
-      - path: ""
+      - path: "/"
         lb_policy: least_connections
         http_redirect: false
+        rewrite: "/frontend/" # rewrite e.q. from "/" to "/frontend/" in the backend service
         backends:
           - url: http://frontend-1.local.com:3000
             weight: 5
@@ -76,10 +78,6 @@ services:
             weight: 3
             max_connections: 800
 
-tls:
-  enabled: true
-  cert_dir: /etc/certs
-
 health_check:
   interval: 10s
   timeout: 2s
@@ -87,11 +85,32 @@ health_check:
   thresholds:
     healthy: 2
     unhealthy: 3
+
+# api authentication
+auth:
+  jwt_secret: mySecretKey
+  db_path: ./auth.db
+  password_expiry_days: 7
+  password_history_size: 5
+
+admin_api:
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
+rate_limit:
+  requests_per_second: 100
+  burst: 150
+
+connection_pool:
+  max_idle: 100
+  max_open: 1000
+  idle_timeout: 90s
 ```
 
 3. Run the load balancer:
 ```bash
-./load-balancer -config config.yaml
+./load-balancer --config config.yaml
 ```
 
 ## Configuration Examples
@@ -148,41 +167,22 @@ security:
   content_type_options: true
   xss_protection: true
 ```
-
-## Environment Variables
-
-The load balancer can be configured using environment variables:
-
-```bash
-# Basic Configuration
-export LB_PORT=8080
-export LB_ADMIN_PORT=8081
-export LB_ALGORITHM=round-robin
-
-# TLS Configuration
-export LB_TLS_ENABLED=true
-export LB_TLS_DOMAINS=example.com
-export LB_TLS_CERT_DIR=/etc/certs
-export LB_TLS_AUTO_CERT=true
-
-# Backend Configuration
-export LB_BACKENDS=http://backend1:8081,http://backend2:8082
-export LB_BACKEND_WEIGHTS=5,3
-```
-
 ## API Examples
 
 ### Admin API
 
 1. Get Backend Status:
 ```bash
-curl http://localhost:8081/api/backends
+curl http://localhost:8081/api/backends \
+    -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
+    -H "Content-Type: application/json"
 ```
 
 2. Add Backend:
 ```bash
 curl -X POST http://localhost:8081/api/backends \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
   -d '{
     "url": "http://newbackend:8080",
     "weight": 5
@@ -295,16 +295,16 @@ FROM golang:1.21-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -o load-balancer cmd/load-balancer/main.go
+RUN go build -o glb cmd/load-balancer/main.go
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
-COPY --from=builder /app/load-balancer .
+COPY --from=builder /app/glb .
 COPY config.yaml .
 
 EXPOSE 8080 8081 9090
-CMD ["./load-balancer", "-config", "config.yaml"]
+CMD ["./glb", "--config", "config.yaml"]
 ```
 
 ```yaml
@@ -321,8 +321,6 @@ services:
     volumes:
       - ./config.yaml:/root/config.yaml
       - ./certs:/etc/certs
-    environment:
-      - LB_TLS_ENABLED=true
     restart: unless-stopped
 ```
 
