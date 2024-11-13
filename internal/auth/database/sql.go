@@ -6,7 +6,8 @@ import (
 	"errors"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
+
 	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
 )
 
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     token TEXT UNIQUE NOT NULL,
+    refresh_token_expires_at DATETIME,
     jti TEXT UNIQUE NOT NULL,
     expires_at DATETIME NOT NULL,
     created_at DATETIME NOT NULL,
@@ -56,7 +58,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_jti ON tokens(jti);
-ALTER TABLE tokens ADD COLUMN refresh_token_expires_at DATETIME;
 CREATE INDEX IF NOT EXISTS idx_tokens_expires_at ON tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);`
@@ -66,8 +67,12 @@ type SQLiteDB struct {
 }
 
 func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 

@@ -32,18 +32,19 @@ func main() {
 
 	// Initialize auth service
 	authConfig := service.AuthConfig{
-		JWTSecret:           []byte(cfg.Auth.JWTSecret),
-		TokenExpiry:         15 * time.Minute,   // Short-lived access token
-		RefreshTokenExpiry:  7 * 24 * time.Hour, // 7-day refresh token
-		MaxLoginAttempts:    5,
-		LockDuration:        15 * time.Minute,
-		MaxActiveTokens:     5,
-		PasswordMinLength:   12,
-		RequireUppercase:    true,
-		RequireNumber:       true,
-		RequireSpecialChar:  true,
-		PasswordExpiryDays:  cfg.Auth.PasswordExpiryDays,
-		PasswordHistorySize: cfg.Auth.PasswordHistorySize,
+		JWTSecret:            []byte(cfg.Auth.JWTSecret),
+		TokenExpiry:          15 * time.Minute,   // Short-lived access token
+		RefreshTokenExpiry:   7 * 24 * time.Hour, // 7-day refresh token
+		MaxLoginAttempts:     5,
+		LockDuration:         15 * time.Minute,
+		MaxActiveTokens:      5,
+		TokenCleanupInterval: 7 * time.Hour,
+		PasswordMinLength:    12,
+		RequireUppercase:     true,
+		RequireNumber:        true,
+		RequireSpecialChar:   true,
+		PasswordExpiryDays:   cfg.Auth.PasswordExpiryDays,
+		PasswordHistoryLimit: cfg.Auth.PasswordHistoryLimit,
 	}
 	authService := service.NewAuthService(db, authConfig)
 	defer authService.Close() // Cleanup background tasks

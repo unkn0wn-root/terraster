@@ -41,7 +41,6 @@ type AuthConfig struct {
 	TokenCleanupInterval time.Duration
 	PasswordExpiryDays   int // e.g., 90 days
 	PasswordHistoryLimit int // Number of previous passwords to remember
-	PasswordHistorySize  int
 }
 
 type AuthService struct {

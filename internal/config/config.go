@@ -66,10 +66,11 @@ type AdminAPIConfig struct {
 }
 
 type APIAuthConfig struct {
-	JWTSecret           string `json:"jwt_secret"`
-	DBPath              string `json:"db_path"`
-	PasswordExpiryDays  int    `json:"password_expiry_days"`
-	PasswordHistorySize int    `json:"password_history_size"`
+	JWTSecret            string `json:"jwt_secret"`
+	DBPath               string `json:"db_path"`
+	TokenCleanupInterval int    `json:"token_cleanup_interval"`
+	PasswordExpiryDays   int    `json:"password_expiry_days"`
+	PasswordHistoryLimit int    `json:"password_history_limit"`
 }
 
 type Service struct {
