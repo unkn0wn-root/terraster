@@ -34,7 +34,7 @@ A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go.
 
 1. Build the load balancer:
 ```bash
-go build -o load-balancer cmd/main.go
+go build -o glb cmd/main.go
 ```
 
 2. Create a configuration file or use provided in repo (config.yaml):
@@ -110,7 +110,7 @@ connection_pool:
 
 3. Run the load balancer:
 ```bash
-./load-balancer --config config.yaml
+./glb --config config.yaml
 ```
 
 ## Configuration Examples
@@ -295,7 +295,7 @@ FROM golang:1.21-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go mod download
-RUN go build -o glb cmd/load-balancer/main.go
+RUN go build -o glb cmd/main.go
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
@@ -312,7 +312,7 @@ CMD ["./glb", "--config", "config.yaml"]
 version: '3.8'
 
 services:
-  load-balancer:
+  glb:
     build: .
     ports:
       - "8080:8080"
