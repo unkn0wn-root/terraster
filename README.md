@@ -1,4 +1,4 @@
-# terraster - Uncomplicated Load Balancer
+# terraster - uncomplicated Load Balancer/Reverse Proxy
 
 A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go with Admin API. 
 
