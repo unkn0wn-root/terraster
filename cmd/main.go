@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/unkn0wn-root/go-load-balancer/internal/auth/database"
+	"github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/server"
 )
@@ -22,11 +24,35 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Initialize database
+	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize auth service
+	authConfig := service.AuthConfig{
+		JWTSecret:           []byte(cfg.Auth.JWTSecret),
+		TokenExpiry:         15 * time.Minute,   // Short-lived access token
+		RefreshTokenExpiry:  7 * 24 * time.Hour, // 7-day refresh token
+		MaxLoginAttempts:    5,
+		LockDuration:        15 * time.Minute,
+		MaxActiveTokens:     5,
+		PasswordMinLength:   12,
+		RequireUppercase:    true,
+		RequireNumber:       true,
+		RequireSpecialChar:  true,
+		PasswordExpiryDays:  cfg.Auth.PasswordExpiryDays,
+		PasswordHistorySize: cfg.Auth.PasswordHistorySize,
+	}
+	authService := service.NewAuthService(db, authConfig)
+	defer authService.Close() // Cleanup background tasks
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	errChan := make(chan error, 1)
-	srv, err := server.NewServer(ctx, errChan, cfg)
+	srv, err := server.NewServer(ctx, errChan, cfg, authService)
 	if err != nil {
 		log.Fatalf("Failed to initialize server %v", err)
 	}

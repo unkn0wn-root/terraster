@@ -18,7 +18,7 @@ type Config struct {
 	HealthCheck HealthCheck     `yaml:"health_check"`
 	RateLimit   RateLimitConfig `yaml:"rate_limit"`
 	ConnPool    PoolConfig      `yaml:"connection_pool"`
-	Auth        AuthConfig      `yaml:"auth"`
+	Auth        APIAuthConfig   `yaml:"auth"`
 	AdminAPI    AdminAPIConfig  `yaml:"admin_api"`
 	Services    []Service       `yaml:"services"`
 }
@@ -58,11 +58,6 @@ type PoolConfig struct {
 	MaxIdle     int           `yaml:"max_idle"`
 	MaxOpen     int           `yaml:"max_open"`
 	IdleTimeout time.Duration `yaml:"idle_timeout"`
-}
-
-type AuthConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	APIKey  string `yaml:"api_key"`
 }
 
 type AdminAPIConfig struct {
