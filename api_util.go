@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/go-load-balancer/internal/auth/database"
 	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
 	"github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
+	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 )
 
 type Config struct {
@@ -23,19 +24,26 @@ type Config struct {
 
 func main() {
 	var (
-		username  = flag.String("username", "", "Username for the new user")
-		password  = flag.String("password", "", "Password for the new user")
-		role      = flag.String("role", "reader", "Role for the new user (admin or reader)")
-		dbPath    = flag.String("db", "./auth.db", "Path to SQLite database")
-		listUsers = flag.Bool("list", false, "List all users")
+		username   = flag.String("username", "", "Username for the new user")
+		password   = flag.String("password", "", "Password for the new user")
+		role       = flag.String("role", "reader", "Role for the new user (admin or reader)")
+		listUsers  = flag.Bool("list", false, "List all users")
+		configPath = flag.String("config", "./config.yaml", "Path to configuration file")
 	)
-
 	flag.Parse()
+	if *configPath == "" {
+		log.Fatalf("Config file path is required")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	// Initialize configuration
 	config := Config{
-		DBPath:             *dbPath,
-		JWTSecret:          "your-jwt-secret", // In production, load from env or config file
+		DBPath:             cfg.Auth.DBPath,
+		JWTSecret:          cfg.Auth.JWTSecret,
 		PasswordMinLength:  12,
 		RequireUppercase:   true,
 		RequireNumber:      true,
