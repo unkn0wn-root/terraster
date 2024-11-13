@@ -28,17 +28,18 @@ type User struct {
 }
 
 type Token struct {
-	ID         int64      `json:"id"`
-	UserID     int64      `json:"user_id"`
-	Token      string     `json:"token"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	CreatedAt  time.Time  `json:"created_at"`
-	LastUsedAt time.Time  `json:"last_used_at"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
-	ClientIP   string     `json:"client_ip"`
-	UserAgent  string     `json:"user_agent"`
-	JTI        string     `json:"-"` // JWT ID for tracking
-	Role       Role       `json:"role"`
+	ID           int64      `json:"id"`
+	UserID       int64      `json:"user_id"`
+	Token        string     `json:"token"`
+	RefreshToken string     `json:"refresh_token,omitempty"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	LastUsedAt   time.Time  `json:"last_used_at"`
+	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	ClientIP     string     `json:"client_ip"`
+	UserAgent    string     `json:"user_agent"`
+	JTI          string     `json:"-"` // JWT ID for tracking
+	Role         Role       `json:"role"`
 }
 
 type AuditLog struct {

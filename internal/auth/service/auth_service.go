@@ -30,6 +30,7 @@ var (
 type AuthConfig struct {
 	JWTSecret            []byte
 	TokenExpiry          time.Duration
+	RefreshTokenExpiry   time.Duration
 	MaxLoginAttempts     int
 	LockDuration         time.Duration
 	MaxActiveTokens      int
@@ -76,6 +77,20 @@ func (s *AuthService) IsPasswordExpired(user *models.User) bool {
 	return time.Since(user.PasswordChangedAt) > s.passwordExpiry
 }
 
+func (s *AuthService) validator() *validation.PasswordValidator {
+	return validation.NewPasswordValidator(validation.PasswordPolicy{
+		MinLength:           s.config.PasswordMinLength,
+		MaxLength:           128,
+		RequireUppercase:    s.config.RequireUppercase,
+		RequireLowercase:    true,
+		RequireNumbers:      s.config.RequireNumber,
+		RequireSpecial:      s.config.RequireSpecialChar,
+		MaxRepeatingChars:   3,
+		PreventSequential:   true,
+		PreventUsernamePart: true,
+	})
+}
+
 func (s *AuthService) tokenCleanupRoutine() {
 	ticker := time.NewTicker(s.config.TokenCleanupInterval)
 	defer ticker.Stop()
@@ -115,18 +130,7 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 	}
 
 	// Validate new password using our existing password validator
-	validator := validation.NewPasswordValidator(validation.PasswordPolicy{
-		MinLength:           s.config.PasswordMinLength,
-		MaxLength:           128,
-		RequireUppercase:    s.config.RequireUppercase,
-		RequireLowercase:    true,
-		RequireNumbers:      s.config.RequireNumber,
-		RequireSpecial:      s.config.RequireSpecialChar,
-		MaxRepeatingChars:   3,
-		PreventSequential:   true,
-		PreventUsernamePart: true,
-	})
-
+	validator := s.validator()
 	if err := validator.ValidatePassword(newPassword, user.Username); err != nil {
 		return fmt.Errorf("invalid new password: %w", err)
 	}
@@ -178,20 +182,8 @@ func (s *AuthService) CreateUser(username, password string, role models.Role) er
 		return fmt.Errorf("error checking username: %w", err)
 	}
 
-	// Create password validator with service config
-	validator := validation.NewPasswordValidator(validation.PasswordPolicy{
-		MinLength:           s.config.PasswordMinLength,
-		MaxLength:           128,
-		RequireUppercase:    s.config.RequireUppercase,
-		RequireLowercase:    true,
-		RequireNumbers:      s.config.RequireNumber,
-		RequireSpecial:      s.config.RequireSpecialChar,
-		MaxRepeatingChars:   3,
-		PreventSequential:   true,
-		PreventUsernamePart: true,
-	})
-
 	// Validate password
+	validator := s.validator()
 	if err := validator.ValidatePassword(password, username); err != nil {
 		return fmt.Errorf("invalid password: %w", err)
 	}
@@ -288,6 +280,12 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 		return nil, err
 	}
 
+	// Generate refresh token
+	refreshToken, err := generateRandomString(32)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create JWT claims
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
@@ -305,15 +303,16 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 
 	// Create token record
 	tokenRecord := &models.Token{
-		UserID:     user.ID,
-		Token:      tokenString,
-		JTI:        jwtID,
-		Role:       user.Role,
-		ExpiresAt:  time.Now().Add(s.config.TokenExpiry),
-		CreatedAt:  time.Now(),
-		LastUsedAt: time.Now(),
-		ClientIP:   r.RemoteAddr,
-		UserAgent:  r.UserAgent(),
+		UserID:       user.ID,
+		Token:        tokenString,
+		RefreshToken: refreshToken,
+		JTI:          jwtID,
+		Role:         user.Role,
+		ExpiresAt:    time.Now().Add(s.config.TokenExpiry),
+		CreatedAt:    time.Now(),
+		LastUsedAt:   time.Now(),
+		ClientIP:     r.RemoteAddr,
+		UserAgent:    r.UserAgent(),
 	}
 
 	if err := s.db.CreateToken(tokenRecord); err != nil {
@@ -321,6 +320,54 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 	}
 
 	return tokenRecord, nil
+}
+
+func (s *AuthService) RefreshToken(refreshToken string, r *http.Request) (*models.Token, error) {
+	claims, err := s.validateRefreshToken(refreshToken)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	userID, ok := claims["user_id"].(float64)
+	if !ok {
+		return nil, ErrInvalidToken
+	}
+
+	oldToken, err := s.db.GetTokenByRefreshToken(refreshToken, int64(userID))
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	// Check if refresh token is expired or revoked
+	if oldToken.RevokedAt != nil {
+		return nil, ErrRevokedToken
+	}
+
+	// Get user
+	user, err := s.db.GetUserByID(oldToken.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate new token
+	newToken, err := s.generateToken(user, r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Revoke old token
+	now := time.Now()
+	oldToken.RevokedAt = &now
+	if err := s.db.UpdateToken(oldToken); err != nil {
+		return nil, err
+	}
+
+	// Save new token
+	if err := s.db.CreateToken(newToken); err != nil {
+		return nil, err
+	}
+
+	return newToken, nil
 }
 
 func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) {
@@ -362,6 +409,25 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 	s.db.UpdateToken(dbToken)
 
 	return &claims, nil
+}
+
+func (s *AuthService) validateRefreshToken(tokenString string) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return s.config.JWTSecret, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, errors.New("invalid token")
 }
 
 func (s *AuthService) RevokeToken(tokenString string) error {
