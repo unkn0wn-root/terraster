@@ -3,7 +3,6 @@ module github.com/unkn0wn-root/go-load-balancer
 go 1.21
 
 require (
-	github.com/fsnotify/fsnotify v1.7.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/gorilla/websocket v1.5.3
