@@ -120,25 +120,32 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	svlc := srvc.Locations
+	if len(svlc) == 0 {
+		http.Error(w, "Service has no locations", http.StatusNotFound)
+		return
+	}
+
 	var location *service.LocationInfo
-	for _, loc := range srvc.Locations {
-		if loc.Path == servicePath {
-			location = loc
-			break
+	if servicePath == "" {
+		if len(svlc) > 1 {
+			http.Error(w, "'path' parameter is required for services with multiple locations",
+				http.StatusBadRequest)
+			return
+		}
+		location = svlc[0]
+	} else {
+		for _, loc := range svlc {
+			if loc.Path == servicePath {
+				location = loc
+				break
+			}
 		}
 	}
 
 	if location == nil {
 		http.Error(w, "Location not found", http.StatusNotFound)
 		return
-	}
-
-	if len(srvc.Locations) > 1 {
-		http.Error(w, "location parameter is required for services with multiple locations",
-			http.StatusBadRequest)
-		return
-	} else {
-		location = srvc.Locations[0]
 	}
 
 	switch r.Method {
