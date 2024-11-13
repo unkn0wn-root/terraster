@@ -60,14 +60,6 @@ func main() {
 		log.Fatalf("Failed to initialize server %v", err)
 	}
 
-	configWatcher, err := config.NewConfigWatcher(*configPath, func(newCfg *config.Config) {
-		srv.UpdateConfig(newCfg)
-	})
-	if err != nil {
-		log.Printf("Could not start config watcher: %v", err)
-	}
-	defer configWatcher.Close()
-
 	// Handle shutdown gracefully
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

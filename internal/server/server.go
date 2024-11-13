@@ -350,12 +350,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *Server) UpdateConfig(cfg *config.Config) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.config = cfg
-}
-
 func (s *Server) servicePort(port int) int {
 	if port != 0 {
 		return port
