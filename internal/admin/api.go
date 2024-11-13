@@ -108,9 +108,9 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 // Supports GET, POST, and DELETE methods to retrieve, add, or remove backends.
 func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.URL.Query().Get("service_name")
-	serviceLocation := r.URL.Query().Get("path")
+	servicePath := r.URL.Query().Get("path")
 	if serviceName == "" {
-		http.Error(w, "service_name is required", http.StatusBadRequest)
+		http.Error(w, "service_name and path is required", http.StatusBadRequest)
 		return
 	}
 
@@ -122,23 +122,23 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 
 	var location *service.LocationInfo
 	for _, loc := range srvc.Locations {
-		if loc.Path == serviceLocation {
+		if loc.Path == servicePath {
 			location = loc
 			break
 		}
 	}
 
-	if location == nil && serviceLocation == "" {
-		if len(srvc.Locations) == 1 {
-			location = srvc.Locations[0]
-		} else {
-			http.Error(w, "location parameter is required for services with multiple locations",
-				http.StatusBadRequest)
-			return
-		}
-	} else {
+	if location == nil {
 		http.Error(w, "Location not found", http.StatusNotFound)
 		return
+	}
+
+	if len(srvc.Locations) > 1 {
+		http.Error(w, "location parameter is required for services with multiple locations",
+			http.StatusBadRequest)
+		return
+	} else {
+		location = srvc.Locations[0]
 	}
 
 	switch r.Method {
