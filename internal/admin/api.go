@@ -1,9 +1,14 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
+	"github.com/golang-jwt/jwt"
+	"github.com/unkn0wn-root/go-load-balancer/internal/auth/handlers"
+	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
+	auth_service "github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
 	"github.com/unkn0wn-root/go-load-balancer/internal/config"
 	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
 	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
@@ -15,15 +20,19 @@ type AdminAPI struct {
 	serviceManager *service.Manager
 	mux            *http.ServeMux
 	config         *config.Config
+	authService    *auth_service.AuthService
+	authHandler    *handlers.AuthHandler
 }
 
 // NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
 // It initializes the HTTP mux and registers all API routes.
-func NewAdminAPI(manager *service.Manager, cfg *config.Config) *AdminAPI {
+func NewAdminAPI(manager *service.Manager, cfg *config.Config, authService *auth_service.AuthService) *AdminAPI {
 	api := &AdminAPI{
 		serviceManager: manager,
 		mux:            http.NewServeMux(),
 		config:         cfg,
+		authService:    authService,
+		authHandler:    handlers.NewAuthHandler(authService),
 	}
 	api.registerRoutes()
 	return api
@@ -31,24 +40,34 @@ func NewAdminAPI(manager *service.Manager, cfg *config.Config) *AdminAPI {
 
 // registerRoutes sets up the HTTP handlers for various administrative endpoints.
 func (a *AdminAPI) registerRoutes() {
-	a.mux.HandleFunc("/api/backends", a.handleBackends)
-	a.mux.HandleFunc("/api/health", a.handleHealth)
-	a.mux.HandleFunc("/api/stats", a.handleStats)
-	a.mux.HandleFunc("/api/config", a.handleConfig)
-	a.mux.HandleFunc("/api/services", a.handleServices)
-	a.mux.HandleFunc("/api/locations", a.handleLocations)
+	// Auth routes
+	a.mux.HandleFunc("/api/auth/login", a.authHandler.Login)
+	a.mux.HandleFunc("/api/auth/refresh", a.authHandler.RefreshToken)
+
+	// Protected routes
+	a.mux.Handle("/api/auth/change-password",
+		a.requireAuth(http.HandlerFunc(a.authHandler.ChangePassword)))
+
+	// Admin-only routes
+	a.mux.Handle("/api/backends",
+		a.requireAuth(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleBackends))))
+	a.mux.Handle("/api/config",
+		a.requireAuth(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleConfig))))
+
+	// Reader routes
+	a.mux.Handle("/api/services",
+		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleServices))))
+	a.mux.Handle("/api/health",
+		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleHealth))))
+	a.mux.Handle("/api/stats",
+		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleStats))))
+	a.mux.Handle("/api/locations",
+		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleLocations))))
 }
 
 // Handler returns the HTTP handler for the AdminAPI, wrapped with necessary middleware.
 func (a *AdminAPI) Handler() http.Handler {
 	var middlewares []middleware.Middleware
-	// If authentication is enabled in the config, add the Auth middleware
-	if a.config.Auth.Enabled {
-		middlewares = append(middlewares, middleware.NewAuthMiddleware(config.AuthConfig{
-			APIKey: a.config.Auth.APIKey,
-		}))
-	}
-
 	middlewares = append(middlewares,
 		NewAdminAccessLogMiddleware(),
 		middleware.NewRateLimiterMiddleware(
@@ -258,4 +277,54 @@ func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(stats)
+}
+
+// Helper methods for route protection
+func (a *AdminAPI) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Remove "Bearer " prefix
+		if len(token) < 7 || token[:7] != "Bearer " {
+			http.Error(w, "Invalid token format", http.StatusUnauthorized)
+			return
+		}
+		token = token[7:]
+
+		// Validate token
+		claims, err := a.authService.ValidateToken(token)
+		if err != nil {
+			switch err {
+			case auth_service.ErrInvalidToken:
+				http.Error(w, "Invalid token", http.StatusUnauthorized)
+			case auth_service.ErrRevokedToken:
+				http.Error(w, "Token has been revoked", http.StatusUnauthorized)
+			default:
+				http.Error(w, "Authentication failed", http.StatusUnauthorized)
+			}
+			return
+		}
+
+		// Add claims to context
+		ctx := context.WithValue(r.Context(), "user_claims", claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (a *AdminAPI) requireRole(role models.Role, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims := r.Context().Value("user_claims").(*jwt.MapClaims)
+		userRole := models.Role((*claims)["role"].(string))
+
+		if userRole != role && userRole != models.RoleAdmin {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

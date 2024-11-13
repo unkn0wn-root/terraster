@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_jti ON tokens(jti);
+ALTER TABLE tokens ADD COLUMN refresh_token_expires_at DATETIME;
 CREATE INDEX IF NOT EXISTS idx_tokens_expires_at ON tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);`
@@ -292,4 +293,66 @@ func (s *SQLiteDB) RevokeAllUserTokens(userID int64) error {
         AND revoked_at IS NULL
     `, now, userID)
 	return err
+}
+
+func (s *SQLiteDB) ListUsers() ([]models.User, error) {
+	rows, err := s.db.Query(`
+        SELECT id, username, role, created_at, last_login_at
+        FROM users
+        ORDER BY id ASC
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.Role,
+			&user.CreatedAt,
+			&user.LastLoginAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+func (s *SQLiteDB) GetTokenByRefreshToken(refreshToken string, userID int64) (*models.Token, error) {
+	var token models.Token
+	err := s.db.QueryRow(`
+        SELECT id, user_id, token, refresh_token, expires_at, created_at,
+               last_used_at, revoked_at, client_ip, user_agent, role
+        FROM tokens
+        WHERE refresh_token = ?
+        AND user_id = ?
+        AND revoked_at IS NULL
+        AND expires_at > ?
+    `, refreshToken, userID, time.Now()).Scan(
+		&token.ID,
+		&token.UserID,
+		&token.Token,
+		&token.RefreshToken,
+		&token.ExpiresAt,
+		&token.CreatedAt,
+		&token.LastUsedAt,
+		&token.RevokedAt,
+		&token.ClientIP,
+		&token.UserAgent,
+		&token.Role,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("token not found or invalid")
+		}
+		return nil, err
+	}
+	return &token, nil
 }

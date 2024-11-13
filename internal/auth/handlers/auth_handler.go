@@ -14,7 +14,7 @@ type AuthHandler struct {
 	authService *service.AuthService
 }
 
-func NewAuthHandler(authService *service.AuthService, config *service.AuthConfig) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 	}
@@ -26,10 +26,11 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Token     string    `json:"token"`
-	Type      string    `json:"type"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Role      string    `json:"role"`
+	Token        string    `json:"token"`
+	RefreshToken string    `json:"refresh_token"`
+	Type         string    `json:"type"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	Role         string    `json:"role"`
 }
 
 type CreateUserRequest struct {
@@ -69,10 +70,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := LoginResponse{
-		Token:     token.Token,
-		Type:      "Bearer",
-		ExpiresAt: token.ExpiresAt,
-		Role:      string(token.Role),
+		Token:        token.Token,
+		RefreshToken: token.RefreshToken,
+		Type:         "Bearer",
+		ExpiresAt:    token.ExpiresAt,
+		Role:         string(token.Role),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -125,6 +127,46 @@ func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	token, err := h.authService.RefreshToken(req.RefreshToken, r)
+	if err != nil {
+		switch err {
+		case service.ErrInvalidToken:
+			http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+		case service.ErrRevokedToken:
+			http.Error(w, "Refresh token has been revoked", http.StatusUnauthorized)
+		default:
+			http.Error(w, "Error refreshing token", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	response := LoginResponse{
+		Token:        token.Token,
+		RefreshToken: token.RefreshToken,
+		Type:         "Bearer",
+		ExpiresAt:    token.ExpiresAt,
+		Role:         string(token.Role),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func (h *AuthHandler) ListSessions(w http.ResponseWriter, r *http.Request) {

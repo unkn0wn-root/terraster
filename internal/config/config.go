@@ -70,6 +70,13 @@ type AdminAPIConfig struct {
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 }
 
+type APIAuthConfig struct {
+	JWTSecret           string `json:"jwt_secret"`
+	DBPath              string `json:"db_path"`
+	PasswordExpiryDays  int    `json:"password_expiry_days"`
+	PasswordHistorySize int    `json:"password_history_size"`
+}
+
 type Service struct {
 	Name         string     `yaml:"name"`
 	Host         string     `yaml:"host"`
