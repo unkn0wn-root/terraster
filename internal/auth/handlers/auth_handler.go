@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
+	"github.com/unkn0wn-root/terraster/internal/auth/models"
+	"github.com/unkn0wn-root/terraster/internal/auth/service"
 )
 
 type AuthHandler struct {

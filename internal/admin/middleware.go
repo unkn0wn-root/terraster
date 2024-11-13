@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
+	"github.com/unkn0wn-root/terraster/internal/middleware"
 )
 
 type AdminAccessLogMiddleware struct{}

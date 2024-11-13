@@ -8,7 +8,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
+	"github.com/unkn0wn-root/terraster/internal/auth/models"
 )
 
 const schema = `

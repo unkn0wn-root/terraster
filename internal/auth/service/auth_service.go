@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/database"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/validation"
+	"github.com/unkn0wn-root/terraster/internal/auth/database"
+	"github.com/unkn0wn-root/terraster/internal/auth/models"
+	"github.com/unkn0wn-root/terraster/internal/auth/validation"
 	"golang.org/x/crypto/bcrypt"
 )
 

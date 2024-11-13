@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/config"
 )
 
 func (m *Manager) validateTLSConfig(service config.Service) error {

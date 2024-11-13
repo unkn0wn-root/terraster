@@ -1,4 +1,4 @@
-module github.com/unkn0wn-root/go-load-balancer
+module github.com/unkn0wn-root/terraster
 
 go 1.21
 

@@ -26,7 +26,7 @@ const (
 	HeaderHost           = "Host"
 
 	DefaultScheme     = "http"
-	DefaultProxyLabel = "go-load-balancer"
+	DefaultProxyLabel = "terraster"
 )
 
 type ProxyError struct {

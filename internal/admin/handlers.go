@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
-	"github.com/unkn0wn-root/go-load-balancer/internal/service"
+	"github.com/unkn0wn-root/terraster/internal/pool"
+	"github.com/unkn0wn-root/terraster/internal/service"
 )
 
 type BackendStatus struct {

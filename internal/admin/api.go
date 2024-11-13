@@ -6,13 +6,13 @@ import (
 	"net/http"
 
 	"github.com/golang-jwt/jwt"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/handlers"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/models"
-	auth_service "github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
-	"github.com/unkn0wn-root/go-load-balancer/internal/config"
-	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
-	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
-	"github.com/unkn0wn-root/go-load-balancer/internal/service"
+	"github.com/unkn0wn-root/terraster/internal/auth/handlers"
+	"github.com/unkn0wn-root/terraster/internal/auth/models"
+	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
+	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/middleware"
+	"github.com/unkn0wn-root/terraster/internal/pool"
+	"github.com/unkn0wn-root/terraster/internal/service"
 )
 
 // AdminAPI represents the administrative API for managing the load balancer.

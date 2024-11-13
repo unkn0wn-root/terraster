@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
+	"github.com/unkn0wn-root/terraster/internal/auth/service"
 	"golang.org/x/time/rate"
 )
 

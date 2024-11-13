@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/config"
-	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
-	"github.com/unkn0wn-root/go-load-balancer/pkg/algorithm"
+	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/pool"
+	"github.com/unkn0wn-root/terraster/pkg/algorithm"
 )
 
 var (

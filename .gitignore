@@ -22,6 +22,6 @@ go.work.sum
 .env
 
 load-balancer
-glb
+terraster
 ./tmp
 config.yaml

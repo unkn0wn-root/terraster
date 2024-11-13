@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/database"
-	"github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
-	"github.com/unkn0wn-root/go-load-balancer/internal/config"
-	"github.com/unkn0wn-root/go-load-balancer/internal/server"
+	"github.com/unkn0wn-root/terraster/internal/auth/database"
+	"github.com/unkn0wn-root/terraster/internal/auth/service"
+	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/server"
 )
 
 func main() {

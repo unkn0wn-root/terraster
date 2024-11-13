@@ -13,14 +13,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unkn0wn-root/go-load-balancer/internal/admin"
-	auth_service "github.com/unkn0wn-root/go-load-balancer/internal/auth/service"
-	"github.com/unkn0wn-root/go-load-balancer/internal/config"
-	"github.com/unkn0wn-root/go-load-balancer/internal/middleware"
-	"github.com/unkn0wn-root/go-load-balancer/internal/pool"
-	"github.com/unkn0wn-root/go-load-balancer/internal/service"
-	"github.com/unkn0wn-root/go-load-balancer/pkg/algorithm"
-	"github.com/unkn0wn-root/go-load-balancer/pkg/health"
+	"github.com/unkn0wn-root/terraster/internal/admin"
+	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
+	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/middleware"
+	"github.com/unkn0wn-root/terraster/internal/pool"
+	"github.com/unkn0wn-root/terraster/internal/service"
+	"github.com/unkn0wn-root/terraster/pkg/algorithm"
+	"github.com/unkn0wn-root/terraster/pkg/health"
 )
 
 // Constants for default configurations
