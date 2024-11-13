@@ -1,6 +1,6 @@
 # GLB - Uncomplicated Load Balancer
 
-A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go with Admin API (add, remove, list).
+A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go with Admin API. 
 
 ## Features
 
