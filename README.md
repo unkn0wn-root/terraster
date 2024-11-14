@@ -1,4 +1,4 @@
-# terraster - uncomplicated Load Balancer/Reverse Proxy
+# Terraster - Uncomplicated Load Balancer/Reverse Proxy
 
 A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go with Admin API. 
 
@@ -32,7 +32,7 @@ A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go 
 
 ## Quick Start
 
-1. Build the load balancer:
+1. Build Terraster:
 ```bash
 go build -o terraster cmd/main.go
 ```
@@ -178,9 +178,9 @@ curl http://localhost:8081/api/backends \
     -H "Content-Type: application/json"
 ```
 
-2. Add Backend:
+2. Add Backend to service:
 ```bash
-curl -X POST http://localhost:8081/api/backends \
+curl -X POST http://localhost:8081/api/backends?service_name=backend-api \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
   -d '{
