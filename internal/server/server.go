@@ -232,13 +232,11 @@ func (s *Server) setupMiddleware() http.Handler {
 	logger := middleware.NewLoggingMiddleware(
 		log,
 		middleware.WithLogLevel(middleware.INFO),
-		middleware.WithHeaders(),
-		middleware.WithQueryParams(),
 		middleware.WithExcludePaths([]string{"/health"}), // exclude health check from logs
 	)
 
 	chain := middleware.NewMiddlewareChain(
-		middleware.NewCircuitBreaker(5, 30*time.Second),
+		middleware.NewCircuitBreaker(10, 10*time.Second),
 		middleware.NewRateLimiterMiddleware(
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
