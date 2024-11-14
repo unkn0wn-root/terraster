@@ -40,7 +40,7 @@ func (lrt *LeastResponseTime) NextServer(pool ServerPool, _ *http.Request) *Serv
 	defer lrt.mu.RUnlock()
 
 	for _, server := range backends {
-		if !server.Alive {
+		if !server.Alive.Load() {
 			continue
 		}
 

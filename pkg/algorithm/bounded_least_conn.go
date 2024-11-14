@@ -35,7 +35,7 @@ func (blc *BoundedLeastConnections) NextServer(pool ServerPool, _ *http.Request)
 
 	for _, idx := range indices {
 		server := backends[idx]
-		if !server.Alive {
+		if !server.Alive.Load() {
 			continue
 		}
 

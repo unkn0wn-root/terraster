@@ -236,7 +236,7 @@ func (s *Server) setupMiddleware() http.Handler {
 	)
 
 	chain := middleware.NewMiddlewareChain(
-		middleware.NewCircuitBreaker(10, 10*time.Second),
+		//middleware.NewCircuitBreaker(10, 10*time.Second),
 		middleware.NewRateLimiterMiddleware(
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,

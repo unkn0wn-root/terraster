@@ -270,7 +270,7 @@ func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 			totalConnections := 0
 			activeBackends := 0
 			for _, backend := range backends {
-				if backend.Alive {
+				if backend.Alive.Load() {
 					activeBackends++
 				}
 				totalConnections += int(backend.ConnectionCount)

@@ -29,7 +29,7 @@ func (ih *IPHash) NextServer(pool ServerPool, r *http.Request) *Server {
 	// Get available servers
 	available := make([]*Server, 0)
 	for _, server := range servers {
-		if server.Alive {
+		if server.Alive.Load() {
 			available = append(available, server)
 		}
 	}

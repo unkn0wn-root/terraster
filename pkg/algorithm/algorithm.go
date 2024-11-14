@@ -20,10 +20,10 @@ type ServerPool interface {
 type Server struct {
 	URL              string
 	Weight           int
-	CurrentWeight    int
+	CurrentWeight    atomic.Int32
 	ConnectionCount  int32
 	MaxConnections   int32
-	Alive            bool
+	Alive            atomic.Bool
 	LastResponseTime time.Duration
 }
 

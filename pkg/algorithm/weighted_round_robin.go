@@ -18,28 +18,36 @@ func (wrr *WeightedRoundRobin) NextServer(pool ServerPool, _ *http.Request) *Ser
 		return nil
 	}
 
-	totalWeight := 0
-	maxWeight := -1
-	var bestServer *Server
+	var totalWeight int32 = 0
+	var maxWeight int32 = -1
+	var selectedServer *Server
 
+	// First pass: calculate total weight and find max weight server
 	for _, server := range servers {
-		if !server.Alive {
+		if !server.Alive.Load() || !server.CanAcceptConnection() {
 			continue
 		}
 
-		server.CurrentWeight += server.Weight
-		totalWeight += server.Weight
+		sw := int32(server.Weight)
 
-		if server.CurrentWeight > maxWeight {
-			maxWeight = server.CurrentWeight
-			bestServer = server
+		currentWeight := server.CurrentWeight.Load()
+		newWeight := currentWeight + sw
+		server.CurrentWeight.Store(newWeight)
+
+		totalWeight += sw
+
+		if selectedServer == nil || newWeight > maxWeight {
+			selectedServer = server
+			maxWeight = newWeight
 		}
 	}
 
-	if bestServer == nil {
-		return nil
+	// If we found a server, decrease its current_weight
+	if selectedServer != nil {
+		newWeight := selectedServer.CurrentWeight.Load() - totalWeight
+		selectedServer.CurrentWeight.Store(newWeight)
+		return selectedServer
 	}
 
-	bestServer.CurrentWeight -= totalWeight
-	return bestServer
+	return nil
 }

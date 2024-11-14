@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httputil"
@@ -22,17 +23,6 @@ type PoolConfig struct {
 	MaxConns  int32  `json:"max_connections"`
 }
 
-type Backend struct {
-	URL             *url.URL
-	Host            string
-	Alive           atomic.Bool
-	Weight          int
-	CurrentWeight   atomic.Int32
-	Proxy           *URLRewriteProxy
-	ConnectionCount int32
-	MaxConnections  int32
-}
-
 type ServerPool struct {
 	backends       atomic.Value
 	current        uint64
@@ -46,46 +36,6 @@ func NewServerPool() *ServerPool {
 	pool.algorithm.Store(algorithm.CreateAlgorithm("round-robin"))
 	pool.maxConnections.Store(1000)
 	return pool
-}
-
-func (s *ServerPool) UpdateConfig(update PoolConfig) {
-	if update.MaxConns != 0 {
-		s.maxConnections.Store(update.MaxConns)
-	}
-
-	if update.Algorithm != "" {
-		s.algorithm.Store(algorithm.CreateAlgorithm(update.Algorithm))
-	}
-}
-
-func (s *ServerPool) GetConfig() PoolConfig {
-	return PoolConfig{
-		Algorithm: s.algorithm.Load().(algorithm.Algorithm).Name(),
-		MaxConns:  s.maxConnections.Load(),
-	}
-}
-func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
-	return s.algorithm.Load().(algorithm.Algorithm)
-}
-
-func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) {
-	s.algorithm.Store(algorithm)
-}
-
-func (s *ServerPool) GetMaxConnections() int32 {
-	return s.maxConnections.Load()
-}
-
-func (s *ServerPool) SetMaxConnections(maxConns int32) {
-	s.maxConnections.Store(maxConns)
-}
-
-func (s *ServerPool) GetCurrentIndex() uint64 {
-	return atomic.LoadUint64(&s.current)
-}
-
-func (s *ServerPool) SetCurrentIndex(idx uint64) {
-	atomic.StoreUint64(&s.current, idx)
 }
 
 func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error {
@@ -104,6 +54,11 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 	)
 	rp.proxy.BufferPool = NewBufferPool()
 	rp.proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		// A canceled context usually means the client disconnected
+		// or the request was canceled, not that the backend is unhealthy.
+		if err == context.Canceled {
+			return
+		}
 		s.MarkBackendStatus(url, false)
 		retries := GetRetryFromContext(r)
 		if retries < 3 {
@@ -121,12 +76,11 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 		}
 	}
 
-	var maxConnections int32
-	if cfg.MaxConnections == 0 {
+	maxConnections := cfg.MaxConnections
+	if maxConnections == 0 {
 		maxConnections = s.GetMaxConnections()
-	} else {
-		maxConnections = cfg.MaxConnections
 	}
+
 	backend := &Backend{
 		URL:            url,
 		Weight:         cfg.Weight,
@@ -218,14 +172,15 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 
 	servers := make([]*algorithm.Server, len(currentBackends))
 	for i, backend := range currentBackends {
-		servers[i] = &algorithm.Server{
+		server := &algorithm.Server{
 			URL:             backend.URL.String(),
 			Weight:          backend.Weight,
-			CurrentWeight:   backend.GetCurrentWeight(),
 			ConnectionCount: backend.ConnectionCount,
 			MaxConnections:  backend.MaxConnections,
-			Alive:           backend.Alive.Load(),
 		}
+		server.Alive.Store(backend.Alive.Load())
+		server.CurrentWeight.Store(backend.CurrentWeight.Load())
+		servers[i] = server
 	}
 	return servers
 }
@@ -295,6 +250,57 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 		}
 	}
 	return nil
+}
+
+func (s *ServerPool) UpdateConfig(update PoolConfig) {
+	if update.MaxConns != 0 {
+		s.maxConnections.Store(update.MaxConns)
+	}
+
+	if update.Algorithm != "" {
+		s.algorithm.Store(algorithm.CreateAlgorithm(update.Algorithm))
+	}
+}
+
+func (s *ServerPool) GetConfig() PoolConfig {
+	return PoolConfig{
+		Algorithm: s.algorithm.Load().(algorithm.Algorithm).Name(),
+		MaxConns:  s.maxConnections.Load(),
+	}
+}
+func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
+	return s.algorithm.Load().(algorithm.Algorithm)
+}
+
+func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) {
+	s.algorithm.Store(algorithm)
+}
+
+func (s *ServerPool) GetMaxConnections() int32 {
+	return s.maxConnections.Load()
+}
+
+func (s *ServerPool) SetMaxConnections(maxConns int32) {
+	s.maxConnections.Store(maxConns)
+}
+
+func (s *ServerPool) GetCurrentIndex() uint64 {
+	return atomic.LoadUint64(&s.current)
+}
+
+func (s *ServerPool) SetCurrentIndex(idx uint64) {
+	atomic.StoreUint64(&s.current, idx)
+}
+
+type Backend struct {
+	URL             *url.URL
+	Host            string
+	Alive           atomic.Bool
+	Weight          int
+	CurrentWeight   atomic.Int32
+	Proxy           *URLRewriteProxy
+	ConnectionCount int32
+	MaxConnections  int32
 }
 
 func (b *Backend) GetURL() string {
