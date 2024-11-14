@@ -202,9 +202,10 @@ func (m *Manager) createServerPool(srvc config.Location) (*pool.ServerPool, erro
 	})
 	for _, backend := range srvc.Backends {
 		rc := pool.RouteConfig{
-			Path:       srvc.Path,
-			RewriteURL: srvc.Rewrite,
-			Redirect:   srvc.Redirect,
+			Path:          srvc.Path,
+			RewriteURL:    srvc.Rewrite,
+			Redirect:      srvc.Redirect,
+			SkipTLSVerify: backend.SkipTLSVerify,
 		}
 		if err := serverPool.AddBackend(backend, rc); err != nil {
 			return nil, err

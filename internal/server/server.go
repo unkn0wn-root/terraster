@@ -281,7 +281,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer backend.DecrementConnections()
 
 	start := time.Now()
-	proxy := backend.ReverseProxy
+	proxy := backend.Proxy
 	proxy.ServeHTTP(w, r)
 	duration := time.Since(start)
 
