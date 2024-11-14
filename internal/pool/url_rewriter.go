@@ -48,7 +48,7 @@ func (r *URLRewriter) shouldRedirect(req *http.Request) (bool, string) {
 	if r.redirect == "" {
 		return false, ""
 	}
-
+	// redirect only on root
 	if r.path == "/" && req.URL.Path == "/" {
 		return true, r.redirect
 	}
@@ -59,7 +59,6 @@ func (r *URLRewriter) shouldRedirect(req *http.Request) (bool, string) {
 func (r *URLRewriter) rewriteRequestURL(req *http.Request, targetURL *url.URL) {
 	req.URL.Scheme = targetURL.Scheme
 	req.URL.Host = targetURL.Host
-	req.Host = targetURL.Host
 
 	if r.shouldStripPath {
 		r.stripPathPrefix(req)

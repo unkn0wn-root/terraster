@@ -34,6 +34,7 @@ type BackendConfig struct {
 	Weight         int         `yaml:"weight"`
 	MaxConnections int32       `yaml:"max_connections"`
 	HealthCheck    HealthCheck `yaml:"health_check"`
+	SkipTLSVerify  bool        `yaml:"skip_tls_verify"`
 }
 
 type HealthCheck struct {

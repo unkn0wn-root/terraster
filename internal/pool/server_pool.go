@@ -29,7 +29,7 @@ type Backend struct {
 	Alive           bool
 	Weight          int
 	CurrentWeight   int
-	ReverseProxy    *httputil.ReverseProxy
+	Proxy           *URLRewriteProxy
 	ConnectionCount int32
 	MaxConnections  int32
 	mu              sync.RWMutex
@@ -151,7 +151,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 		Alive:          true,
 		Weight:         cfg.Weight,
 		MaxConnections: maxConnections,
-		ReverseProxy:   rp.proxy,
+		Proxy:          rp,
 	}
 
 	s.mu.Lock()
@@ -230,7 +230,6 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 	defer s.mu.Unlock()
 
 	newBackends := make([]*Backend, 0)
-
 	for _, cfg := range configs {
 		url, err := url.Parse(cfg.URL)
 		if err != nil {
@@ -251,12 +250,18 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 			existing.Weight = cfg.Weight
 			newBackends = append(newBackends, existing)
 		} else {
-			proxy := httputil.NewSingleHostReverseProxy(url)
+			proxy := &httputil.ReverseProxy{}
+			pr := NewReverseProxy(
+				url,
+				RouteConfig{},
+				proxy,
+			)
+
 			backend := &Backend{
-				URL:          url,
-				Alive:        true,
-				Weight:       cfg.Weight,
-				ReverseProxy: proxy,
+				URL:    url,
+				Alive:  true,
+				Weight: cfg.Weight,
+				Proxy:  pr,
 			}
 			newBackends = append(newBackends, backend)
 		}
@@ -266,10 +271,10 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 	return nil
 }
 
-func (s *ServerPool) GetNextProxy(r *http.Request) *httputil.ReverseProxy {
+func (s *ServerPool) GetNextProxy(r *http.Request) *URLRewriteProxy {
 	if backend := s.GetNextPeer(); backend != nil {
 		atomic.AddInt32(&backend.ConnectionCount, 1)
-		return backend.ReverseProxy
+		return backend.Proxy
 	}
 	return nil
 }
