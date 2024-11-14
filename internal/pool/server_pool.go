@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"sync"
 	"sync/atomic"
 
 	"github.com/unkn0wn-root/terraster/internal/config"
@@ -26,77 +25,59 @@ type PoolConfig struct {
 type Backend struct {
 	URL             *url.URL
 	Host            string
-	Alive           bool
+	Alive           atomic.Bool
 	Weight          int
-	CurrentWeight   int
+	CurrentWeight   atomic.Int32
 	Proxy           *URLRewriteProxy
 	ConnectionCount int32
 	MaxConnections  int32
-	mu              sync.RWMutex
 }
 
 type ServerPool struct {
-	backends       []*Backend
+	backends       atomic.Value
 	current        uint64
-	algorithm      algorithm.Algorithm
-	maxConnections int32
-	mu             sync.RWMutex
+	algorithm      atomic.Value
+	maxConnections atomic.Int32
 }
 
 func NewServerPool() *ServerPool {
-	return &ServerPool{
-		backends:       make([]*Backend, 0),
-		algorithm:      algorithm.CreateAlgorithm("round-robin"), // default algorithm
-		maxConnections: 1000,                                     // default max connections
-	}
+	pool := &ServerPool{}
+	pool.backends.Store([]*Backend{})
+	pool.algorithm.Store(algorithm.CreateAlgorithm("round-robin"))
+	pool.maxConnections.Store(1000)
+	return pool
 }
 
 func (s *ServerPool) UpdateConfig(update PoolConfig) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if update.MaxConns != 0 {
-		s.maxConnections = update.MaxConns
+		s.maxConnections.Store(update.MaxConns)
 	}
 
 	if update.Algorithm != "" {
-		s.algorithm = algorithm.CreateAlgorithm(update.Algorithm)
+		s.algorithm.Store(algorithm.CreateAlgorithm(update.Algorithm))
 	}
 }
 
 func (s *ServerPool) GetConfig() PoolConfig {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	return PoolConfig{
-		Algorithm: s.algorithm.Name(),
-		MaxConns:  s.maxConnections,
+		Algorithm: s.algorithm.Load().(algorithm.Algorithm).Name(),
+		MaxConns:  s.maxConnections.Load(),
 	}
 }
 func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.algorithm
+	return s.algorithm.Load().(algorithm.Algorithm)
 }
 
-func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.algorithm = algorithm
-	return nil
+func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) {
+	s.algorithm.Store(algorithm)
 }
 
 func (s *ServerPool) GetMaxConnections() int32 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.maxConnections
+	return s.maxConnections.Load()
 }
 
-func (s *ServerPool) SetMaxConnections(maxConns int32) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.maxConnections = maxConns
-	return nil
+func (s *ServerPool) SetMaxConnections(maxConns int32) {
+	s.maxConnections.Store(maxConns)
 }
 
 func (s *ServerPool) GetCurrentIndex() uint64 {
@@ -148,97 +129,121 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 	}
 	backend := &Backend{
 		URL:            url,
-		Alive:          true,
 		Weight:         cfg.Weight,
 		MaxConnections: maxConnections,
 		Proxy:          rp,
 	}
+	backend.Alive.Store(true)
 
-	s.mu.Lock()
-	s.backends = append(s.backends, backend)
-	s.mu.Unlock()
+	currentBackends := s.backends.Load().([]*Backend)
+	// Create new slice with added backend
+	newBackends := make([]*Backend, len(currentBackends)+1)
+	copy(newBackends, currentBackends)
+	newBackends[len(currentBackends)] = backend
 
+	// Atomically replace the backends slice
+	s.backends.Store(newBackends)
 	return nil
 }
 
 func (s *ServerPool) RemoveBackend(backendURL string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	url, err := url.Parse(backendURL)
 	if err != nil {
 		return err
 	}
 
-	for i, backend := range s.backends {
-		if backend.URL.String() == url.String() {
-			// Remove the backend by creating a new slice without it
-			s.backends = append(s.backends[:i], s.backends[i+1:]...)
-			return nil
+	currentBackends := s.backends.Load().([]*Backend)
+	// Find and remove the backend
+	found := false
+	newBackends := make([]*Backend, 0, len(currentBackends))
+
+	for _, backend := range currentBackends {
+		if backend.URL.String() != url.String() {
+			newBackends = append(newBackends, backend)
+		} else {
+			found = true
 		}
 	}
 
-	return errors.New("backend not found")
+	if !found {
+		return errors.New("backend not found")
+	}
+
+	// Atomically replace the backends slice
+	s.backends.Store(newBackends)
+	return nil
 }
 
 func (s *ServerPool) GetNextPeer() *Backend {
-	next := atomic.AddUint64(&s.current, 1)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	l := len(s.backends)
-	if l == 0 {
+	// Get current backends snapshot without locks
+	backends := s.backends.Load().([]*Backend)
+	backendCount := uint64(len(backends))
+
+	if backendCount == 0 {
 		return nil
 	}
-	return s.backends[next%uint64(l)]
+
+	if backendCount == 1 {
+		if backends[0].Alive.Load() {
+			return backends[0]
+		}
+		return nil
+	}
+
+	// Try up to backendCount times to find an alive backend
+	for i := uint64(0); i < backendCount; i++ {
+		next := atomic.AddUint64(&s.current, 1)
+		idx := next % backendCount
+		if backends[idx].Alive.Load() {
+			return backends[idx]
+		}
+	}
+
+	return nil
 }
 
 func (s *ServerPool) MarkBackendStatus(backendUrl *url.URL, alive bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	backends := s.backends.Load().([]*Backend)
 
-	for _, b := range s.backends {
+	for _, b := range backends {
 		if b.URL.String() == backendUrl.String() {
-			b.mu.Lock()
-			b.Alive = alive
-			b.mu.Unlock()
+			b.Alive.Store(alive)
 			break
 		}
 	}
 }
 
 func (s *ServerPool) GetBackends() []*algorithm.Server {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	currentBackends := s.backends.Load().([]*Backend)
 
-	servers := make([]*algorithm.Server, len(s.backends))
-	for i, backend := range s.backends {
+	servers := make([]*algorithm.Server, len(currentBackends))
+	for i, backend := range currentBackends {
 		servers[i] = &algorithm.Server{
 			URL:             backend.URL.String(),
 			Weight:          backend.Weight,
-			CurrentWeight:   backend.CurrentWeight,
+			CurrentWeight:   backend.GetCurrentWeight(),
 			ConnectionCount: backend.ConnectionCount,
 			MaxConnections:  backend.MaxConnections,
-			Alive:           backend.Alive,
+			Alive:           backend.Alive.Load(),
 		}
 	}
 	return servers
 }
 
-// Add method to update backends from config
+// UpdateBackends completely replaces the backend list
 func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	newBackends := make([]*Backend, 0, len(configs))
 
-	newBackends := make([]*Backend, 0)
 	for _, cfg := range configs {
 		url, err := url.Parse(cfg.URL)
 		if err != nil {
 			return err
 		}
 
-		// Check if backend already exists
+		// Check if backend already exists in current backends
+		currentBackends := s.backends.Load().([]*Backend)
 		var existing *Backend
-		for _, b := range s.backends {
+		for _, b := range currentBackends {
 			if b.URL.String() == url.String() {
 				existing = b
 				break
@@ -250,8 +255,9 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 			existing.Weight = cfg.Weight
 			newBackends = append(newBackends, existing)
 		} else {
+			// Create new backend
 			proxy := &httputil.ReverseProxy{}
-			pr := NewReverseProxy(
+			rp := NewReverseProxy(
 				url,
 				RouteConfig{},
 				proxy,
@@ -259,15 +265,16 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 
 			backend := &Backend{
 				URL:    url,
-				Alive:  true,
 				Weight: cfg.Weight,
-				Proxy:  pr,
+				Proxy:  rp,
 			}
+			backend.Alive.Store(true)
 			newBackends = append(newBackends, backend)
 		}
 	}
 
-	s.backends = newBackends
+	// Atomically replace entire backend list
+	s.backends.Store(newBackends)
 	return nil
 }
 
@@ -280,10 +287,9 @@ func (s *ServerPool) GetNextProxy(r *http.Request) *URLRewriteProxy {
 }
 
 func (s *ServerPool) GetBackendByURL(url string) *Backend {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	currentBackends := s.backends.Load().([]*Backend)
 
-	for _, backend := range s.backends {
+	for _, backend := range currentBackends {
 		if backend.URL.String() == url {
 			return backend
 		}
@@ -300,11 +306,11 @@ func (b *Backend) GetWeight() int {
 }
 
 func (b *Backend) GetCurrentWeight() int {
-	return b.CurrentWeight
+	return int(b.CurrentWeight.Load())
 }
 
 func (b *Backend) SetCurrentWeight(weight int) {
-	b.CurrentWeight = weight
+	b.CurrentWeight.Store(int32(weight))
 }
 
 func (b *Backend) GetConnectionCount() int {
@@ -312,9 +318,11 @@ func (b *Backend) GetConnectionCount() int {
 }
 
 func (b *Backend) IsAlive() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.Alive
+	return b.Alive.Load()
+}
+
+func (b *Backend) SetAlive(alive bool) {
+	b.Alive.Store(alive)
 }
 
 func (b *Backend) IncrementConnections() bool {
