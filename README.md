@@ -1,6 +1,6 @@
 # Terraster - Uncomplicated Load Balancer/Reverse Proxy
 
-WARNING: This project is in early stages (Alfa) and things can break and are in constant changes.
+**WARNING: This project is in early stages (Alfa) and things can break and are in constant changes.**
 
 A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go with Admin API. 
 
