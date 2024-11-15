@@ -1,7 +1,6 @@
 package pool
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httputil"
@@ -38,7 +37,7 @@ func NewServerPool() *ServerPool {
 	return pool
 }
 
-func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error {
+func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg *config.HealthCheckConfig) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
 		return err
@@ -53,28 +52,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 		WithURLRewriter(rc, url),
 	)
 	rp.proxy.BufferPool = NewBufferPool()
-	rp.proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		// A canceled context usually means the client disconnected
-		// or the request was canceled, not that the backend is unhealthy.
-		if err == context.Canceled {
-			return
-		}
-		s.MarkBackendStatus(url, false)
-		retries := GetRetryFromContext(r)
-		if retries < 3 {
-			select {
-			case <-r.Context().Done():
-				return
-			default:
-				proxy := s.GetNextProxy(r)
-				if proxy != nil {
-					proxy.ServeHTTP(w, r)
-					return
-				}
-				http.Error(w, "No proxy server available right now", http.StatusServiceUnavailable)
-			}
-		}
-	}
+	rp.proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {}
 
 	maxConnections := cfg.MaxConnections
 	if maxConnections == 0 {
@@ -86,8 +64,11 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig) error 
 		Weight:         cfg.Weight,
 		MaxConnections: maxConnections,
 		Proxy:          rp,
+		HealthCheckCfg: hcCfg,
 	}
 	backend.Alive.Store(true)
+	atomic.StoreInt32(&backend.SuccessCount, 0)
+	atomic.StoreInt32(&backend.FailureCount, 0)
 
 	currentBackends := s.backends.Load().([]*Backend)
 	// Create new slice with added backend
@@ -186,7 +167,7 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 }
 
 // UpdateBackends completely replaces the backend list
-func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
+func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealthCheck *config.HealthCheckConfig) error {
 	newBackends := make([]*Backend, 0, len(configs))
 
 	for _, cfg := range configs {
@@ -208,6 +189,10 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 		if existing != nil {
 			// Update existing backend
 			existing.Weight = cfg.Weight
+			existing.MaxConnections = cfg.MaxConnections
+			if cfg.HealthCheck.Type != "" {
+				existing.HealthCheckCfg = cfg.HealthCheck
+			}
 			newBackends = append(newBackends, existing)
 		} else {
 			// Create new backend
@@ -219,10 +204,13 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig) error {
 			)
 
 			backend := &Backend{
-				URL:    url,
-				Weight: cfg.Weight,
-				Proxy:  rp,
+				URL:            url,
+				Weight:         cfg.Weight,
+				Proxy:          rp,
+				HealthCheckCfg: serviceHealthCheck,
 			}
+			atomic.StoreInt32(&backend.SuccessCount, 0)
+			atomic.StoreInt32(&backend.FailureCount, 0)
 			backend.Alive.Store(true)
 			newBackends = append(newBackends, backend)
 		}
@@ -250,6 +238,10 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 		}
 	}
 	return nil
+}
+
+func (s *ServerPool) GetAllBackends() []*Backend {
+	return s.backends.Load().([]*Backend)
 }
 
 func (s *ServerPool) UpdateConfig(update PoolConfig) {

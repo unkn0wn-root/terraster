@@ -3,6 +3,8 @@ package pool
 import (
 	"net/url"
 	"sync/atomic"
+
+	"github.com/unkn0wn-root/terraster/internal/config"
 )
 
 type Backend struct {
@@ -14,6 +16,9 @@ type Backend struct {
 	Proxy           *URLRewriteProxy
 	ConnectionCount int32
 	MaxConnections  int32
+	SuccessCount    int32
+	FailureCount    int32
+	HealthCheckCfg  *config.HealthCheckConfig
 }
 
 func (b *Backend) GetURL() string {

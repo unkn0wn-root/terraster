@@ -30,6 +30,7 @@ type ServiceInfo struct {
 	Port         int
 	TLS          *config.TLSConfig
 	HTTPRedirect bool
+	HealthCheck  *config.HealthCheckConfig
 	Locations    []*LocationInfo
 }
 
@@ -61,12 +62,17 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 				},
 			},
 		}
-		if err := m.AddService(defaultService); err != nil {
+		if err := m.AddService(defaultService, cfg.HealthCheck); err != nil {
 			return nil, err
 		}
 	} else {
 		for _, svc := range cfg.Services {
-			if err := m.AddService(svc); err != nil {
+			// If service has no specific health check, use global
+			hcCfg := svc.HealthCheck
+			if hcCfg == nil {
+				hcCfg = cfg.HealthCheck
+			}
+			if err := m.AddService(svc, hcCfg); err != nil {
 				return nil, err
 			}
 		}
@@ -75,7 +81,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	return m, nil
 }
 
-func (m *Manager) AddService(service config.Service) error {
+func (m *Manager) AddService(service config.Service, globalHealthCheck *config.HealthCheckConfig) error {
 	// For each location in the service, create a server pool
 	locations := make([]*LocationInfo, 0, len(service.Locations))
 	locationPaths := make(map[string]bool)
@@ -95,7 +101,7 @@ func (m *Manager) AddService(service config.Service) error {
 
 		locationPaths[location.Path] = true
 
-		serverPool, err := m.createServerPool(location)
+		serverPool, err := m.createServerPool(location, globalHealthCheck)
 		if err != nil {
 			return err
 		}
@@ -122,6 +128,12 @@ func (m *Manager) AddService(service config.Service) error {
 		return ErrServiceAlreadyExists
 	}
 
+	// Determine service's health check config
+	serviceHealthCheck := globalHealthCheck
+	if service.HealthCheck != nil && service.HealthCheck.Type != "" {
+		serviceHealthCheck = service.HealthCheck
+	}
+
 	m.mu.Lock()
 	m.services[k] = &ServiceInfo{
 		Name:         service.Name,
@@ -129,6 +141,7 @@ func (m *Manager) AddService(service config.Service) error {
 		Port:         service.Port,
 		TLS:          service.TLS,
 		HTTPRedirect: service.HTTPRedirect,
+		HealthCheck:  serviceHealthCheck,
 		Locations:    locations,
 	}
 	m.mu.Unlock()
@@ -195,7 +208,7 @@ func (m *Manager) GetServices() []*ServiceInfo {
 	return services
 }
 
-func (m *Manager) createServerPool(srvc config.Location) (*pool.ServerPool, error) {
+func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *config.HealthCheckConfig) (*pool.ServerPool, error) {
 	serverPool := pool.NewServerPool()
 	serverPool.UpdateConfig(pool.PoolConfig{
 		Algorithm: srvc.LoadBalancer,
@@ -207,7 +220,12 @@ func (m *Manager) createServerPool(srvc config.Location) (*pool.ServerPool, erro
 			Redirect:      srvc.Redirect,
 			SkipTLSVerify: backend.SkipTLSVerify,
 		}
-		if err := serverPool.AddBackend(backend, rc); err != nil {
+
+		backendHealthCheck := serviceHealthCheck
+		if backend.HealthCheck != nil {
+			backendHealthCheck = backend.HealthCheck
+		}
+		if err := serverPool.AddBackend(backend, rc, backendHealthCheck); err != nil {
 			return nil, err
 		}
 	}

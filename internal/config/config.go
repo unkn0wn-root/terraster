@@ -1,6 +1,10 @@
+// config/config.go
+
 package config
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -8,19 +12,19 @@ import (
 )
 
 type Config struct {
-	Port        int             `yaml:"port"`
-	HTTPPort    int             `yaml:"http_port"`
-	HTTPSPort   int             `yaml:"https_port"`
-	AdminPort   int             `yaml:"admin_port"`
-	TLS         TLSConfig       `yaml:"tls"`
-	Algorithm   string          `yaml:"algorithm"`
-	Backends    []BackendConfig `yaml:"backends"`
-	HealthCheck HealthCheck     `yaml:"health_check"`
-	RateLimit   RateLimitConfig `yaml:"rate_limit"`
-	ConnPool    PoolConfig      `yaml:"connection_pool"`
-	Auth        APIAuthConfig   `yaml:"auth"`
-	AdminAPI    AdminAPIConfig  `yaml:"admin_api"`
-	Services    []Service       `yaml:"services"`
+	Port        int                `yaml:"port"`
+	HTTPPort    int                `yaml:"http_port"`
+	HTTPSPort   int                `yaml:"https_port"`
+	AdminPort   int                `yaml:"admin_port"`
+	TLS         TLSConfig          `yaml:"tls"`
+	Algorithm   string             `yaml:"algorithm"`
+	RateLimit   RateLimitConfig    `yaml:"rate_limit"`
+	ConnPool    PoolConfig         `yaml:"connection_pool"`
+	Backends    []BackendConfig    `yaml:"backends"`
+	Auth        APIAuthConfig      `yaml:"auth"`
+	AdminAPI    AdminAPIConfig     `yaml:"admin_api"`
+	HealthCheck *HealthCheckConfig `yaml:"health_check"`
+	Services    []Service          `yaml:"services"`
 }
 
 type TLSConfig struct {
@@ -30,24 +34,24 @@ type TLSConfig struct {
 }
 
 type BackendConfig struct {
-	URL            string      `yaml:"url"`
-	Weight         int         `yaml:"weight"`
-	MaxConnections int32       `yaml:"max_connections"`
-	HealthCheck    HealthCheck `yaml:"health_check"`
-	SkipTLSVerify  bool        `yaml:"skip_tls_verify"`
-}
-
-type HealthCheck struct {
-	Type       string        `yaml:"type"`
-	Path       string        `yaml:"path"`
-	Interval   time.Duration `yaml:"interval"`
-	Timeout    time.Duration `yaml:"timeout"`
-	Thresholds Thresholds    `yaml:"thresholds"`
+	URL            string             `yaml:"url"`
+	Weight         int                `yaml:"weight"`
+	MaxConnections int32              `yaml:"max_connections"`
+	SkipTLSVerify  bool               `yaml:"skip_tls_verify"`
+	HealthCheck    *HealthCheckConfig `yaml:"health_check,omitempty"`
 }
 
 type Thresholds struct {
 	Healthy   int `yaml:"healthy"`
 	Unhealthy int `yaml:"unhealthy"`
+}
+
+type HealthCheckConfig struct {
+	Type       string        `yaml:"type"`           // "http" or "tcp"
+	Path       string        `yaml:"path,omitempty"` // Applicable for HTTP health checks
+	Interval   time.Duration `yaml:"interval"`       // e.g., "10s"
+	Timeout    time.Duration `yaml:"timeout"`        // e.g., "2s"
+	Thresholds Thresholds    `yaml:"thresholds"`     // Healthy and Unhealthy thresholds
 }
 
 type RateLimitConfig struct {
@@ -58,7 +62,7 @@ type RateLimitConfig struct {
 type PoolConfig struct {
 	MaxIdle     int           `yaml:"max_idle"`
 	MaxOpen     int           `yaml:"max_open"`
-	IdleTimeout time.Duration `yaml:"idle_timeout"`
+	IdleTimeout time.Duration `yaml:"idle_timeout"` // e.g., "90s"
 }
 
 type AdminAPIConfig struct {
@@ -67,20 +71,21 @@ type AdminAPIConfig struct {
 }
 
 type APIAuthConfig struct {
-	JWTSecret            string `json:"jwt_secret"`
-	DBPath               string `json:"db_path"`
-	TokenCleanupInterval int    `json:"token_cleanup_interval"`
-	PasswordExpiryDays   int    `json:"password_expiry_days"`
-	PasswordHistoryLimit int    `json:"password_history_limit"`
+	JWTSecret            string `yaml:"jwt_secret"`
+	DBPath               string `yaml:"db_path"`
+	TokenCleanupInterval int    `yaml:"token_cleanup_interval"`
+	PasswordExpiryDays   int    `yaml:"password_expiry_days"`
+	PasswordHistoryLimit int    `yaml:"password_history_limit"`
 }
 
 type Service struct {
-	Name         string     `yaml:"name"`
-	Host         string     `yaml:"host"`
-	Port         int        `yaml:"port"`
-	TLS          *TLSConfig `yaml:"tls"`
-	HTTPRedirect bool       `yaml:"http_redirect"`
-	Locations    []Location `yaml:"locations"`
+	Name         string             `yaml:"name"`
+	Host         string             `yaml:"host"`
+	Port         int                `yaml:"port"`
+	TLS          *TLSConfig         `yaml:"tls"`
+	HTTPRedirect bool               `yaml:"http_redirect"`
+	HealthCheck  *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
+	Locations    []Location         `yaml:"locations"`
 }
 
 type Location struct {
@@ -91,6 +96,17 @@ type Location struct {
 	Backends     []BackendConfig `yaml:"backends"`
 }
 
+var DefaultHealthCheck = HealthCheckConfig{
+	Type:     "http",
+	Path:     "/health",
+	Interval: 10 * time.Second,
+	Timeout:  2 * time.Second,
+	Thresholds: Thresholds{
+		Healthy:   2,
+		Unhealthy: 4,
+	},
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -98,9 +114,42 @@ func Load(path string) (*Config, error) {
 	}
 
 	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := yaml.UnmarshalStrict(data, &config); err != nil {
 		return nil, err
 	}
 
 	return &config, nil
+}
+
+func (cfg *Config) Validate() error {
+	// Apply default global health check if not set
+	if cfg.HealthCheck == nil {
+		log.Printf("Global health_check not defined. Applying default health check configuration.")
+		cfg.HealthCheck = DefaultHealthCheck.DeepCopy()
+	} else {
+		// Validate global health check
+		if cfg.HealthCheck.Type != "http" && cfg.HealthCheck.Type != "tcp" {
+			return fmt.Errorf("invalid global health_check type: %s", cfg.HealthCheck.Type)
+		}
+		if cfg.HealthCheck.Interval <= 0 {
+			return fmt.Errorf("health_check interval must be positive")
+		}
+		if cfg.HealthCheck.Timeout <= 0 {
+			return fmt.Errorf("health_check timeout must be positive")
+		}
+		if cfg.HealthCheck.Thresholds.Healthy <= 0 || cfg.HealthCheck.Thresholds.Unhealthy <= 0 {
+			return fmt.Errorf("health_check thresholds must be positive integers")
+		}
+	}
+
+	return nil
+}
+
+func (hc *HealthCheckConfig) DeepCopy() *HealthCheckConfig {
+	if hc == nil {
+		return nil
+	}
+
+	copyHC := *hc
+	return &copyHC
 }

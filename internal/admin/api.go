@@ -159,12 +159,20 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		var hcCfg *config.HealthCheckConfig
+		if backend.HealthCheck != nil {
+			hcCfg = backend.HealthCheck
+		} else {
+			// Inherit from service-level health check
+			hcCfg = srvc.HealthCheck
+		}
+
 		rc := pool.RouteConfig{
 			Path:       location.Path,
 			RewriteURL: location.Rewrite,
 		}
 
-		if err := location.ServerPool.AddBackend(backend, rc); err != nil {
+		if err := location.ServerPool.AddBackend(backend, rc, hcCfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
