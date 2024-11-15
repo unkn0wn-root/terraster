@@ -121,11 +121,13 @@ func Load(path string) (*Config, error) {
 	return &config, nil
 }
 
+// @TODO: Implement the Validate method for the Config struct
+// and add more validation
 func (cfg *Config) Validate() error {
 	// Apply default global health check if not set
 	if cfg.HealthCheck == nil {
 		log.Printf("Global health_check not defined. Applying default health check configuration.")
-		cfg.HealthCheck = DefaultHealthCheck.DeepCopy()
+		cfg.HealthCheck = DefaultHealthCheck.Copy()
 	} else {
 		// Validate global health check
 		if cfg.HealthCheck.Type != "http" && cfg.HealthCheck.Type != "tcp" {
@@ -145,7 +147,7 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
-func (hc *HealthCheckConfig) DeepCopy() *HealthCheckConfig {
+func (hc *HealthCheckConfig) Copy() *HealthCheckConfig {
 	if hc == nil {
 		return nil
 	}

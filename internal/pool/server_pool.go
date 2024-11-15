@@ -2,6 +2,7 @@ package pool
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -51,12 +52,15 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg 
 		createProxy,
 		WithURLRewriter(rc, url),
 	)
-	rp.proxy.BufferPool = NewBufferPool()
-	rp.proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {}
 
 	maxConnections := cfg.MaxConnections
 	if maxConnections == 0 {
 		maxConnections = s.GetMaxConnections()
+	}
+
+	if hcCfg == nil {
+		log.Printf("HealthCheckConfig is nil for backend %s, applying default health check.", cfg.URL)
+		hcCfg = config.DefaultHealthCheck.Copy()
 	}
 
 	backend := &Backend{

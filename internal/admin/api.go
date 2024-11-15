@@ -153,26 +153,38 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 		backends := location.ServerPool.GetBackends()
 		json.NewEncoder(w).Encode(backends)
 	case http.MethodPost:
-		var backend config.BackendConfig
-		if err := json.NewDecoder(r.Body).Decode(&backend); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		var req BackendRequest
+		if err := DecodeAndValidate(w, r, &req); err != nil {
 			return
 		}
 
-		var hcCfg *config.HealthCheckConfig
-		if backend.HealthCheck != nil {
-			hcCfg = backend.HealthCheck
-		} else {
-			// Inherit from service-level health check
-			hcCfg = srvc.HealthCheck
+		// Map AddBackendRequest to config.BackendConfig
+		backendCfg := config.BackendConfig{
+			URL:            req.URL,
+			Weight:         req.Weight,
+			MaxConnections: req.MaxConnections,
+			SkipTLSVerify:  req.SkipTLSVerify,
+			HealthCheck:    req.HealthCheck, // May be nil
 		}
 
+		// @TODO: Add Redirect from location
 		rc := pool.RouteConfig{
 			Path:       location.Path,
 			RewriteURL: location.Rewrite,
 		}
 
-		if err := location.ServerPool.AddBackend(backend, rc, hcCfg); err != nil {
+		// Determine the HealthCheckConfig to pass:
+		// Priority: Backend-specific > Service-specific > Global default
+		var hcCfg *config.HealthCheckConfig
+		if backendCfg.HealthCheck != nil {
+			hcCfg = backendCfg.HealthCheck
+		} else if srvc.HealthCheck != nil {
+			hcCfg = srvc.HealthCheck
+		} else {
+			hcCfg = config.DefaultHealthCheck.Copy()
+		}
+
+		if err := location.ServerPool.AddBackend(backendCfg, rc, hcCfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

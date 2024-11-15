@@ -225,6 +225,7 @@ func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *con
 		if backend.HealthCheck != nil {
 			backendHealthCheck = backend.HealthCheck
 		}
+
 		if err := serverPool.AddBackend(backend, rc, backendHealthCheck); err != nil {
 			return nil, err
 		}
