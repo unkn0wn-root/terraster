@@ -16,11 +16,11 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/admin"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
 	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/health"
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
-	"github.com/unkn0wn-root/terraster/pkg/health"
 )
 
 // Constants for default configurations
@@ -40,6 +40,7 @@ type Server struct {
 	healthChecker  *health.Checker
 	adminAPI       *admin.AdminAPI
 	adminServer    *http.Server
+	healthCheckers map[string]*health.Checker
 	serviceManager *service.Manager
 	serverPool     *pool.ServerPool
 	servers        []*http.Server
@@ -52,11 +53,14 @@ type Server struct {
 
 // Start initializes and starts all servers.
 func (s *Server) Start() error {
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		s.healthChecker.Start(s.ctx)
-	}()
+	for svcName, hc := range s.healthCheckers {
+		s.wg.Add(1)
+		go func(name string, checker *health.Checker) {
+			defer s.wg.Done()
+			log.Printf("Starting health checker for service: %s", name)
+			checker.Start(s.ctx)
+		}(svcName, hc)
+	}
 
 	mainHandler := s.setupMiddleware()
 
@@ -209,20 +213,40 @@ func NewServer(
 	ctx, cancel := context.WithCancel(srvCtx)
 	serviceManager, err := service.NewManager(cfg)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
-	return &Server{
+	s := &Server{
 		config:         cfg,
-		healthChecker:  health.NewChecker(cfg.HealthCheck.Interval, cfg.HealthCheck.Timeout),
+		healthCheckers: make(map[string]*health.Checker),
 		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
 		serviceManager: serviceManager,
 		ctx:            ctx,
 		cancel:         cancel,
 		servers:        make([]*http.Server, 0),
 		errorChan:      make(chan error),
-	}, nil
+	}
+
+	// Initialize health checkers per service
+	for _, svc := range serviceManager.GetServices() {
+		hcCfg := svc.HealthCheck
+		// If service has no specific health check, use global
+		if (&config.HealthCheckConfig{}) == hcCfg {
+			hcCfg = cfg.HealthCheck
+		}
+		hc := health.NewChecker(
+			hcCfg.Interval,
+			hcCfg.Timeout,
+			log.New(os.Stdout, "[HealthChecker-"+svc.Name+"] ", log.LstdFlags), // Dedicated logger per service
+		)
+		s.healthCheckers[svc.Name] = hc
+		// Register server pools with the respective health checker
+		for _, loc := range svc.Locations {
+			hc.RegisterPool(loc.ServerPool)
+		}
+	}
+
+	return s, nil
 }
 
 func (s *Server) setupMiddleware() http.Handler {
@@ -309,8 +333,7 @@ func (s *Server) hostNameNoPort(host string) string {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.healthChecker.Stop()
-
+	s.cancel()
 	var wg sync.WaitGroup
 
 	// Shutdown admin server
@@ -319,6 +342,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		defer wg.Done()
 		if err := s.adminServer.Shutdown(ctx); err != nil {
 			log.Printf("Admin server shutdown error: %v", err)
+		} else {
+			log.Println("Admin server shutdown successfully")
 		}
 	}()
 
@@ -328,8 +353,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			defer wg.Done()
 			if err := server.Shutdown(ctx); err != nil {
 				log.Printf("Server shutdown error for %s: %v", server.Addr, err)
+			} else {
+				log.Printf("Server at %s shutdown successfully", server.Addr)
 			}
 		}(srv)
+	}
+
+	// Stop health checkers
+	for svcName, hc := range s.healthCheckers {
+		wg.Add(1)
+		go func(name string, checker *health.Checker) {
+			defer wg.Done()
+			checker.Stop()
+			log.Printf("Health checker for service %s stopped", name)
+		}(svcName, hc)
 	}
 
 	// Wait for all shutdowns to complete
@@ -343,7 +380,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-done:
-		log.Println("All servers shutdown successfully")
+		log.Println("All servers and health checkers shutdown successfully")
 		return nil
 	}
 }

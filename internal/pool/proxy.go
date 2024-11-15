@@ -102,6 +102,9 @@ func NewReverseProxy(
 	reverseProxy.Director = prx.director
 	reverseProxy.ModifyResponse = prx.modifyResponse
 	reverseProxy.Transport = NewTransport(http.DefaultTransport, config.SkipTLSVerify)
+	reverseProxy.ErrorHandler = prx.errorHandler
+	reverseProxy.BufferPool = NewBufferPool()
+
 	prx.proxy = reverseProxy
 
 	return prx
@@ -186,4 +189,9 @@ func isRedirect(statusCode int) bool {
 	default:
 		return false
 	}
+}
+
+func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	p.logf("Unexpected error in proxy: %v", err)
+	http.Error(w, "Something went wrong", http.StatusInternalServerError)
 }

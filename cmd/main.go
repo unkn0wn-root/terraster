@@ -26,6 +26,10 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Invalid config: %v", err)
+	}
+
 	// Initialize database
 	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
 	if err != nil {
