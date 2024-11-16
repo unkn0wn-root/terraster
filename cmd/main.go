@@ -13,6 +13,8 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/auth/service"
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/internal/server"
+	"github.com/unkn0wn-root/terraster/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -21,19 +23,31 @@ func main() {
 	configPath = flag.String("c", "config.yaml", "path to config file")
 	flag.Parse()
 
+	if err := logger.Init("log.config.json"); err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+
+	logger := logger.Logger()
+
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Printf("Logger sync error: %v", err)
+		}
+	}()
+
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Fatal("Failed to load config: %v", zap.Error(err))
 	}
 
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid config: %v", err)
+		logger.Fatal("Invalid config: %v", zap.Error(err))
 	}
 
 	// Initialize database
 	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("Failed to initialize database: %v", zap.Error(err))
 	}
 
 	// Initialize auth service
@@ -59,9 +73,9 @@ func main() {
 	defer cancel()
 
 	errChan := make(chan error, 1)
-	srv, err := server.NewServer(ctx, errChan, cfg, authService)
+	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger)
 	if err != nil {
-		log.Fatalf("Failed to initialize server %v", err)
+		logger.Fatal("Failed to initialize server %v", zap.Error(err))
 	}
 
 	// Handle shutdown gracefully
@@ -76,20 +90,20 @@ func main() {
 
 	select {
 	case <-sigChan:
-		log.Println("Shutdown signal received, starting graceful shutdown")
+		logger.Info("Shutdown signal received, starting graceful shutdown")
 		cancel()
 	case err := <-errChan:
-		log.Printf("Server error triggered shutdown: %v", err)
+		logger.Fatal("Server error triggered shutdown: %v", zap.Error(err))
 	case <-ctx.Done():
-		log.Println("Context cancelled")
+		logger.Info("Context cancelled")
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
-		log.Printf("Error during shutdown: %v", err)
+		logger.Fatal("Error during shutdown: %v", zap.Error(err))
 	} else {
-		log.Println("Shutdown completed")
+		logger.Info("Shutdown completed")
 	}
 }

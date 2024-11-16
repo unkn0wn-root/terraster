@@ -1,38 +1,17 @@
 package middleware
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
-
-type LogLevel int
-
-const (
-	INFO LogLevel = iota
-	WARNING
-	ERROR
-)
-
-type LogEntry struct {
-	Timestamp   string            `json:"timestamp"`
-	Method      string            `json:"method"`
-	Path        string            `json:"path"`
-	Status      int               `json:"status"`
-	Duration    string            `json:"duration"`
-	IP          string            `json:"ip"`
-	UserAgent   string            `json:"user_agent"`
-	QueryParams map[string]string `json:"query_params,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Level       string            `json:"level"`
-	Error       string            `json:"error,omitempty"`
-}
 
 type LoggingMiddleware struct {
-	logger         *log.Logger
-	logLevel       LogLevel
+	logger         *zap.Logger
+	logLevel       zapcore.Level
 	includeHeaders bool
 	includeQuery   bool
 	excludePaths   []string
@@ -40,7 +19,7 @@ type LoggingMiddleware struct {
 
 type LoggingOption func(*LoggingMiddleware)
 
-func WithLogLevel(level LogLevel) LoggingOption {
+func WithLogLevel(level zapcore.Level) LoggingOption {
 	return func(l *LoggingMiddleware) {
 		l.logLevel = level
 	}
@@ -64,14 +43,19 @@ func WithExcludePaths(paths []string) LoggingOption {
 	}
 }
 
-func NewLoggingMiddleware(logger *log.Logger, opts ...LoggingOption) *LoggingMiddleware {
-	if logger == nil {
-		logger = log.Default()
+func NewLoggingMiddleware(opts ...LoggingOption) (*LoggingMiddleware, error) {
+	config := zap.NewProductionConfig()
+	config.EncoderConfig.TimeKey = "timestamp"
+	config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
+
+	logger, err := config.Build()
+	if err != nil {
+		return nil, err
 	}
 
 	lm := &LoggingMiddleware{
 		logger:         logger,
-		logLevel:       INFO,
+		logLevel:       zapcore.InfoLevel,
 		includeHeaders: false,
 		includeQuery:   false,
 		excludePaths:   []string{},
@@ -81,22 +65,24 @@ func NewLoggingMiddleware(logger *log.Logger, opts ...LoggingOption) *LoggingMid
 		opt(lm)
 	}
 
-	return lm
+	return lm, nil
 }
 
-type LogStatusWriter struct {
+type responseWriter struct {
 	http.ResponseWriter
 	status int
-	error  error
+	size   int64
 }
 
-func newLogStatusWriter(w http.ResponseWriter) *LogStatusWriter {
-	return &LogStatusWriter{ResponseWriter: w, status: http.StatusOK}
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
-func (w *LogStatusWriter) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	size, err := rw.ResponseWriter.Write(b)
+	rw.size += int64(size)
+	return size, err
 }
 
 func (l *LoggingMiddleware) shouldExcludePath(path string) bool {
@@ -108,28 +94,6 @@ func (l *LoggingMiddleware) shouldExcludePath(path string) bool {
 	return false
 }
 
-func getLogLevel(status int) LogLevel {
-	switch {
-	case status >= 500:
-		return ERROR
-	case status >= 400:
-		return WARNING
-	default:
-		return INFO
-	}
-}
-
-func getLevelString(level LogLevel) string {
-	switch level {
-	case ERROR:
-		return "ERROR"
-	case WARNING:
-		return "WARNING"
-	default:
-		return "INFO"
-	}
-}
-
 func (l *LoggingMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if l.shouldExcludePath(r.URL.Path) {
@@ -138,55 +102,46 @@ func (l *LoggingMiddleware) Middleware(next http.Handler) http.Handler {
 		}
 
 		start := time.Now()
-		sw := newLogStatusWriter(w)
+		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
 
-		next.ServeHTTP(sw, r)
+		duration := time.Since(start)
 
-		if getLogLevel(sw.status) >= l.logLevel {
-			duration := time.Since(start)
+		// Build fields slice with capacity for common fields
+		fields := make([]zap.Field, 0, 8)
+		fields = append(fields,
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.Int("status", rw.status),
+			zap.Duration("duration", duration),
+			zap.String("ip", r.RemoteAddr),
+			zap.String("user_agent", r.UserAgent()),
+			zap.Int64("response_size", rw.size),
+		)
 
-			entry := LogEntry{
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Method:    r.Method,
-				Path:      r.URL.Path,
-				Status:    sw.status,
-				Duration:  duration.String(),
-				IP:        r.RemoteAddr,
-				UserAgent: r.UserAgent(),
-				Level:     getLevelString(getLogLevel(sw.status)),
+		if l.includeQuery && len(r.URL.RawQuery) > 0 {
+			queryParams := make(map[string]string)
+			for key, values := range r.URL.Query() {
+				queryParams[key] = strings.Join(values, ",")
 			}
+			fields = append(fields, zap.Any("query_params", queryParams))
+		}
 
-			if l.includeQuery {
-				queryParams := make(map[string]string)
-				for key, values := range r.URL.Query() {
-					queryParams[key] = strings.Join(values, ",")
-				}
-				if len(queryParams) > 0 {
-					entry.QueryParams = queryParams
-				}
+		if l.includeHeaders {
+			headers := make(map[string]string)
+			for key, values := range r.Header {
+				headers[key] = strings.Join(values, ",")
 			}
+			fields = append(fields, zap.Any("headers", headers))
+		}
 
-			if l.includeHeaders {
-				headers := make(map[string]string)
-				for key, values := range r.Header {
-					headers[key] = strings.Join(values, ",")
-				}
-				if len(headers) > 0 {
-					entry.Headers = headers
-				}
-			}
-
-			if sw.error != nil {
-				entry.Error = sw.error.Error()
-			}
-
-			jsonEntry, err := json.Marshal(entry)
-			if err != nil {
-				l.logger.Printf("Error marshaling log entry: %v", err)
-				return
-			}
-
-			l.logger.Println(string(jsonEntry))
+		switch {
+		case rw.status >= 500:
+			l.logger.Error("Server error", fields...)
+		case rw.status >= 400:
+			l.logger.Warn("Client error", fields...)
+		default:
+			l.logger.Info("Request completed", fields...)
 		}
 	})
 }

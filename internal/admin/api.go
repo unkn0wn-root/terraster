@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/golang-jwt/jwt"
@@ -13,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
+	"go.uber.org/zap"
 )
 
 // AdminAPI represents the administrative API for managing the load balancer.
@@ -22,6 +24,7 @@ type AdminAPI struct {
 	config         *config.Config
 	authService    *auth_service.AuthService
 	authHandler    *handlers.AuthHandler
+	logger         *zap.SugaredLogger
 }
 
 // NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
@@ -67,8 +70,20 @@ func (a *AdminAPI) registerRoutes() {
 
 // Handler returns the HTTP handler for the AdminAPI, wrapped with necessary middleware.
 func (a *AdminAPI) Handler() http.Handler {
+	logger, err := middleware.NewLoggingMiddleware(
+		middleware.WithLogLevel(zap.InfoLevel),
+		middleware.WithHeaders(),
+		middleware.WithQueryParams(),
+		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var middlewares []middleware.Middleware
 	middlewares = append(middlewares,
+		logger,
 		NewAdminAccessLogMiddleware(),
 		middleware.NewRateLimiterMiddleware(
 			a.config.AdminAPI.RateLimit.RequestsPerSecond,

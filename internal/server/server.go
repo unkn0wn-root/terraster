@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +20,8 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
+	"github.com/unkn0wn-root/terraster/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // Constants for default configurations
@@ -209,6 +210,7 @@ func NewServer(
 	errChan chan<- error,
 	cfg *config.Config,
 	authSrvc *auth_service.AuthService,
+	zLog *zap.Logger,
 ) (*Server, error) {
 	ctx, cancel := context.WithCancel(srvCtx)
 	serviceManager, err := service.NewManager(cfg)
@@ -234,10 +236,14 @@ func NewServer(
 		if (&config.HealthCheckConfig{}) == hcCfg {
 			hcCfg = cfg.HealthCheck
 		}
+
+		prefix := "[HealthChecker-" + svc.Name + "]"
+		lc := logger.NewZapWriter(zLog, zap.InfoLevel, prefix)
+
 		hc := health.NewChecker(
 			hcCfg.Interval,
 			hcCfg.Timeout,
-			log.New(os.Stdout, "[HealthChecker-"+svc.Name+"] ", log.LstdFlags), // Dedicated logger per service
+			log.New(lc, "", 0),
 		)
 		s.healthCheckers[svc.Name] = hc
 		// Register server pools with the respective health checker
@@ -251,16 +257,20 @@ func NewServer(
 
 func (s *Server) setupMiddleware() http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
-	log := log.New(os.Stdout, "", log.LstdFlags)
 	// @toDo: get it from config
-	logger := middleware.NewLoggingMiddleware(
-		log,
-		middleware.WithLogLevel(middleware.INFO),
-		middleware.WithExcludePaths([]string{"/health"}), // exclude health check from logs
+	logger, err := middleware.NewLoggingMiddleware(
+		middleware.WithLogLevel(zap.InfoLevel),
+		middleware.WithHeaders(),
+		middleware.WithQueryParams(),
+		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
 
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	chain := middleware.NewMiddlewareChain(
-		//middleware.NewCircuitBreaker(10, 10*time.Second),
+		middleware.NewCircuitBreaker(10, 10*time.Second),
 		middleware.NewRateLimiterMiddleware(
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
