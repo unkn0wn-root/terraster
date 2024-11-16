@@ -45,11 +45,63 @@ type Server struct {
 	serviceManager *service.Manager
 	serverPool     *pool.ServerPool
 	servers        []*http.Server
+	logger         *zap.Logger
 	mu             sync.RWMutex
 	ctx            context.Context
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
 	errorChan      chan<- error
+}
+
+func NewServer(
+	srvCtx context.Context,
+	errChan chan<- error,
+	cfg *config.Config,
+	authSrvc *auth_service.AuthService,
+	zLog *zap.Logger,
+) (*Server, error) {
+	ctx, cancel := context.WithCancel(srvCtx)
+	serviceManager, err := service.NewManager(cfg, zLog)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Server{
+		config:         cfg,
+		healthCheckers: make(map[string]*health.Checker),
+		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
+		serviceManager: serviceManager,
+		ctx:            ctx,
+		cancel:         cancel,
+		servers:        make([]*http.Server, 0),
+		errorChan:      make(chan error),
+		logger:         zLog,
+	}
+
+	// Initialize health checkers per service
+	for _, svc := range serviceManager.GetServices() {
+		hcCfg := svc.HealthCheck
+		// If service has no specific health check, use global
+		if (&config.HealthCheckConfig{}) == hcCfg {
+			hcCfg = cfg.HealthCheck
+		}
+
+		prefix := "[HealthChecker-" + svc.Name + "]"
+		lc := logger.NewZapWriter(zLog, zap.InfoLevel, prefix)
+
+		hc := health.NewChecker(
+			hcCfg.Interval,
+			hcCfg.Timeout,
+			log.New(lc, "", 0),
+		)
+		s.healthCheckers[svc.Name] = hc
+		// Register server pools with the respective health checker
+		for _, loc := range svc.Locations {
+			hc.RegisterPool(loc.ServerPool)
+		}
+	}
+
+	return s, nil
 }
 
 // Start initializes and starts all servers.
@@ -58,7 +110,7 @@ func (s *Server) Start() error {
 		s.wg.Add(1)
 		go func(name string, checker *health.Checker) {
 			defer s.wg.Done()
-			log.Printf("Starting health checker for service: %s", name)
+			s.logger.Info("Starting health checker for service: %s", zap.String("server_name", name))
 			checker.Start(s.ctx)
 		}(svcName, hc)
 	}
@@ -79,7 +131,7 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	log.Println("Starting server(s)...")
+	s.logger.Info("Starting server(s)...")
 	return nil
 }
 
@@ -172,7 +224,7 @@ func (s *Server) createServer(
 func (s *Server) runServer(server *http.Server, errorChan chan<- error, name, scheme string) {
 	defer s.wg.Done()
 	n := strings.ToUpper(name)
-	log.Printf("Starting %s server on %s", n, server.Addr)
+	s.logger.Info("Starting server, ", zap.String("name", n), zap.String("server_addr", server.Addr))
 
 	var err error
 	if scheme == "https" {
@@ -182,11 +234,11 @@ func (s *Server) runServer(server *http.Server, errorChan chan<- error, name, sc
 	}
 
 	if err != nil && err != http.ErrServerClosed {
-		log.Printf("Error starting %s server: %v", n, err)
+		s.logger.Error("Error starting server", zap.String("server_name", n), zap.Error(err))
 		defer s.cancel()
 		errorChan <- err
 	} else {
-		log.Printf("%s server stopped gracefully", n)
+		s.logger.Info("Server stopped gracefully", zap.String("server_name", n))
 	}
 }
 
@@ -202,57 +254,6 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("Hello, World!"))
-}
-
-// NewServer creates a new Server instance with the provided configurations.
-func NewServer(
-	srvCtx context.Context,
-	errChan chan<- error,
-	cfg *config.Config,
-	authSrvc *auth_service.AuthService,
-	zLog *zap.Logger,
-) (*Server, error) {
-	ctx, cancel := context.WithCancel(srvCtx)
-	serviceManager, err := service.NewManager(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	s := &Server{
-		config:         cfg,
-		healthCheckers: make(map[string]*health.Checker),
-		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
-		serviceManager: serviceManager,
-		ctx:            ctx,
-		cancel:         cancel,
-		servers:        make([]*http.Server, 0),
-		errorChan:      make(chan error),
-	}
-
-	// Initialize health checkers per service
-	for _, svc := range serviceManager.GetServices() {
-		hcCfg := svc.HealthCheck
-		// If service has no specific health check, use global
-		if (&config.HealthCheckConfig{}) == hcCfg {
-			hcCfg = cfg.HealthCheck
-		}
-
-		prefix := "[HealthChecker-" + svc.Name + "]"
-		lc := logger.NewZapWriter(zLog, zap.InfoLevel, prefix)
-
-		hc := health.NewChecker(
-			hcCfg.Interval,
-			hcCfg.Timeout,
-			log.New(lc, "", 0),
-		)
-		s.healthCheckers[svc.Name] = hc
-		// Register server pools with the respective health checker
-		for _, loc := range svc.Locations {
-			hc.RegisterPool(loc.ServerPool)
-		}
-	}
-
-	return s, nil
 }
 
 func (s *Server) setupMiddleware() http.Handler {
@@ -351,9 +352,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	go func() {
 		defer wg.Done()
 		if err := s.adminServer.Shutdown(ctx); err != nil {
-			log.Printf("Admin server shutdown error: %v", err)
+			s.logger.Error("Admin server shutdown error: %v", zap.Error(err))
 		} else {
-			log.Println("Admin server shutdown successfully")
+			s.logger.Info("Admin server shutdown successfully")
 		}
 	}()
 
@@ -362,9 +363,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		go func(server *http.Server) {
 			defer wg.Done()
 			if err := server.Shutdown(ctx); err != nil {
-				log.Printf("Server shutdown error for %s: %v", server.Addr, err)
+				s.logger.Error("Server shutdown error for ", zap.String("server_addr", server.Addr), zap.Error(err))
 			} else {
-				log.Printf("Server at %s shutdown successfully", server.Addr)
+				s.logger.Info("Server at %s shutdown successfully", zap.String("server_addr", server.Addr))
 			}
 		}(srv)
 	}
@@ -375,7 +376,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		go func(name string, checker *health.Checker) {
 			defer wg.Done()
 			checker.Stop()
-			log.Printf("Health checker for service %s stopped", name)
+			s.logger.Info("Health checker for service %s stopped", zap.String("name", name))
 		}(svcName, hc)
 	}
 
@@ -390,7 +391,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-done:
-		log.Println("All servers and health checkers shutdown successfully")
+		s.logger.Info("All servers and health checkers shutdown successfully")
 		return nil
 	}
 }

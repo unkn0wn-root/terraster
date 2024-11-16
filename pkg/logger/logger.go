@@ -26,7 +26,6 @@ func (w *nopSyncWriter) Sync() error {
 
 type Config struct {
 	Level            string             `json:"level"`
-	Encoding         string             `json:"encoding"`
 	OutputPaths      []string           `json:"outputPaths"`
 	ErrorOutputPaths []string           `json:"errorOutputPaths"`
 	Development      bool               `json:"development"`
@@ -71,7 +70,6 @@ type SanitizationConfig struct {
 // defaultConfig provides fallback logging settings
 var defaultConfig = Config{
 	Level:       "info",
-	Encoding:    "json",
 	OutputPaths: []string{"stdout"},
 	ErrorOutputPaths: []string{
 		"stderr",
@@ -112,14 +110,12 @@ var defaultConfig = Config{
 	},
 }
 
-// should be called once at the start of your application.
 func Init(configPath string) error {
 	var initErr error
 	once.Do(func() {
 		var cfg Config
 		data, err := os.ReadFile(configPath)
 		if err != nil {
-			// If file not found, use default config
 			if os.IsNotExist(err) {
 				cfg = defaultConfig
 			} else {
@@ -133,15 +129,7 @@ func Init(configPath string) error {
 			}
 		}
 
-		rotationCfg := cfg.LogRotation
-
-		// Process OutputPaths with default to stdout
-		outputWriteSyncers := createWriteSyncers(cfg.OutputPaths, rotationCfg.Enabled, rotationCfg, zapcore.AddSync(os.Stdout))
-
-		// Process ErrorOutputPaths with default to stderr
-		errorWriteSyncers := createWriteSyncers(cfg.ErrorOutputPaths, rotationCfg.Enabled, rotationCfg, zapcore.AddSync(os.Stderr))
-
-		encoderCfg := zapcore.EncoderConfig{
+		encoderConfig := zapcore.EncoderConfig{
 			TimeKey:        cfg.EncodingConfig.TimeKey,
 			LevelKey:       cfg.EncodingConfig.LevelKey,
 			NameKey:        cfg.EncodingConfig.NameKey,
@@ -149,51 +137,62 @@ func Init(configPath string) error {
 			MessageKey:     cfg.EncodingConfig.MessageKey,
 			StacktraceKey:  cfg.EncodingConfig.StacktraceKey,
 			LineEnding:     cfg.EncodingConfig.LineEnding,
-			EncodeLevel:    getZapLevelEncoder(cfg.EncodingConfig.LevelEncoder),
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
 			EncodeTime:     getZapTimeEncoder(cfg.EncodingConfig.TimeEncoder),
 			EncodeDuration: getZapDurationEncoder(cfg.EncodingConfig.DurationEncoder),
 			EncodeCaller:   getZapCallerEncoder(cfg.EncodingConfig.CallerEncoder),
 		}
 
-		var encoder zapcore.Encoder
-		switch cfg.Encoding {
-		case "json":
-			encoder = zapcore.NewJSONEncoder(encoderCfg)
-		case "console":
-			encoder = zapcore.NewConsoleEncoder(encoderCfg)
-		default:
-			encoder = zapcore.NewJSONEncoder(encoderCfg)
-		}
+		encodeConsole := encoderConfig
+		encodeConsole.EncodeLevel = coloredLevelEncoder
 
+		var cores []zapcore.Core
 		level := zap.NewAtomicLevelAt(getZapLevel(cfg.Level))
 
-		// Modified version that separates concerns
-		outputCore := zapcore.NewCore(
-			encoder,
-			zapcore.NewMultiWriteSyncer(outputWriteSyncers...),
-			level,
-		)
+		consoleEncoder := zapcore.NewConsoleEncoder(encodeConsole)
+		consoleOutput := zapcore.Lock(os.Stdout)
+		consoleCore := zapcore.NewCore(consoleEncoder, consoleOutput, level)
+		cores = append(cores, consoleCore)
 
-		// Error core only handles error levels and above
-		errorCore := zapcore.NewCore(
-			encoder,
-			zapcore.NewMultiWriteSyncer(errorWriteSyncers...),
-			zap.NewAtomicLevelAt(zapcore.ErrorLevel), // Only error and above
-		)
+		for _, path := range cfg.OutputPaths {
+			if path != "stdout" && path != "stderr" {
+				jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
+				var writer zapcore.WriteSyncer
 
-		combinedCore := zapcore.NewTee(outputCore, errorCore)
+				if cfg.LogRotation.Enabled {
+					lj := &lumberjack.Logger{
+						Filename:   path,
+						MaxSize:    cfg.LogRotation.MaxSizeMB,
+						MaxBackups: cfg.LogRotation.MaxBackups,
+						MaxAge:     cfg.LogRotation.MaxAgeDays,
+						Compress:   cfg.LogRotation.Compress,
+					}
+					writer = zapcore.AddSync(lj)
+				} else {
+					file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if err != nil {
+						continue
+					}
+					writer = zapcore.AddSync(file)
+				}
 
-		sensitiveFields := cfg.Sanitization.SensitiveFields
-		mask := cfg.Sanitization.Mask
+				fileCore := zapcore.NewCore(jsonEncoder, writer, level)
+				cores = append(cores, fileCore)
+			}
+		}
 
-		sanitizerCore := NewSanitizerCore(combinedCore, sensitiveFields, mask)
+		combinedCore := zapcore.NewTee(cores...)
 
-		zapLogger := zap.New(sanitizerCore,
+		if len(cfg.Sanitization.SensitiveFields) > 0 {
+			combinedCore = NewSanitizerCore(combinedCore,
+				cfg.Sanitization.SensitiveFields,
+				cfg.Sanitization.Mask)
+		}
+
+		loggerInstance = zap.New(combinedCore,
 			zap.AddCaller(),
 			zap.AddStacktrace(zap.ErrorLevel),
 		)
-
-		loggerInstance = zapLogger
 	})
 	return initErr
 }
@@ -323,4 +322,23 @@ func Sync() error {
 		return loggerInstance.Sync()
 	}
 	return nil
+}
+
+func coloredLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
+	var level string
+	switch l {
+	case zapcore.DebugLevel:
+		level = "\x1b[36m" + l.String() + "\x1b[0m" // Cyan
+	case zapcore.InfoLevel:
+		level = "\x1b[32m" + l.String() + "\x1b[0m" // Green
+	case zapcore.WarnLevel:
+		level = "\x1b[33m" + l.String() + "\x1b[0m" // Yellow
+	case zapcore.ErrorLevel:
+		level = "\x1b[31m" + l.String() + "\x1b[0m" // Red
+	case zapcore.DPanicLevel, zapcore.PanicLevel, zapcore.FatalLevel:
+		level = "\x1b[35m" + l.String() + "\x1b[0m" // Magenta
+	default:
+		level = l.String()
+	}
+	enc.AppendString(level)
 }

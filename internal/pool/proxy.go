@@ -3,10 +3,11 @@ package pool
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -62,7 +63,7 @@ type URLRewriteProxy struct {
 	rewriteURL  string
 	urlRewriter *URLRewriter
 	rConfig     RewriteConfig
-	logger      *log.Logger
+	logger      *zap.Logger
 }
 
 type ProxyOption func(*URLRewriteProxy)
@@ -71,6 +72,7 @@ func NewReverseProxy(
 	target *url.URL,
 	config RouteConfig,
 	px *httputil.ReverseProxy,
+	logger *zap.Logger,
 	opts ...ProxyOption,
 ) *URLRewriteProxy {
 	rewriteConfig := RewriteConfig{
@@ -78,12 +80,14 @@ func NewReverseProxy(
 		RewriteURL: config.RewriteURL,
 		Redirect:   config.Redirect,
 	}
+
+	proxyLogger := logger.With(zap.String("prefix", "PROXY"))
 	prx := &URLRewriteProxy{
 		target:     target,
 		path:       config.Path,
 		rewriteURL: config.RewriteURL,
 		rConfig:    rewriteConfig,
-		logger:     log.Default(),
+		logger:     proxyLogger,
 		proxy:      px,
 	}
 
@@ -95,8 +99,11 @@ func NewReverseProxy(
 		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
 	}
 
-	prx.logf("Creating proxy with target: %s, path: %s, rewriteURL: %s",
-		target.String(), config.Path, config.RewriteURL)
+	prx.logger.Info("Creating proxy",
+		zap.String("target", target.String()),
+		zap.String("path", config.Path),
+		zap.String("rewriteURL", config.RewriteURL),
+	)
 
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
@@ -162,7 +169,7 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 }
 
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
-	p.logf("Received response: %d", resp.StatusCode)
+	p.logger.Info("Received response: %d", zap.Int("status_code", resp.StatusCode))
 	if isRedirect(resp.StatusCode) {
 		p.handleRedirect(resp)
 	}
@@ -177,10 +184,6 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
 }
 
-func (p *URLRewriteProxy) logf(format string, args ...interface{}) {
-	p.logger.Printf("[PROXY] "+format, args...)
-}
-
 func isRedirect(statusCode int) bool {
 	switch statusCode {
 	case StatusMovedPermanently, StatusFound, StatusSeeOther,
@@ -192,6 +195,6 @@ func isRedirect(statusCode int) bool {
 }
 
 func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	p.logf("Unexpected error in proxy: %v", err)
+	p.logger.Error("Unexpected error in proxy: %v", zap.Error(err))
 	http.Error(w, "Something went wrong", http.StatusInternalServerError)
 }

@@ -2,7 +2,6 @@ package pool
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
+	"go.uber.org/zap"
 )
 
 type contextKey int
@@ -28,17 +28,22 @@ type ServerPool struct {
 	current        uint64
 	algorithm      atomic.Value
 	maxConnections atomic.Int32
+	log            *zap.Logger
 }
 
-func NewServerPool() *ServerPool {
-	pool := &ServerPool{}
+func NewServerPool(logger *zap.Logger) *ServerPool {
+	pool := &ServerPool{log: logger}
 	pool.backends.Store([]*Backend{})
 	pool.algorithm.Store(algorithm.CreateAlgorithm("round-robin"))
 	pool.maxConnections.Store(1000)
 	return pool
 }
 
-func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg *config.HealthCheckConfig) error {
+func (s *ServerPool) AddBackend(
+	cfg config.BackendConfig,
+	rc RouteConfig,
+	hcCfg *config.HealthCheckConfig,
+) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
 		return err
@@ -50,6 +55,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg 
 		url,
 		rc,
 		createProxy,
+		s.log,
 		WithURLRewriter(rc, url),
 	)
 
@@ -59,7 +65,7 @@ func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg 
 	}
 
 	if hcCfg == nil {
-		log.Printf("HealthCheckConfig is nil for backend %s, applying default health check.", cfg.URL)
+		s.log.Info("HealthCheckConfig is nil for backend, applying default health check.", zap.String("url", cfg.URL))
 		hcCfg = config.DefaultHealthCheck.Copy()
 	}
 
@@ -205,6 +211,7 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealt
 				url,
 				RouteConfig{},
 				proxy,
+				s.log,
 			)
 
 			backend := &Backend{

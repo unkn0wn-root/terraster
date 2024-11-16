@@ -9,6 +9,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
+	"go.uber.org/zap"
 )
 
 var (
@@ -19,6 +20,7 @@ var (
 
 type Manager struct {
 	services map[string]*ServiceInfo
+	logger   *zap.Logger
 	mu       sync.RWMutex
 }
 
@@ -43,9 +45,10 @@ type LocationInfo struct {
 	ServerPool *pool.ServerPool
 }
 
-func NewManager(cfg *config.Config) (*Manager, error) {
+func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 	m := &Manager{
 		services: make(map[string]*ServiceInfo),
+		logger:   logger,
 	}
 
 	// If no services are defined in config, create a default service
@@ -209,7 +212,7 @@ func (m *Manager) GetServices() []*ServiceInfo {
 }
 
 func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *config.HealthCheckConfig) (*pool.ServerPool, error) {
-	serverPool := pool.NewServerPool()
+	serverPool := pool.NewServerPool(m.logger)
 	serverPool.UpdateConfig(pool.PoolConfig{
 		Algorithm: srvc.LoadBalancer,
 	})

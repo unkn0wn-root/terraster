@@ -1,8 +1,9 @@
 package pool
 
 import (
-	"log"
 	"net/url"
+
+	"go.uber.org/zap"
 )
 
 func WithURLRewriter(config RouteConfig, backendURL *url.URL) ProxyOption {
@@ -11,7 +12,7 @@ func WithURLRewriter(config RouteConfig, backendURL *url.URL) ProxyOption {
 	}
 }
 
-func WithLogger(logger *log.Logger) ProxyOption {
+func WithLogger(logger *zap.Logger) ProxyOption {
 	return func(p *URLRewriteProxy) {
 		p.logger = logger
 	}
