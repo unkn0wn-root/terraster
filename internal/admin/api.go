@@ -13,6 +13,8 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
+	"github.com/unkn0wn-root/terraster/pkg/trace"
+	"go.uber.org/zap"
 )
 
 // AdminAPI represents the administrative API for managing the load balancer.
@@ -22,6 +24,7 @@ type AdminAPI struct {
 	config         *config.Config
 	authService    *auth_service.AuthService
 	authHandler    *handlers.AuthHandler
+	logger         *zap.SugaredLogger
 }
 
 // NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
@@ -69,6 +72,7 @@ func (a *AdminAPI) registerRoutes() {
 func (a *AdminAPI) Handler() http.Handler {
 	var middlewares []middleware.Middleware
 	middlewares = append(middlewares,
+		trace.WithRequestID(),
 		NewAdminAccessLogMiddleware(),
 		middleware.NewRateLimiterMiddleware(
 			a.config.AdminAPI.RateLimit.RequestsPerSecond,

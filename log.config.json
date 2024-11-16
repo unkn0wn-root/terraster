@@ -1,0 +1,35 @@
+{
+  "level": "info",
+  "encoding": "json",
+  "outputPaths": ["stdout", "terraster.log"],
+  "errorOutputPaths": ["stderr"],
+  "development": false,
+  "sampling": {
+    "initial": 100,
+    "thereafter": 100
+  },
+  "encodingConfig": {
+    "timeKey": "time",
+    "levelKey": "level",
+    "nameKey": "logger",
+    "callerKey": "caller",
+    "messageKey": "msg",
+    "stacktraceKey": "stacktrace",
+    "lineEnding": "\n",
+    "levelEncoder": "lowercase",
+    "timeEncoder": "iso8601",
+    "durationEncoder": "string",
+    "callerEncoder": "short"
+  },
+  "logRotation": {
+    "enabled": true,
+    "maxSizeMB": 100,
+    "maxBackups": 7,
+    "maxAgeDays": 30,
+    "compress": true
+  },
+  "sanitization": {
+    "sensitiveFields": ["password", "token", "api_key"],
+    "mask": "****"
+  }
+}
