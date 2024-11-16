@@ -7,14 +7,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// SanitizerCore wraps a zapcore.Core and sanitizes log entries.
+// wraps a zapcore.Core and sanitizes log entries.
 type SanitizerCore struct {
 	zapcore.Core
 	sensitiveFields []string
 	mask            string
 }
 
-// NewSanitizerCore creates a new SanitizerCore.
 func NewSanitizerCore(core zapcore.Core, sensitiveFields []string, mask string) *SanitizerCore {
 	return &SanitizerCore{
 		Core:            core,
@@ -23,7 +22,7 @@ func NewSanitizerCore(core zapcore.Core, sensitiveFields []string, mask string) 
 	}
 }
 
-// With adds structured context to the core.
+// adds structured context to the core.
 func (s *SanitizerCore) With(fields []zapcore.Field) zapcore.Core {
 	return &SanitizerCore{
 		Core:            s.Core.With(fields),
@@ -32,7 +31,7 @@ func (s *SanitizerCore) With(fields []zapcore.Field) zapcore.Core {
 	}
 }
 
-// Check determines whether the supplied Entry should be logged.
+// determines whether the supplied entry should be logged.
 func (s *SanitizerCore) Check(entry zapcore.Entry, checkedEntry *zapcore.CheckedEntry) *zapcore.CheckedEntry {
 	if s.Enabled(entry.Level) {
 		return checkedEntry.AddCore(entry, s)
@@ -40,18 +39,17 @@ func (s *SanitizerCore) Check(entry zapcore.Entry, checkedEntry *zapcore.Checked
 	return checkedEntry
 }
 
-// Write serializes the Entry and any Fields and writes them to the destination.
 func (s *SanitizerCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
 	sanitizedFields := sanitizeFields(fields, s.sensitiveFields, s.mask)
 	return s.Core.Write(entry, sanitizedFields)
 }
 
-// Sync flushes buffered logs (if any).
+// flushe buffered logs (if any).
 func (s *SanitizerCore) Sync() error {
 	return s.Core.Sync()
 }
 
-// sanitizeFields processes fields and masks sensitive data.
+// processes fields and masks sensitive data.
 func sanitizeFields(fields []zapcore.Field, sensitiveFields []string, mask string) []zapcore.Field {
 	maskedFields := make([]zapcore.Field, len(fields))
 	copy(maskedFields, fields)

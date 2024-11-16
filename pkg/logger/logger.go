@@ -308,7 +308,7 @@ func getZapCallerEncoder(encoder string) zapcore.CallerEncoder {
 	}
 }
 
-// Logger returns the global *zap.Logger.
+// returns the global *zap.Logger.
 // It panics if Init was not called successfully.
 func Logger() *zap.Logger {
 	if loggerInstance == nil {
@@ -323,18 +323,4 @@ func Sync() error {
 		return loggerInstance.Sync()
 	}
 	return nil
-}
-
-// WithRequestID returns a *zap.Logger with the request_id field added.
-// If request_id is empty, it returns the base logger.
-func WithRequestID(reqID string) *zap.Logger {
-	if loggerInstance == nil {
-		panic("Logger not initialized. Call logger.Init() before using the logger.")
-	}
-
-	if reqID != "" {
-		return loggerInstance.With(zap.String("request_id", reqID))
-	}
-
-	return loggerInstance
 }

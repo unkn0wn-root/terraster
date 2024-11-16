@@ -1,0 +1,46 @@
+port: 443
+admin_port: 4433
+
+services:
+  - name: citrix
+    host: citrix.krogsveen.no
+    port: 8455 # service listener port
+    health_check:
+      type: "http"
+      path: "/"
+      interval: "5s"
+      timeout: "3s"
+      thresholds:
+        healthy: 2
+        unhealthy: 3
+    locations:
+      - path: "/"
+        lb_policy: round-robin
+        backends:
+          - url: http://193.75.49.222
+            weight: 3
+            max_connections: 10000
+          - url: http://193.75.49.217
+            weight: 5
+            max_connections: 800
+
+# api authentication
+auth:
+  jwt_secret: mySecretKey
+  db_path: ./auth.db
+  password_expiry_days: 7
+  password_history_limit: 5
+
+admin_api:
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
+rate_limit:
+  requests_per_second: 100
+  burst: 150
+
+connection_pool:
+  max_idle: 100
+  max_open: 1000
+  idle_timeout: 90s

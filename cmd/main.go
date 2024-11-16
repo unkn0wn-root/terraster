@@ -23,15 +23,6 @@ func main() {
 	configPath = flag.String("c", "config.yaml", "path to config file")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid config: %v", err)
-	}
-
 	if err := logger.Init("log.config.json"); err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
@@ -43,6 +34,15 @@ func main() {
 			log.Printf("Logger sync error: %v", err)
 		}
 	}()
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		logger.Fatal("Failed to load config: %v", zap.Error(err))
+	}
+
+	if err := cfg.Validate(); err != nil {
+		logger.Fatal("Invalid config: %v", zap.Error(err))
+	}
 
 	// Initialize database
 	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
@@ -73,7 +73,7 @@ func main() {
 	defer cancel()
 
 	errChan := make(chan error, 1)
-	srv, err := server.NewServer(ctx, errChan, cfg, authService)
+	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize server %v", zap.Error(err))
 	}

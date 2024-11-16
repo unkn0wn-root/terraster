@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/golang-jwt/jwt"
@@ -13,7 +14,6 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
-	"github.com/unkn0wn-root/terraster/pkg/trace"
 	"go.uber.org/zap"
 )
 
@@ -70,9 +70,20 @@ func (a *AdminAPI) registerRoutes() {
 
 // Handler returns the HTTP handler for the AdminAPI, wrapped with necessary middleware.
 func (a *AdminAPI) Handler() http.Handler {
+	logger, err := middleware.NewLoggingMiddleware(
+		middleware.WithLogLevel(zap.InfoLevel),
+		middleware.WithHeaders(),
+		middleware.WithQueryParams(),
+		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var middlewares []middleware.Middleware
 	middlewares = append(middlewares,
-		trace.WithRequestID(),
+		logger,
 		NewAdminAccessLogMiddleware(),
 		middleware.NewRateLimiterMiddleware(
 			a.config.AdminAPI.RateLimit.RequestsPerSecond,

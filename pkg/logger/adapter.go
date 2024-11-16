@@ -7,20 +7,19 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// ZapWriter is an adapter that implements io.Writer and writes to Zap logger.
+// adapter implements io.Writer and writes to Zap logger.
 type ZapWriter struct {
-	sugar  *zap.SugaredLogger
+	logger *zap.Logger
 	level  zapcore.Level
 	prefix string
 }
 
-// NewZapWriter creates a new ZapWriter.
-// - sugar: the Zap sugared logger.
+// - logger: the Zap structured logger.
 // - level: the log level at which messages should be logged.
-// - prefix: the prefix to prepend to each log message.
-func NewZapWriter(sugar *zap.SugaredLogger, level zapcore.Level, prefix string) *ZapWriter {
+// - prefix: the prefix to include as a separate field (optional).
+func NewZapWriter(logger *zap.Logger, level zapcore.Level, prefix string) *ZapWriter {
 	return &ZapWriter{
-		sugar:  sugar,
+		logger: logger,
 		level:  level,
 		prefix: prefix,
 	}
@@ -33,29 +32,29 @@ func (w *ZapWriter) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 
-	// Prepend the prefix if any
+	fields := []zap.Field{}
+
 	if w.prefix != "" {
-		msg = w.prefix + " " + msg
+		fields = append(fields, zap.String("prefix", w.prefix))
 	}
 
-	// Log the message at the specified level
 	switch w.level {
 	case zapcore.DebugLevel:
-		w.sugar.Debug(msg)
+		w.logger.Debug(msg, fields...)
 	case zapcore.InfoLevel:
-		w.sugar.Info(msg)
+		w.logger.Info(msg, fields...)
 	case zapcore.WarnLevel:
-		w.sugar.Warn(msg)
+		w.logger.Warn(msg, fields...)
 	case zapcore.ErrorLevel:
-		w.sugar.Error(msg)
+		w.logger.Error(msg, fields...)
 	case zapcore.DPanicLevel:
-		w.sugar.DPanic(msg)
+		w.logger.DPanic(msg, fields...)
 	case zapcore.PanicLevel:
-		w.sugar.Panic(msg)
+		w.logger.Panic(msg, fields...)
 	case zapcore.FatalLevel:
-		w.sugar.Fatal(msg)
+		w.logger.Fatal(msg, fields...)
 	default:
-		w.sugar.Info(msg)
+		w.logger.Info(msg, fields...)
 	}
 
 	return len(p), nil
