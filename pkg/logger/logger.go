@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
@@ -184,13 +185,31 @@ func Init(configPath string) error {
 		}
 
 		// Wrap the combined core with AsyncCore
-		asyncCore := NewAsyncCore(combinedCore, 1000) // @todo: ur - get this from config!
+		asyncCore := NewAsyncCore(combinedCore, 1000, 100, 500*time.Millisecond) // Buffer size of 1000, adjust as needed
+
 		loggerInstance = zap.New(asyncCore,
 			zap.AddCaller(),
 			zap.AddStacktrace(zap.ErrorLevel),
 		)
 	})
 	return initErr
+}
+
+// returns the global *zap.Logger.
+// It panics if Init was not called successfully.
+func Logger() *zap.Logger {
+	if loggerInstance == nil {
+		panic("Logger not initialized. Call logger.Init() before using the logger.")
+	}
+	return loggerInstance
+}
+
+// flushes any buffered log entries.
+func Sync() error {
+	if loggerInstance != nil {
+		return loggerInstance.Sync()
+	}
+	return nil
 }
 
 // processes a list of log paths and returns corresponding WriteSyncers.
@@ -295,23 +314,6 @@ func getZapCallerEncoder(encoder string) zapcore.CallerEncoder {
 	default:
 		return zapcore.ShortCallerEncoder
 	}
-}
-
-// returns the global *zap.Logger.
-// It panics if Init was not called successfully.
-func Logger() *zap.Logger {
-	if loggerInstance == nil {
-		panic("Logger not initialized. Call logger.Init() before using the logger.")
-	}
-	return loggerInstance
-}
-
-// flushes any buffered log entries.
-func Sync() error {
-	if loggerInstance != nil {
-		return loggerInstance.Sync()
-	}
-	return nil
 }
 
 func coloredLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
