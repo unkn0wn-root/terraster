@@ -68,6 +68,14 @@ services:
           - url: http://internal-api1.local.com:8455
             weight: 5
             max_connections: 1000
+            health_check: # or have separate health check for each backend and override service health check
+              type: "http"
+              path: "/api_health"
+              interval: "4s"
+              timeout: "3s"
+              thresholds:
+                healthy: 1
+                unhealthy: 2
           - url: http://internal-api2.local.com:8455
             weight: 3
             max_connections: 800
