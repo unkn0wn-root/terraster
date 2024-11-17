@@ -160,13 +160,7 @@ func Init(configPath string) error {
 				var writer zapcore.WriteSyncer
 
 				if cfg.LogRotation.Enabled {
-					lj := &lumberjack.Logger{
-						Filename:   path,
-						MaxSize:    cfg.LogRotation.MaxSizeMB,
-						MaxBackups: cfg.LogRotation.MaxBackups,
-						MaxAge:     cfg.LogRotation.MaxAgeDays,
-						Compress:   cfg.LogRotation.Compress,
-					}
+					lj := ljLogger(path, cfg.LogRotation)
 					writer = zapcore.AddSync(lj)
 				} else {
 					file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -210,13 +204,7 @@ func createWriteSyncers(paths []string, logRotationEnabled bool, rotationCfg Log
 			writeSyncers = append(writeSyncers, zapcore.AddSync(&nopSyncWriter{os.Stderr}))
 		default:
 			if logRotationEnabled {
-				lj := &lumberjack.Logger{
-					Filename:   path,                   // Log file path
-					MaxSize:    rotationCfg.MaxSizeMB,  // Size in MB before rotation
-					MaxBackups: rotationCfg.MaxBackups, // Number of old files to keep
-					MaxAge:     rotationCfg.MaxAgeDays, // Days to keep old files
-					Compress:   rotationCfg.Compress,   // Compress old files
-				}
+				lj := ljLogger(path, rotationCfg)
 				writeSyncers = append(writeSyncers, zapcore.AddSync(lj))
 			} else {
 				// If rotation is disabled, just use regular file writing
@@ -341,4 +329,14 @@ func coloredLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 		level = l.String()
 	}
 	enc.AppendString(level)
+}
+
+func ljLogger(path string, l LogRotationConfig) *lumberjack.Logger {
+	return &lumberjack.Logger{
+		Filename:   path,
+		MaxSize:    l.MaxSizeMB,
+		MaxBackups: l.MaxBackups,
+		MaxAge:     l.MaxAgeDays,
+		Compress:   l.Compress,
+	}
 }
