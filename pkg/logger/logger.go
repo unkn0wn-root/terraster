@@ -2,8 +2,9 @@ package logger
 
 import (
 	"encoding/json"
-	"io"
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,17 +14,9 @@ import (
 )
 
 var (
-	loggerInstance *zap.Logger
-	once           sync.Once
+	managerOnce sync.Once
+	initErr     error
 )
-
-type nopSyncWriter struct {
-	io.Writer
-}
-
-func (w *nopSyncWriter) Sync() error {
-	return nil
-}
 
 type Config struct {
 	Level            string             `json:"level"`
@@ -63,182 +56,126 @@ type LogRotationConfig struct {
 	Compress   bool `json:"compress"`
 }
 
+// SanitizationConfig configures sensitive field sanitization.
 type SanitizationConfig struct {
 	SensitiveFields []string `json:"sensitiveFields"`
 	Mask            string   `json:"mask"`
 }
 
-// defaultConfig provides fallback logging settings
-var defaultConfig = Config{
-	Level:       "info",
-	OutputPaths: []string{"stdout"},
-	ErrorOutputPaths: []string{
-		"stderr",
-	},
-	Development: false,
-	Sampling: SamplingConfig{
-		Initial:    100,
-		Thereafter: 100,
-	},
-	EncodingConfig: EncodingConfig{
-		TimeKey:         "time",
-		LevelKey:        "level",
-		NameKey:         "logger",
-		CallerKey:       "caller",
-		MessageKey:      "msg",
-		StacktraceKey:   "stacktrace",
-		LineEnding:      "\n",
-		LevelEncoder:    "lowercase",
-		TimeEncoder:     "iso8601",
-		DurationEncoder: "string",
-		CallerEncoder:   "short",
-	},
-	LogRotation: LogRotationConfig{
-		Enabled:    true,
-		MaxSizeMB:  100,
-		MaxBackups: 7,
-		MaxAgeDays: 30,
-		Compress:   true,
-	},
-	Sanitization: SanitizationConfig{
-		SensitiveFields: []string{
-			"password",
-			"token",
-			"access_token",
-			"refresh_token",
-		},
-		Mask: "****",
-	},
-}
-
-func Init(configPath string) error {
-	var initErr error
-	once.Do(func() {
-		var cfg Config
+// Init initializes the loggers based on the configuration file.
+// It should be called once at the start of the application.
+func Init(configPath string, manager *LoggerManager) error {
+	managerOnce.Do(func() {
+		var cfgMap map[string]Config
 		data, err := os.ReadFile(configPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				cfg = defaultConfig
+				fmt.Println("Configuration file not found. Using default logger configurations.")
+				// left on purpose
+				// No specific loggers defined; use defaults for any logger initialized later
 			} else {
-				initErr = err
+				initErr = fmt.Errorf("failed to read configuration file: %w", err)
 				return
 			}
 		} else {
-			if err := json.Unmarshal(data, &cfg); err != nil {
-				initErr = err
+			var configWrapper struct {
+				Loggers map[string]Config `json:"loggers"`
+			}
+			if err := json.Unmarshal(data, &configWrapper); err != nil {
+				initErr = fmt.Errorf("failed to parse configuration file: %w", err)
 				return
 			}
+			cfgMap = configWrapper.Loggers
 		}
 
-		encoderConfig := zapcore.EncoderConfig{
-			TimeKey:        cfg.EncodingConfig.TimeKey,
-			LevelKey:       cfg.EncodingConfig.LevelKey,
-			NameKey:        cfg.EncodingConfig.NameKey,
-			CallerKey:      cfg.EncodingConfig.CallerKey,
-			MessageKey:     cfg.EncodingConfig.MessageKey,
-			StacktraceKey:  cfg.EncodingConfig.StacktraceKey,
-			LineEnding:     cfg.EncodingConfig.LineEnding,
-			EncodeLevel:    zapcore.LowercaseLevelEncoder,
-			EncodeTime:     getZapTimeEncoder(cfg.EncodingConfig.TimeEncoder),
-			EncodeDuration: getZapDurationEncoder(cfg.EncodingConfig.DurationEncoder),
-			EncodeCaller:   getZapCallerEncoder(cfg.EncodingConfig.CallerEncoder),
-		}
-
-		encodeConsole := encoderConfig
-		encodeConsole.EncodeLevel = coloredLevelEncoder
-
-		var cores []zapcore.Core
-		level := zap.NewAtomicLevelAt(getZapLevel(cfg.Level))
-
-		consoleEncoder := zapcore.NewConsoleEncoder(encodeConsole)
-		consoleOutput := zapcore.Lock(os.Stdout)
-		consoleCore := zapcore.NewCore(consoleEncoder, consoleOutput, level)
-		cores = append(cores, consoleCore)
-
-		for _, path := range cfg.OutputPaths {
-			if path != "stdout" && path != "stderr" {
-				jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
-				var writer zapcore.WriteSyncer
-
-				if cfg.LogRotation.Enabled {
-					lj := ljLogger(path, cfg.LogRotation)
-					writer = zapcore.AddSync(lj)
-				} else {
-					file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-					if err != nil {
-						continue
-					}
-					writer = zapcore.AddSync(file)
-				}
-
-				fileCore := zapcore.NewCore(jsonEncoder, writer, level)
-				cores = append(cores, fileCore)
+		for name, cfg := range cfgMap {
+			logger, err := buildLogger(name, &cfg)
+			if err != nil {
+				initErr = fmt.Errorf("failed to build logger '%s': %w", name, err)
+				return
 			}
+			manager.AddLogger(name, logger)
 		}
-
-		combinedCore := zapcore.NewTee(cores...)
-
-		if len(cfg.Sanitization.SensitiveFields) > 0 {
-			combinedCore = NewSanitizerCore(combinedCore,
-				cfg.Sanitization.SensitiveFields,
-				cfg.Sanitization.Mask)
-		}
-
-		// Wrap the combined core with AsyncCore
-		asyncCore := NewAsyncCore(combinedCore, 1000, 100, 500*time.Millisecond) // Buffer size of 1000, adjust as needed
-
-		loggerInstance = zap.New(asyncCore,
-			zap.AddCaller(),
-			zap.AddStacktrace(zap.ErrorLevel),
-		)
 	})
 	return initErr
 }
 
-// returns the global *zap.Logger.
-// It panics if Init was not called successfully.
-func Logger() *zap.Logger {
-	if loggerInstance == nil {
-		panic("Logger not initialized. Call logger.Init() before using the logger.")
-	}
-	return loggerInstance
-}
+func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
+	// Apply default configuration if any field is missing
+	assignDefaultValues(cfg)
 
-// flushes any buffered log entries.
-func Sync() error {
-	if loggerInstance != nil {
-		return loggerInstance.Sync()
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:        cfg.EncodingConfig.TimeKey,
+		LevelKey:       cfg.EncodingConfig.LevelKey,
+		NameKey:        cfg.EncodingConfig.NameKey,
+		CallerKey:      cfg.EncodingConfig.CallerKey,
+		MessageKey:     cfg.EncodingConfig.MessageKey,
+		StacktraceKey:  cfg.EncodingConfig.StacktraceKey,
+		LineEnding:     cfg.EncodingConfig.LineEnding,
+		EncodeLevel:    getZapLevelEncoder(cfg.EncodingConfig.LevelEncoder),
+		EncodeTime:     getZapTimeEncoder(cfg.EncodingConfig.TimeEncoder),
+		EncodeDuration: getZapDurationEncoder(cfg.EncodingConfig.DurationEncoder),
+		EncodeCaller:   getZapCallerEncoder(cfg.EncodingConfig.CallerEncoder),
 	}
-	return nil
-}
 
-// processes a list of log paths and returns corresponding WriteSyncers.
-func createWriteSyncers(paths []string, logRotationEnabled bool, rotationCfg LogRotationConfig, defaultSyncer zapcore.WriteSyncer) []zapcore.WriteSyncer {
-	var writeSyncers []zapcore.WriteSyncer
-	for _, path := range paths {
-		switch path {
-		case "stdout":
-			// Stdout just writes directly, no rotation
-			writeSyncers = append(writeSyncers, zapcore.AddSync(&nopSyncWriter{os.Stdout}))
-		case "stderr":
-			// Stderr just writes directly, no rotation
-			writeSyncers = append(writeSyncers, zapcore.AddSync(&nopSyncWriter{os.Stderr}))
-		default:
-			if logRotationEnabled {
-				lj := ljLogger(path, rotationCfg)
-				writeSyncers = append(writeSyncers, zapcore.AddSync(lj))
-			} else {
-				// If rotation is disabled, just use regular file writing
-				writeSyncers = append(writeSyncers, defaultSyncer)
+	// Console Encoder with colored levels
+	consoleEncoderConfig := encoderConfig
+	consoleEncoderConfig.EncodeLevel = coloredLevelEncoder
+	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
+
+	jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
+	atomicLevel := zap.NewAtomicLevelAt(getZapLevel(cfg.Level))
+
+	var allCores []zapcore.Core
+	if cfg.Development {
+		// 1. Console Core - Synchronous
+		consoleWS := zapcore.Lock(os.Stdout)
+		consoleCore := zapcore.NewCore(consoleEncoder, consoleWS, atomicLevel)
+		allCores = append(allCores, consoleCore)
+	} else {
+		for _, path := range cfg.OutputPaths {
+			if path == "stdout" || path == "stderr" {
+				// Already handled by consoleCore
+				continue
 			}
+
+			var fileWS zapcore.WriteSyncer
+			if cfg.LogRotation.Enabled {
+				lj := ljLogger(path, cfg.LogRotation)
+				fileWS = zapcore.AddSync(lj)
+			} else {
+				file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Printf("Failed to open log file '%s': %v\n", path, err)
+					continue // Skip this file
+				}
+				fileWS = zapcore.AddSync(file)
+			}
+
+			fileCore := zapcore.NewCore(jsonEncoder, fileWS, atomicLevel)
+			asyncFileCore := NewAsyncCore(fileCore, 1000, 100, 500*time.Millisecond) // bufferSize, batchSize, flushInterval
+			allCores = append(allCores, asyncFileCore)
 		}
 	}
-	return writeSyncers
+
+	combinedCore := zapcore.NewTee(allCores...)
+
+	// apply Sanitization if needed
+	if len(cfg.Sanitization.SensitiveFields) > 0 {
+		combinedCore = NewSanitizerCore(combinedCore, cfg.Sanitization.SensitiveFields, cfg.Sanitization.Mask)
+	}
+
+	logger := zap.New(combinedCore,
+		zap.AddCaller(),
+		zap.AddStacktrace(zap.ErrorLevel),
+	).Named(name)
+
+	return logger, nil
 }
 
-// maps string levels to zapcore.Level
+// maps string levels to zapcore.Level.
 func getZapLevel(level string) zapcore.Level {
-	switch level {
+	switch strings.ToLower(level) {
 	case "debug":
 		return zap.DebugLevel
 	case "info":
@@ -258,9 +195,9 @@ func getZapLevel(level string) zapcore.Level {
 	}
 }
 
-// maps string encoders to zapcore.LevelEncoder
+// maps string encoders to zapcore.LevelEncoder.
 func getZapLevelEncoder(encoder string) zapcore.LevelEncoder {
-	switch encoder {
+	switch strings.ToLower(encoder) {
 	case "lowercase":
 		return zapcore.LowercaseLevelEncoder
 	case "uppercase":
@@ -272,9 +209,9 @@ func getZapLevelEncoder(encoder string) zapcore.LevelEncoder {
 	}
 }
 
-// maps string encoders to zapcore.TimeEncoder
+// maps string encoders to zapcore.TimeEncoder.
 func getZapTimeEncoder(encoder string) zapcore.TimeEncoder {
-	switch encoder {
+	switch strings.ToLower(encoder) {
 	case "iso8601":
 		return zapcore.ISO8601TimeEncoder
 	case "epoch":
@@ -288,9 +225,9 @@ func getZapTimeEncoder(encoder string) zapcore.TimeEncoder {
 	}
 }
 
-// maps string encoders to zapcore.DurationEncoder
+// maps string encoders to zapcore.DurationEncoder.
 func getZapDurationEncoder(encoder string) zapcore.DurationEncoder {
-	switch encoder {
+	switch strings.ToLower(encoder) {
 	case "string":
 		return zapcore.StringDurationEncoder
 	case "seconds":
@@ -304,9 +241,9 @@ func getZapDurationEncoder(encoder string) zapcore.DurationEncoder {
 	}
 }
 
-// maps string encoders to zapcore.CallerEncoder
+// maps string encoders to zapcore.CallerEncoder.
 func getZapCallerEncoder(encoder string) zapcore.CallerEncoder {
-	switch encoder {
+	switch strings.ToLower(encoder) {
 	case "full":
 		return zapcore.FullCallerEncoder
 	case "short":
@@ -316,6 +253,7 @@ func getZapCallerEncoder(encoder string) zapcore.CallerEncoder {
 	}
 }
 
+// adds color codes to log levels for console output - this is a bit slow so only in dev
 func coloredLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 	var level string
 	switch l {
@@ -335,6 +273,7 @@ func coloredLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(level)
 }
 
+// creates a new Lumberjack logger with the given path and configuration.
 func ljLogger(path string, l LogRotationConfig) *lumberjack.Logger {
 	return &lumberjack.Logger{
 		Filename:   path,

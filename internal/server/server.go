@@ -46,6 +46,7 @@ type Server struct {
 	serverPool     *pool.ServerPool
 	servers        []*http.Server
 	logger         *zap.Logger
+	logManager     *logger.LoggerManager
 	mu             sync.RWMutex
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -59,6 +60,7 @@ func NewServer(
 	cfg *config.Config,
 	authSrvc *auth_service.AuthService,
 	zLog *zap.Logger,
+	logManager *logger.LoggerManager,
 ) (*Server, error) {
 	ctx, cancel := context.WithCancel(srvCtx)
 	serviceManager, err := service.NewManager(cfg, zLog)
@@ -76,6 +78,7 @@ func NewServer(
 		servers:        make([]*http.Server, 0),
 		errorChan:      make(chan error),
 		logger:         zLog,
+		logManager:     logManager,
 	}
 
 	// Initialize health checkers per service
@@ -258,9 +261,14 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setupMiddleware() http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
+	requestsLogger, err := s.logManager.GetLogger("request")
+	if err != nil {
+		s.logger.Error("Failed to get request logger", zap.Error(err))
+	}
+
 	// @toDo: get it from config
 	logger := middleware.NewLoggingMiddleware(
-		s.logger,
+		requestsLogger,
 		middleware.WithLogLevel(zap.InfoLevel),
 		middleware.WithHeaders(),
 		middleware.WithQueryParams(),
