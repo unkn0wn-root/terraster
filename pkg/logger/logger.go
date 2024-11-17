@@ -184,8 +184,7 @@ func Init(configPath string) error {
 		}
 
 		// Wrap the combined core with AsyncCore
-		asyncCore := NewAsyncCore(combinedCore, 1000) // Buffer size of 1000, adjust as needed
-
+		asyncCore := NewAsyncCore(combinedCore, 1000) // @todo: ur - get this from config!
 		loggerInstance = zap.New(asyncCore,
 			zap.AddCaller(),
 			zap.AddStacktrace(zap.ErrorLevel),
