@@ -24,6 +24,7 @@ type AsyncCore struct {
 	batchSize     int
 	flushInterval time.Duration
 	droppedLogs   uint64 // Atomic counter for dropped logs
+	batchPool     *sync.Pool
 }
 
 // initializes a new AsyncCore with batching and tracking.
@@ -31,6 +32,15 @@ type AsyncCore struct {
 // batchSize: number of log entries per batch
 // flushInterval: maximum time to wait before flushing a batch
 func NewAsyncCore(core zapcore.Core, bufferSize, batchSize int, flushInterval time.Duration) *AsyncCore {
+	if bufferSize <= 0 {
+		bufferSize = 10000
+	}
+	if batchSize <= 0 || batchSize > bufferSize {
+		batchSize = bufferSize / 10
+	}
+	if flushInterval <= 0 {
+		flushInterval = time.Second
+	}
 	ac := &AsyncCore{
 		core:          core,
 		entryChan:     make(chan LogEntry, bufferSize),
@@ -38,6 +48,12 @@ func NewAsyncCore(core zapcore.Core, bufferSize, batchSize int, flushInterval ti
 		bufferSize:    bufferSize,
 		batchSize:     batchSize,
 		flushInterval: flushInterval,
+		batchPool: &sync.Pool{
+			New: func() interface{} {
+				batch := make([]LogEntry, 0, batchSize)
+				return &batch
+			},
+		},
 	}
 
 	ac.wg.Add(2)
@@ -54,7 +70,17 @@ func (ac *AsyncCore) processEntries() {
 	ticker := time.NewTicker(ac.flushInterval)
 	defer ticker.Stop()
 
-	var batch []LogEntry
+	batchPtr := ac.batchPool.Get().(*[]LogEntry)
+	batch := *batchPtr
+	batch = batch[:0]
+
+	defer func() {
+		if len(batch) > 0 {
+			ac.writeBatch(batch)
+		}
+		*batchPtr = batch
+		ac.batchPool.Put(batchPtr)
+	}()
 
 	for {
 		select {
@@ -62,12 +88,12 @@ func (ac *AsyncCore) processEntries() {
 			batch = append(batch, logEntry)
 			if len(batch) >= ac.batchSize {
 				ac.writeBatch(batch)
-				batch = nil
+				batch = batch[:0]
 			}
 		case <-ticker.C:
 			if len(batch) > 0 {
 				ac.writeBatch(batch)
-				batch = nil
+				batch = batch[:0]
 			}
 		case <-ac.quit:
 			// Drain remaining log entries before exiting
@@ -75,6 +101,10 @@ func (ac *AsyncCore) processEntries() {
 				select {
 				case logEntry := <-ac.entryChan:
 					batch = append(batch, logEntry)
+					if len(batch) >= ac.batchSize {
+						ac.writeBatch(batch)
+						batch = batch[:0]
+					}
 				default:
 					if len(batch) > 0 {
 						ac.writeBatch(batch)
