@@ -2,7 +2,7 @@
 
 **WARNING: This project is in early stages (Alfa) and things can break and are in constant changes.**
 
-A high-performance, feature-rich L4/L7 load balancer with admin API. 
+A high-performance, feature-rich L4/L7 load balancer with admin API.
 
 ## Features
 
@@ -48,9 +48,17 @@ services:
   - name: backend-api # service name
     host: internal-api1.local.com # service listener hostname
     port: 8455 # service listener port
-    tls:
+    tls: # service tls configuration
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
+    health_check: # service health check configuration - will be used by each location
+      type: "http"
+      path: "/"
+      interval: "5s"
+      timeout: "3s"
+      thresholds:
+        healthy: 2
+        unhealthy: 3
     locations:
       - path: "/api/" # served path suffix so "https://internal-api1.local.com/api/"
         lb_policy: round-robin # load balancing policy
@@ -80,13 +88,11 @@ services:
             weight: 3
             max_connections: 800
 
+# global health check will be used by every service that don't have health_check configuration
 health_check:
   interval: 10s
   timeout: 2s
   path: /health
-  thresholds:
-    healthy: 2
-    unhealthy: 3
 
 # api authentication
 auth:
@@ -100,7 +106,7 @@ admin_api:
     requests_per_second: 10
     burst: 20
 
-rate_limit:
+rate_limit: # global rate limit for each service if not defined in the service
   requests_per_second: 100
   burst: 150
 
