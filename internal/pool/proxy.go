@@ -169,7 +169,6 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 }
 
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
-	p.logger.Info("Received response: %d", zap.Int("status_code", resp.StatusCode))
 	if isRedirect(resp.StatusCode) {
 		p.handleRedirect(resp)
 	}
@@ -195,6 +194,6 @@ func isRedirect(statusCode int) bool {
 }
 
 func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	p.logger.Error("Unexpected error in proxy: %v", zap.Error(err))
+	p.logger.Error("Unexpected error in proxy", zap.Error(err))
 	http.Error(w, "Something went wrong", http.StatusInternalServerError)
 }
