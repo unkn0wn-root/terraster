@@ -1,7 +1,6 @@
 package algorithm
 
 import (
-	"fmt"
 	"net/http"
 )
 
@@ -28,7 +27,6 @@ func (rr *RoundRobin) NextServer(pool ServerPool, _ *http.Request) *Server {
 		serverIdx := (idx + i) % l
 		server := servers[serverIdx]
 		if server.Alive.Load() && server.CanAcceptConnection() {
-			fmt.Println("Server selected: ", server.URL)
 			return server
 		}
 

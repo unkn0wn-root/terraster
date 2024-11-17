@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/golang-jwt/jwt"
@@ -24,7 +23,7 @@ type AdminAPI struct {
 	config         *config.Config
 	authService    *auth_service.AuthService
 	authHandler    *handlers.AuthHandler
-	logger         *zap.SugaredLogger
+	logger         *zap.Logger
 }
 
 // NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
@@ -70,16 +69,13 @@ func (a *AdminAPI) registerRoutes() {
 
 // Handler returns the HTTP handler for the AdminAPI, wrapped with necessary middleware.
 func (a *AdminAPI) Handler() http.Handler {
-	logger, err := middleware.NewLoggingMiddleware(
+	logger := middleware.NewLoggingMiddleware(
+		a.logger,
 		middleware.WithLogLevel(zap.InfoLevel),
 		middleware.WithHeaders(),
 		middleware.WithQueryParams(),
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
-
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	var middlewares []middleware.Middleware
 	middlewares = append(middlewares,

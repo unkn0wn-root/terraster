@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// LoggingMiddleware handles logging of HTTP requests.
 type LoggingMiddleware struct {
 	logger         *zap.Logger
 	logLevel       zapcore.Level
@@ -25,34 +26,28 @@ func WithLogLevel(level zapcore.Level) LoggingOption {
 	}
 }
 
+// enables logging of request headers.
 func WithHeaders() LoggingOption {
 	return func(l *LoggingMiddleware) {
 		l.includeHeaders = true
 	}
 }
 
+// enables logging of query parameters.
 func WithQueryParams() LoggingOption {
 	return func(l *LoggingMiddleware) {
 		l.includeQuery = true
 	}
 }
 
+// excludes specified paths from logging.
 func WithExcludePaths(paths []string) LoggingOption {
 	return func(l *LoggingMiddleware) {
 		l.excludePaths = paths
 	}
 }
 
-func NewLoggingMiddleware(opts ...LoggingOption) (*LoggingMiddleware, error) {
-	config := zap.NewProductionConfig()
-	config.EncoderConfig.TimeKey = "timestamp"
-	config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
-
-	logger, err := config.Build()
-	if err != nil {
-		return nil, err
-	}
-
+func NewLoggingMiddleware(logger *zap.Logger, opts ...LoggingOption) *LoggingMiddleware {
 	lm := &LoggingMiddleware{
 		logger:         logger,
 		logLevel:       zapcore.InfoLevel,
@@ -65,20 +60,23 @@ func NewLoggingMiddleware(opts ...LoggingOption) (*LoggingMiddleware, error) {
 		opt(lm)
 	}
 
-	return lm, nil
+	return lm
 }
 
+// wraps http.ResponseWriter to capture status code and response size.
 type responseWriter struct {
 	http.ResponseWriter
 	status int
 	size   int64
 }
 
+// captures the status code.
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// captures the response size.
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	size, err := rw.ResponseWriter.Write(b)
 	rw.size += int64(size)
@@ -104,17 +102,15 @@ func (l *LoggingMiddleware) Middleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
-
 		duration := time.Since(start)
 
-		// Build fields slice with capacity for common fields
 		fields := make([]zap.Field, 0, 8)
 		fields = append(fields,
 			zap.String("method", r.Method),
 			zap.String("path", r.URL.Path),
 			zap.Int("status", rw.status),
 			zap.Duration("duration", duration),
-			zap.String("ip", r.RemoteAddr),
+			zap.String("ip", getIPAddress(r)),
 			zap.String("user_agent", r.UserAgent()),
 			zap.Int64("response_size", rw.size),
 		)
@@ -144,4 +140,23 @@ func (l *LoggingMiddleware) Middleware(next http.Handler) http.Handler {
 			l.logger.Info("Request completed", fields...)
 		}
 	})
+}
+
+// extracts the IP address from the request.
+func getIPAddress(r *http.Request) string {
+	// Attempt to get the IP from the X-Forwarded-For header
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		// X-Forwarded-For can contain multiple IPs, the first is the client
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+
+	// Fallback to the remote address
+	ip := r.RemoteAddr
+	// Remove the port if present
+	if colon := strings.LastIndex(ip, ":"); colon != -1 {
+		return ip[:colon]
+	}
+	return ip
 }

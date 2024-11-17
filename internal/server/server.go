@@ -259,16 +259,13 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) setupMiddleware() http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
 	// @toDo: get it from config
-	logger, err := middleware.NewLoggingMiddleware(
+	logger := middleware.NewLoggingMiddleware(
+		s.logger,
 		middleware.WithLogLevel(zap.InfoLevel),
 		middleware.WithHeaders(),
 		middleware.WithQueryParams(),
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
-
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	chain := middleware.NewMiddlewareChain(
 		middleware.NewCircuitBreaker(10, 10*time.Second),
