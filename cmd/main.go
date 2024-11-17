@@ -23,14 +23,25 @@ func main() {
 	configPath = flag.String("c", "config.yaml", "path to config file")
 	flag.Parse()
 
-	if err := logger.Init("log.config.json"); err != nil {
+	// Initialize logger manager. Panic if any error occurs.
+	logManager, err := logger.NewLoggerManager("log.config.json")
+	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 
-	defer logger.Sync()
+	defer func() {
+		if err := logManager.Sync(); err != nil {
+			log.Fatalf("Failed to sync loggers: %s", err)
+		}
+	}()
 
-	logger := logger.Logger()
+	// Get main app logger
+	logger, err := logManager.GetLogger("main")
+	if err != nil {
+		log.Fatalf("Failed to get logger: %v", err)
+	}
 
+	// load main app configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		logger.Fatal("Failed to load config", zap.Error(err))
@@ -40,13 +51,13 @@ func main() {
 		logger.Fatal("Invalid config", zap.Error(err))
 	}
 
-	// Initialize database
+	// Initialize API database
 	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
 	if err != nil {
 		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}
 
-	// Initialize auth service
+	// Initialize API auth service
 	authConfig := service.AuthConfig{
 		JWTSecret:            []byte(cfg.Auth.JWTSecret),
 		TokenExpiry:          15 * time.Minute,   // Short-lived access token
@@ -69,7 +80,7 @@ func main() {
 	defer cancel()
 
 	errChan := make(chan error, 1)
-	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger)
+	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger, logManager)
 	if err != nil {
 		logger.Fatal("Failed to initialize server", zap.Error(err))
 	}
