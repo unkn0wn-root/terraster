@@ -37,17 +37,17 @@ func main() {
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		logger.Fatal("Failed to load config: %v", zap.Error(err))
+		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
 	if err := cfg.Validate(); err != nil {
-		logger.Fatal("Invalid config: %v", zap.Error(err))
+		logger.Fatal("Invalid config", zap.Error(err))
 	}
 
 	// Initialize database
 	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
 	if err != nil {
-		logger.Fatal("Failed to initialize database: %v", zap.Error(err))
+		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}
 
 	// Initialize auth service
@@ -75,7 +75,7 @@ func main() {
 	errChan := make(chan error, 1)
 	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger)
 	if err != nil {
-		logger.Fatal("Failed to initialize server %v", zap.Error(err))
+		logger.Fatal("Failed to initialize server", zap.Error(err))
 	}
 
 	// Handle shutdown gracefully
@@ -93,7 +93,7 @@ func main() {
 		logger.Info("Shutdown signal received, starting graceful shutdown")
 		cancel()
 	case err := <-errChan:
-		logger.Fatal("Server error triggered shutdown: %v", zap.Error(err))
+		logger.Fatal("Server error triggered shutdown", zap.Error(err))
 	case <-ctx.Done():
 		logger.Info("Context cancelled")
 	}
@@ -102,7 +102,7 @@ func main() {
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
-		logger.Fatal("Error during shutdown: %v", zap.Error(err))
+		logger.Fatal("Error during shutdown", zap.Error(err))
 	} else {
 		logger.Info("Shutdown completed")
 	}

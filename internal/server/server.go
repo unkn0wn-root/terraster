@@ -110,7 +110,7 @@ func (s *Server) Start() error {
 		s.wg.Add(1)
 		go func(name string, checker *health.Checker) {
 			defer s.wg.Done()
-			s.logger.Info("Starting health checker for service: %s", zap.String("server_name", name))
+			s.logger.Info("Starting health checker", zap.String("service_name", name))
 			checker.Start(s.ctx)
 		}(svcName, hc)
 	}
@@ -352,7 +352,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	go func() {
 		defer wg.Done()
 		if err := s.adminServer.Shutdown(ctx); err != nil {
-			s.logger.Error("Admin server shutdown error: %v", zap.Error(err))
+			s.logger.Error("Admin server shutdown error", zap.Error(err))
 		} else {
 			s.logger.Info("Admin server shutdown successfully")
 		}
@@ -363,9 +363,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		go func(server *http.Server) {
 			defer wg.Done()
 			if err := server.Shutdown(ctx); err != nil {
-				s.logger.Error("Server shutdown error for ", zap.String("server_addr", server.Addr), zap.Error(err))
+				s.logger.Error("Server shutdown error", zap.String("server_addr", server.Addr), zap.Error(err))
 			} else {
-				s.logger.Info("Server at %s shutdown successfully", zap.String("server_addr", server.Addr))
+				s.logger.Info("Server shutdown successfully", zap.String("server_addr", server.Addr))
 			}
 		}(srv)
 	}
@@ -376,7 +376,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		go func(name string, checker *health.Checker) {
 			defer wg.Done()
 			checker.Stop()
-			s.logger.Info("Health checker for service %s stopped", zap.String("name", name))
+			s.logger.Info("Health checker stopped", zap.String("name", name))
 		}(svcName, hc)
 	}
 
