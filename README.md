@@ -2,7 +2,7 @@
 
 **WARNING: This project is in early stages (Alfa) and things can break and are in constant changes.**
 
-A high-ish-performance, feature-rich (?) HTTP/HTTPS load balancer written in Go with Admin API. 
+A high-performance, feature-rich L4/L7 load balancer with admin API. 
 
 ## Features
 
