@@ -62,11 +62,12 @@ func NewServer(
 	zLog *zap.Logger,
 	logManager *logger.LoggerManager,
 ) (*Server, error) {
-	ctx, cancel := context.WithCancel(srvCtx)
 	serviceManager, err := service.NewManager(cfg, zLog)
 	if err != nil {
 		return nil, err
 	}
+
+	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
 		config:         cfg,
