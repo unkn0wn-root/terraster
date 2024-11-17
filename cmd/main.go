@@ -27,13 +27,9 @@ func main() {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 
-	logger := logger.Logger()
+	defer logger.Sync()
 
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Printf("Logger sync error: %v", err)
-		}
-	}()
+	logger := logger.Logger()
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {

@@ -183,7 +183,10 @@ func Init(configPath string) error {
 				cfg.Sanitization.Mask)
 		}
 
-		loggerInstance = zap.New(combinedCore,
+		// Wrap the combined core with AsyncCore
+		asyncCore := NewAsyncCore(combinedCore, 1000) // Buffer size of 1000, adjust as needed
+
+		loggerInstance = zap.New(asyncCore,
 			zap.AddCaller(),
 			zap.AddStacktrace(zap.ErrorLevel),
 		)
