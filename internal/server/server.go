@@ -36,6 +36,17 @@ const (
 	ShutdownGracePeriod = 30 * time.Second
 )
 
+type tlsCache struct {
+	certs map[string]*tls.Certificate
+}
+
+// newTLSCache creates an immutable certificate cache
+func newTLSCache() *tlsCache {
+	return &tlsCache{
+		certs: make(map[string]*tls.Certificate),
+	}
+}
+
 type Server struct {
 	config         *config.Config
 	healthChecker  *health.Checker
@@ -43,8 +54,11 @@ type Server struct {
 	adminServer    *http.Server
 	healthCheckers map[string]*health.Checker
 	serviceManager *service.Manager
+	tlsConfigCache *tlsCache
+	tlsConfigs     map[string]*tls.Certificate
 	serverPool     *pool.ServerPool
 	servers        []*http.Server
+	portServers    map[int]*http.Server
 	logger         *zap.Logger
 	logManager     *logger.LoggerManager
 	mu             sync.RWMutex
@@ -74,9 +88,11 @@ func NewServer(
 		healthCheckers: make(map[string]*health.Checker),
 		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
 		serviceManager: serviceManager,
+		tlsConfigs:     make(map[string]*tls.Certificate),
 		ctx:            ctx,
 		cancel:         cancel,
 		servers:        make([]*http.Server, 0),
+		portServers:    make(map[int]*http.Server),
 		errorChan:      make(chan error),
 		logger:         zLog,
 		logManager:     logManager,
@@ -120,15 +136,27 @@ func (s *Server) Start() error {
 	}
 
 	mainHandler := s.setupMiddleware()
+	svcsCerts := make(map[string]*tls.Certificate)
+	// Load all certificates during initialization
+	for _, svc := range s.serviceManager.GetServices() {
+		if svc.TLS != nil && svc.TLS.Enabled {
+			cert, err := tls.LoadX509KeyPair(svc.TLS.CertFile, svc.TLS.KeyFile)
+			if err != nil {
+				return fmt.Errorf("failed to load certificate for %s: %w", svc.Host, err)
+			}
+			svcsCerts[svc.Host] = &cert
+			s.logger.Info("Loaded certificate", zap.String("host", svc.Host))
+		}
 
-	// Start service servers
-	services := s.serviceManager.GetServices()
-	for _, svc := range services {
+		// start each service server
 		if err := s.startServiceServer(svc, mainHandler); err != nil {
 			s.cancel()
 			return err
 		}
 	}
+
+	// create TLS cache
+	s.tlsConfigCache = &tlsCache{certs: svcsCerts}
 
 	if err := s.startAdminServer(); err != nil {
 		s.cancel()
@@ -141,46 +169,31 @@ func (s *Server) Start() error {
 // startServiceServer sets up and starts HTTP and HTTPS servers for a service.
 func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handler) error {
 	port := s.servicePort(svc.Port)
-	for _, server := range s.servers {
-		// we want to bind to existing socket/port if already registered
-		// so any host with the same port will reuse the same connection
-		if server.Addr == fmt.Sprintf(":%d", port) {
-			s.logger.Info("Service port already registred. Bounding to the same socket",
-				zap.String("service", svc.Name),
-				zap.String("host", svc.Host),
-				zap.Int("port", port))
-			return nil
-		}
-	}
-
-	var tlsCert tls.Certificate
-	var err error
-	if svc.TLS != nil {
-		tlsCert, err = tls.LoadX509KeyPair(svc.TLS.CertFile, svc.TLS.KeyFile)
-		if err != nil {
-			return fmt.Errorf("failed to load TLS certificate for service %s: %w", svc.Name, err)
-		}
-
-		httpsServer, err := s.createServer(svc, handler, "https", &tlsCert)
-		if err != nil {
-			return fmt.Errorf("failed to create HTTPS server for service %s: %w", svc.Name, err)
-		}
-
-		s.wg.Add(1)
-		go s.runServer(httpsServer, s.errorChan, svc.Name, "https")
-
+	if server := s.portServers[port]; server != nil {
+		s.logger.Info("Service port already registred. Bounding to the same socket",
+			zap.String("service", svc.Name),
+			zap.String("host", svc.Host),
+			zap.Int("port", port))
 		return nil
 	}
 
-	// Start HTTP server otherwise
-	httpServer, err := s.createServer(svc, handler, "http", nil)
+	server, err := s.createServer(svc, handler)
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP server for service %s: %w", svc.Name, err)
+		return fmt.Errorf("failed to create server for port %d: %w", port, err)
 	}
 
-	s.servers = append(s.servers, httpServer)
+	s.portServers[port] = server
+	s.servers = append(s.servers, server)
+	sTLS := svc.TLS != nil && svc.TLS.Enabled
+
 	s.wg.Add(1)
-	go s.runServer(httpServer, s.errorChan, svc.Name, "http")
+	// tls is true if the server will run on HTTPS
+	go s.runServer(server, s.errorChan, svc.Name, sTLS)
+
+	s.logger.Info("Service registered",
+		zap.String("service", svc.Name),
+		zap.String("host", svc.Host),
+		zap.Int("port", port))
 
 	return nil
 }
@@ -202,7 +215,7 @@ func (s *Server) startAdminServer() error {
 	}
 
 	s.wg.Add(1)
-	go s.runServer(s.adminServer, s.errorChan, "admin", "http")
+	go s.runServer(s.adminServer, s.errorChan, "admin", s.config.TLS.Enabled)
 
 	return nil
 }
@@ -211,11 +224,9 @@ func (s *Server) startAdminServer() error {
 func (s *Server) createServer(
 	svc *service.ServiceInfo,
 	handler http.Handler,
-	scheme string,
-	tlsCert *tls.Certificate,
 ) (*http.Server, error) {
 	finalHandler := handler
-	if scheme == "http" && svc.HTTPRedirect && svc.TLS != nil {
+	if svc.HTTPRedirect && svc.TLS != nil && !svc.TLS.Enabled {
 		// For HTTP servers that need to redirect to HTTPS
 		finalHandler = s.createRedirectHandler(svc)
 	}
@@ -228,24 +239,28 @@ func (s *Server) createServer(
 		IdleTimeout:  IdleTimeout,
 	}
 
-	if scheme == "https" && tlsCert != nil {
-		server.TLSConfig = &tls.Config{
-			Certificates: []tls.Certificate{*tlsCert},
-			MinVersion:   TLSMinVersion,
-		}
+	server.TLSConfig = &tls.Config{
+		MinVersion: TLSMinVersion,
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			// Lock-free read from cache
+			if cert := s.tlsConfigCache.certs[hello.ServerName]; cert != nil {
+				return cert, nil
+			}
+			return nil, fmt.Errorf("no certificate for host: %s", hello.ServerName)
+		},
 	}
 
 	return server, nil
 }
 
 // runServer starts the server and handles errors.
-func (s *Server) runServer(server *http.Server, errorChan chan<- error, name, scheme string) {
+func (s *Server) runServer(server *http.Server, errorChan chan<- error, name string, tls bool) {
 	defer s.wg.Done()
 	n := strings.ToUpper(name)
-	s.logger.Info("Starting server, ", zap.String("name", n), zap.String("server_addr", server.Addr))
+	s.logger.Info("Starting server", zap.String("name", n), zap.String("server_addr", server.Addr))
 
 	var err error
-	if scheme == "https" {
+	if tls {
 		err = server.ListenAndServeTLS("", "")
 	} else {
 		err = server.ListenAndServe()

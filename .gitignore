@@ -25,3 +25,4 @@ load-balancer
 terraster
 ./tmp
 config.yaml
+./certs
