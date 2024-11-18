@@ -23,6 +23,7 @@ type Config struct {
 	OutputPaths      []string           `json:"outputPaths"`
 	ErrorOutputPaths []string           `json:"errorOutputPaths"`
 	Development      bool               `json:"development"`
+	LogToConsole     bool               `json:"logToConsole"`
 	Sampling         SamplingConfig     `json:"sampling"`
 	EncodingConfig   EncodingConfig     `json:"encodingConfig"`
 	LogRotation      LogRotationConfig  `json:"logRotation"`
@@ -127,7 +128,7 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 	atomicLevel := zap.NewAtomicLevelAt(getZapLevel(cfg.Level))
 
 	var allCores []zapcore.Core
-	if cfg.Development {
+	if cfg.Development || cfg.LogToConsole {
 		// 1. Console Core - Synchronous
 		consoleWS := zapcore.Lock(os.Stdout)
 		consoleCore := zapcore.NewCore(consoleEncoder, consoleWS, atomicLevel)

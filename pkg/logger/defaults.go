@@ -7,7 +7,8 @@ var DefaultConfig = Config{
 	ErrorOutputPaths: []string{
 		"stderr",
 	},
-	Development: false,
+	Development:  false,
+	LogToConsole: false,
 	Sampling: SamplingConfig{
 		Initial:    100,
 		Thereafter: 100,

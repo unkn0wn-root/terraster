@@ -5,6 +5,7 @@
       "outputPaths": ["app.log"],
       "errorOutputPaths": ["stderr"],
       "development": true,
+      "logToConsole": true,
       "sampling": {
         "initial": 100,
         "thereafter": 100
@@ -39,6 +40,7 @@
       "outputPaths": ["request.log"],
       "errorOutputPaths": ["stderr"],
       "development": false,
+      "logToConsole": false,
       "sampling": {
         "initial": 100,
         "thereafter": 100
