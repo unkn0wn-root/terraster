@@ -135,12 +135,24 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	s.logger.Info("Starting server(s)...")
 	return nil
 }
 
 // startServiceServer sets up and starts HTTP and HTTPS servers for a service.
 func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handler) error {
+	port := s.servicePort(svc.Port)
+	for _, server := range s.servers {
+		// we want to bind to existing socket/port if already registered
+		// so any host with the same port will reuse the same connection
+		if server.Addr == fmt.Sprintf(":%d", port) {
+			s.logger.Info("Service port already registred. Bounding to the same socket",
+				zap.String("service", svc.Name),
+				zap.String("host", svc.Host),
+				zap.Int("port", port))
+			return nil
+		}
+	}
+
 	var tlsCert tls.Certificate
 	var err error
 	if svc.TLS != nil {
@@ -165,6 +177,8 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP server for service %s: %w", svc.Name, err)
 	}
+
+	s.servers = append(s.servers, httpServer)
 	s.wg.Add(1)
 	go s.runServer(httpServer, s.errorChan, svc.Name, "http")
 
