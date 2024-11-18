@@ -2,7 +2,7 @@
 
 **WARNING: This project is in early stages (Alfa) and things can break and are in constant changes.**
 
-A high-performance, feature-rich L4/L7 load balancer with admin API.
+A high-performance, feature-rich L7 load balancer with admin API.
 
 ## Features
 
