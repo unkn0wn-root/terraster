@@ -18,6 +18,13 @@ var (
 	ErrNotDefined           = errors.New("service must have either host or name defined")
 )
 
+type ServiceType string
+
+const (
+	HTTP  ServiceType = "http"
+	HTTPS ServiceType = "https"
+)
+
 type Manager struct {
 	services map[string]*ServiceInfo
 	logger   *zap.Logger
@@ -34,6 +41,13 @@ type ServiceInfo struct {
 	HTTPRedirect bool
 	HealthCheck  *config.HealthCheckConfig
 	Locations    []*LocationInfo
+}
+
+func (s *ServiceInfo) ServiceType() ServiceType {
+	if s.TLS != nil && s.TLS.Enabled {
+		return HTTPS
+	}
+	return HTTP
 }
 
 // LocationInfo contains information about a path location

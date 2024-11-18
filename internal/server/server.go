@@ -135,15 +135,24 @@ func (s *Server) Start() error {
 		}(svcName, hc)
 	}
 
+	// setup main middleware handler
 	mainHandler := s.setupMiddleware()
+
+	// imuutable cache for storing services certificates
 	svcsCerts := make(map[string]*tls.Certificate)
+
+	// get all services
+	services := s.serviceManager.GetServices()
 	// Load all certificates during initialization
-	for _, svc := range s.serviceManager.GetServices() {
-		if svc.TLS != nil && svc.TLS.Enabled {
+
+	for _, svc := range services {
+		// check if serivce requires HTTPS
+		if svc.ServiceType() == service.HTTPS {
 			cert, err := tls.LoadX509KeyPair(svc.TLS.CertFile, svc.TLS.KeyFile)
 			if err != nil {
 				return fmt.Errorf("failed to load certificate for %s: %w", svc.Host, err)
 			}
+
 			svcsCerts[svc.Host] = &cert
 			s.logger.Info("Loaded certificate", zap.String("host", svc.Host))
 		}
@@ -155,7 +164,9 @@ func (s *Server) Start() error {
 		}
 	}
 
-	// create TLS cache
+	// We need to fast read TLS configurtion for each service request
+	// if multiple services are running on the same port
+	// with diffrent host name so using cache to load all certficates
 	s.tlsConfigCache = &tlsCache{certs: svcsCerts}
 
 	if err := s.startAdminServer(); err != nil {
@@ -168,6 +179,10 @@ func (s *Server) Start() error {
 
 // startServiceServer sets up and starts HTTP and HTTPS servers for a service.
 func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handler) error {
+	// if there is a service with the same port,
+	// we should bind the new service to the same socket
+	// to reuse the same underlying HTTP instance.
+	// This will route then based on HTTP host header
 	port := s.servicePort(svc.Port)
 	if server := s.portServers[port]; server != nil {
 		s.logger.Info("Service port already registred. Bounding to the same socket",
@@ -177,18 +192,17 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 		return nil
 	}
 
-	server, err := s.createServer(svc, handler)
+	svcType := svc.ServiceType()
+	server, err := s.createServer(svc, handler, svcType)
 	if err != nil {
 		return fmt.Errorf("failed to create server for port %d: %w", port, err)
 	}
 
 	s.portServers[port] = server
 	s.servers = append(s.servers, server)
-	sTLS := svc.TLS != nil && svc.TLS.Enabled
 
 	s.wg.Add(1)
-	// tls is true if the server will run on HTTPS
-	go s.runServer(server, s.errorChan, svc.Name, sTLS)
+	go s.runServer(server, s.errorChan, svc.Name, svcType)
 
 	s.logger.Info("Service registered",
 		zap.String("service", svc.Name),
@@ -214,8 +228,13 @@ func (s *Server) startAdminServer() error {
 		IdleTimeout:  IdleTimeout,
 	}
 
+	admSvcType := service.HTTP
+	if s.config.TLS.Enabled {
+		admSvcType = service.HTTPS
+	}
+
 	s.wg.Add(1)
-	go s.runServer(s.adminServer, s.errorChan, "admin", s.config.TLS.Enabled)
+	go s.runServer(s.adminServer, s.errorChan, "admin", admSvcType)
 
 	return nil
 }
@@ -224,21 +243,22 @@ func (s *Server) startAdminServer() error {
 func (s *Server) createServer(
 	svc *service.ServiceInfo,
 	handler http.Handler,
+	protocol service.ServiceType,
 ) (*http.Server, error) {
-	finalHandler := handler
-	if svc.HTTPRedirect && svc.TLS != nil && !svc.TLS.Enabled {
-		// For HTTP servers that need to redirect to HTTPS
-		finalHandler = s.createRedirectHandler(svc)
-	}
-
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.servicePort(svc.Port)),
-		Handler:      finalHandler,
 		ReadTimeout:  ReadTimeout,
 		WriteTimeout: WriteTimeout,
 		IdleTimeout:  IdleTimeout,
 	}
 
+	if svc.HTTPRedirect && protocol == service.HTTP {
+		// For HTTP servers that need to redirect to HTTPS
+		server.Handler = s.createRedirectHandler(svc)
+		return server, nil
+	}
+
+	server.Handler = handler
 	server.TLSConfig = &tls.Config{
 		MinVersion: TLSMinVersion,
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -254,13 +274,18 @@ func (s *Server) createServer(
 }
 
 // runServer starts the server and handles errors.
-func (s *Server) runServer(server *http.Server, errorChan chan<- error, name string, tls bool) {
+func (s *Server) runServer(
+	server *http.Server,
+	errorChan chan<- error,
+	name string,
+	serviceType service.ServiceType,
+) {
 	defer s.wg.Done()
 	n := strings.ToUpper(name)
-	s.logger.Info("Starting server", zap.String("name", n), zap.String("server_addr", server.Addr))
+	s.logger.Info("Server started", zap.String("name", n), zap.String("server_addr", server.Addr))
 
 	var err error
-	if tls {
+	if serviceType == service.HTTPS {
 		err = server.ListenAndServeTLS("", "")
 	} else {
 		err = server.ListenAndServe()
