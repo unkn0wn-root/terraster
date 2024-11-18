@@ -1,8 +1,9 @@
 # Terraster - Uncomplicated Load Balancer/Reverse Proxy
 
-**WARNING: This project is in early stages (Alfa) and things can break and are in constant changes.**
+## Project Status: Early Stages 🚧
+**This project is currently in its early development stages. While the core functionality is in place and working as intended, further improvements and features are actively being developed. Expect updates as the project evolves.**
 
-A high-performance, feature-rich L7 load balancer with admin API.
+A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API.
 
 ## Features
 
@@ -28,8 +29,7 @@ A high-performance, feature-rich L7 load balancer with admin API.
   - Health checking
 
 - Administration
-  - REST API
-  - Dynamic configuration
+  - Dynamic configuration via Admin API
   - Graceful shutdown
 
 ## Quick Start
