@@ -540,18 +540,6 @@ func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, dura
 	}
 }
 
-// hasHTTPSRedirects checks if any of the configured services require HTTP to HTTPS redirection.
-// Returns true if at least one service has HTTP redirects enabled, otherwise false.
-func (s *Server) hasHTTPSRedirects() bool {
-	services := s.serviceManager.GetServices()
-	for _, service := range services {
-		if service.HTTPRedirect {
-			return true
-		}
-	}
-	return false
-}
-
 // Shutdown gracefully shuts down all running servers, including the admin server and all service servers.
 // It also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
 // Returns an error if the shutdown process is interrupted or fails.

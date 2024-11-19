@@ -41,6 +41,18 @@ func (s *Server) servicePort(port int) int {
 	return DefaultHTTPPort // Default to the standard HTTP port (e.g., 80) if no port is specified.
 }
 
+// hasHTTPSRedirects checks if any of the configured services require HTTP to HTTPS redirection.
+// Returns true if at least one service has HTTP redirects enabled, otherwise false.
+func (s *Server) hasHTTPSRedirects() bool {
+	services := s.serviceManager.GetServices()
+	for _, service := range services {
+		if service.HTTPRedirect {
+			return true
+		}
+	}
+	return false
+}
+
 // parseHostPort parses a combined host and port string and determines the appropriate port based on TLS state.
 // If the host string does not contain a port, it assigns a default port based on whether TLS is enabled.
 //
