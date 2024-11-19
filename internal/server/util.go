@@ -7,16 +7,26 @@ import (
 )
 
 func parseHostPort(hostPort string, tlsState *tls.ConnectionState) (host string, port int, err error) {
-	host, portStr, _ := net.SplitHostPort(hostPort)
-	// if no port, we have to assume that request is either http or https
-	// so based on the protocol we can determine the port to use
-	pn, err := strconv.Atoi(portStr)
+	host, portStr, err := net.SplitHostPort(hostPort)
 	if err != nil {
-		return "", 0, err
+		host = hostPort
 	}
 
-	// if port is 0, it is because incoming request is on standard http or https port
-	// and portStr will return empty string which then means that pn will be 0
+	// portStr will be empty if there is no port in the hostPort string
+	// we have to assume that request is either http or https on standard port
+	var pn int
+	if portStr == "" {
+		pn = 0
+	} else {
+		p, err := strconv.Atoi(portStr)
+		if err != nil {
+			return "", 0, err
+		}
+
+		pn = p
+	}
+
+	// if port is 0, then assign standard http or https port
 	if pn == 0 {
 		if tlsState != nil {
 			pn = DefaultHTTPSPort
