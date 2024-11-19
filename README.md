@@ -51,7 +51,9 @@ services:
     tls: # service tls configuration
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
-    health_check: # service health check configuration - will be used by each location
+    # service health check configuration - will be used by each location
+    # can be overwrite by location config
+    health_check:
       type: "http"
       path: "/"
       interval: "5s"
@@ -62,7 +64,6 @@ services:
     locations:
       - path: "/api/" # served path suffix so "https://internal-api1.local.com/api/"
         lb_policy: round-robin # load balancing policy
-        http_redirect: true # http to https redirect
         redirect: "/" # redirect e.q. from "/" to "/api/"
         backends:
           - url: http://internal-api1.local.com:8455
@@ -76,16 +77,16 @@ services:
               thresholds:
                 healthy: 1
                 unhealthy: 2
-          - url: http://internal-api2.local.com:8455
+          - url: http://internal-api2.local.com:8455 # this is missing health check so it will inherit from service
             weight: 3
             max_connections: 800
 
   - name: frontend
     host: frontend.local.com
+    port: 443
     locations:
       - path: "/"
         lb_policy: least_connections
-        http_redirect: false
         rewrite: "/frontend/" # rewrite e.q. from "/" to "/frontend/" in the backend service
         backends:
           - url: http://frontend-1.local.com:3000
@@ -95,6 +96,20 @@ services:
           - url: http://frontend-2.local.com:3000
             weight: 3
             max_connections: 800
+
+  - name: frontend_redirect
+    host: frontend.local.com
+    port: 80
+    # this will redirect to 443 based on host so you can have multiple hosts on the same port
+    # but keep in mind that you have to have correct host redirect so this :80 -> frontend.local.com:443
+    http_redirect: true
+    redirect_port: 443
+
+  - name: backend_api_redirect
+    host: internal-api1.local.com
+    port: 80
+    http_redirect: true
+    redirect_port: 8455 # this will redirect to 8455 - mark host field
 
 # global health check will be used by every service that don't have health_check configuration
 health_check:
