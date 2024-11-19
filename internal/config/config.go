@@ -82,6 +82,7 @@ type Service struct {
 	Port         int                `yaml:"port"`
 	TLS          *TLSConfig         `yaml:"tls"`
 	HTTPRedirect bool               `yaml:"http_redirect"`
+	RedirectPort int                `yaml:"redirect_port"`
 	HealthCheck  *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
 	Locations    []Location         `yaml:"locations"`
 }
