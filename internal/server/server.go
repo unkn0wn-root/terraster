@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -365,50 +366,33 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// determine the protocol of the request to be able to match to the correct service
 	// checking if request is comming on TLS should be enough to determine the protocol
-	protocol := service.HTTP
-	if r.TLS != nil {
-		protocol = service.HTTPS
-	}
+	// Determine the protocol of the request
+	protocol := getProtocol(r)
 
 	// build service key which later be cached or retrieved from cache if found
-	key := service.ServiceKey{
-		Host:     host,
-		Port:     port,
-		Protocol: protocol,
-	}.String()
+	// Build service key for caching
+	key := getServiceKey(host, port, protocol)
 
-	cachedService, found := s.serviceCache.Load(key)
-	var srvc *service.LocationInfo
-	if found {
-		srvc = cachedService.(*service.LocationInfo)
-	} else {
-		// find the appropriate service for this path matching host and port
-		_, sr, err := s.serviceManager.GetService(host, r.URL.Path, port, false)
+	// Try to get the service from the cache
+	srvc, err := s.getServiceFromCache(key)
+	if err != nil {
+		// Service not found in cache, get it from the service manager
+		srvc, err = s.getServiceFromManager(host, r.URL.Path, port)
 		if err != nil {
 			http.Error(w, "Service not found", http.StatusNotFound)
 			return
 		}
-		// service found, assign and cache it for future requests
-		srvc = sr
-		s.serviceCache.Store(key, sr)
+		// Cache the service for future requests
+		s.cacheService(key, srvc)
 	}
 
-	// find the appropriate backend for this path based on configured algorithm
-	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r)
-	if backendAlgo == nil {
-		http.Error(w, "No service available right now", http.StatusServiceUnavailable)
+	// Find the appropriate backend based on the configured algorithm
+	backend, err := s.getBackend(srvc, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
-	// find correct peer URL
-	backend := srvc.ServerPool.GetBackendByURL(backendAlgo.URL)
-	if backend == nil {
-		http.Error(w, "No peers available", http.StatusServiceUnavailable)
-		return
-	}
-
-	ctx := context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())
-	r = r.WithContext(ctx)
 	if !backend.IncrementConnections() {
 		http.Error(w, "Server at max capacity", http.StatusServiceUnavailable)
 		return
@@ -416,13 +400,67 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer backend.DecrementConnections()
 
 	start := time.Now()
-	proxy := backend.Proxy
-	proxy.ServeHTTP(w, r)
+	backend.Proxy.ServeHTTP(w, r.WithContext(
+		context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())),
+	)
 	duration := time.Since(start)
 
 	// record response time for least-response-time algorithm
+	s.recordResponseTime(srvc, backend.URL.String(), duration)
+}
+
+func getProtocol(r *http.Request) service.ServiceType {
+	if r.TLS != nil {
+		return service.HTTPS
+	}
+	return service.HTTP
+}
+
+func getServiceKey(host string, port int, protocol service.ServiceType) string {
+	return service.ServiceKey{
+		Host:     host,
+		Port:     port,
+		Protocol: protocol,
+	}.String()
+}
+
+func (s *Server) getServiceFromCache(key string) (*service.LocationInfo, error) {
+	cachedService, found := s.serviceCache.Load(key)
+	if found {
+		return cachedService.(*service.LocationInfo), nil
+	}
+	return nil, errors.New("service not found in cache")
+}
+
+func (s *Server) cacheService(key string, srvc *service.LocationInfo) {
+	s.serviceCache.Store(key, srvc)
+}
+
+func (s *Server) getServiceFromManager(host, path string, port int) (*service.LocationInfo, error) {
+	_, srvc, err := s.serviceManager.GetService(host, path, port, false)
+	if err != nil {
+		return nil, err
+	}
+	return srvc, nil
+}
+
+func (s *Server) getBackend(srvc *service.LocationInfo, r *http.Request) (*pool.Backend, error) {
+	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r)
+	if backendAlgo == nil {
+		return nil, errors.New("no service available")
+	}
+
+	backend := srvc.ServerPool.GetBackendByURL(backendAlgo.URL)
+	if backend == nil {
+		return nil, errors.New("no peers available")
+	}
+
+	return backend, nil
+}
+
+func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, duration time.Duration) {
 	if lrt, ok := srvc.Algorithm.(*algorithm.LeastResponseTime); ok {
-		lrt.UpdateResponseTime(backend.URL.String(), duration)
+		lrt.UpdateResponseTime(url, duration)
 	}
 }
 
@@ -434,15 +472,6 @@ func (s *Server) hasHTTPSRedirects() bool {
 		}
 	}
 	return false
-}
-
-func (s *Server) hostNameNoPort(host string) string {
-	h, _, err := net.SplitHostPort(host)
-	if err != nil {
-		return ""
-	}
-
-	return h
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -496,12 +525,4 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.logger.Info("All servers and health checkers shutdown successfully")
 		return nil
 	}
-}
-
-func (s *Server) servicePort(port int) int {
-	if port != 0 {
-		return port
-	}
-
-	return DefaultHTTPPort
 }

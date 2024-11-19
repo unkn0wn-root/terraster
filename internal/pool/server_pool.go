@@ -23,6 +23,11 @@ type PoolConfig struct {
 	MaxConns  int32  `json:"max_connections"`
 }
 
+type BackendSnapshot struct {
+	Backends     []*Backend
+	BackendCache map[string]*Backend
+}
+
 type ServerPool struct {
 	backends       atomic.Value
 	current        uint64
@@ -33,7 +38,11 @@ type ServerPool struct {
 
 func NewServerPool(logger *zap.Logger) *ServerPool {
 	pool := &ServerPool{log: logger}
-	pool.backends.Store([]*Backend{})
+	initialSnapshot := &BackendSnapshot{
+		Backends:     []*Backend{},
+		BackendCache: make(map[string]*Backend),
+	}
+	pool.backends.Store(initialSnapshot)
 	pool.algorithm.Store(algorithm.CreateAlgorithm("round-robin"))
 	pool.maxConnections.Store(1000)
 	return pool
@@ -80,14 +89,25 @@ func (s *ServerPool) AddBackend(
 	atomic.StoreInt32(&backend.SuccessCount, 0)
 	atomic.StoreInt32(&backend.FailureCount, 0)
 
-	currentBackends := s.backends.Load().([]*Backend)
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
 	// Create new slice with added backend
-	newBackends := make([]*Backend, len(currentBackends)+1)
-	copy(newBackends, currentBackends)
-	newBackends[len(currentBackends)] = backend
+	newBackends := make([]*Backend, len(currentSnapshot.Backends)+1)
+	copy(newBackends, currentSnapshot.Backends)
+	newBackends[len(currentSnapshot.Backends)] = backend
 
-	// Atomically replace the backends slice
-	s.backends.Store(newBackends)
+	// Create a new map with the added backend
+	newBackendCache := make(map[string]*Backend, len(currentSnapshot.BackendCache)+1)
+	for k, v := range currentSnapshot.BackendCache {
+		newBackendCache[k] = v
+	}
+	newBackendCache[url.String()] = backend
+
+	// Create a new snapshot and atomically replace it
+	newSnapshot := &BackendSnapshot{
+		Backends:     newBackends,
+		BackendCache: newBackendCache,
+	}
+	s.backends.Store(newSnapshot)
 	return nil
 }
 
@@ -97,31 +117,40 @@ func (s *ServerPool) RemoveBackend(backendURL string) error {
 		return err
 	}
 
-	currentBackends := s.backends.Load().([]*Backend)
-	// Find and remove the backend
-	found := false
-	newBackends := make([]*Backend, 0, len(currentBackends))
-
-	for _, backend := range currentBackends {
-		if backend.URL.String() != url.String() {
-			newBackends = append(newBackends, backend)
-		} else {
-			found = true
-		}
-	}
-
-	if !found {
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	backend, exists := currentSnapshot.BackendCache[url.String()]
+	if !exists {
 		return errors.New("backend not found")
 	}
 
-	// Atomically replace the backends slice
-	s.backends.Store(newBackends)
+	// Remove from slice
+	newBackends := make([]*Backend, 0, len(currentSnapshot.Backends)-1)
+	for _, b := range currentSnapshot.Backends {
+		if b != backend {
+			newBackends = append(newBackends, b)
+		}
+	}
+
+	newBackendCache := make(map[string]*Backend, len(currentSnapshot.BackendCache)-1)
+	for k, v := range currentSnapshot.BackendCache {
+		if k != url.String() {
+			newBackendCache[k] = v
+		}
+	}
+
+	// Create a new snapshot and atomically replace it
+	newSnapshot := &BackendSnapshot{
+		Backends:     newBackends,
+		BackendCache: newBackendCache,
+	}
+	s.backends.Store(newSnapshot)
 	return nil
 }
 
 func (s *ServerPool) GetNextPeer() *Backend {
 	// Get current backends snapshot without locks
-	backends := s.backends.Load().([]*Backend)
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	backends := currentSnapshot.Backends
 	backendCount := uint64(len(backends))
 
 	if backendCount == 0 {
@@ -148,18 +177,16 @@ func (s *ServerPool) GetNextPeer() *Backend {
 }
 
 func (s *ServerPool) MarkBackendStatus(backendUrl *url.URL, alive bool) {
-	backends := s.backends.Load().([]*Backend)
-
-	for _, b := range backends {
-		if b.URL.String() == backendUrl.String() {
-			b.Alive.Store(alive)
-			break
-		}
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	backend, exists := currentSnapshot.BackendCache[backendUrl.String()]
+	if exists {
+		backend.Alive.Store(alive)
 	}
 }
 
 func (s *ServerPool) GetBackends() []*algorithm.Server {
-	currentBackends := s.backends.Load().([]*Backend)
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	currentBackends := currentSnapshot.Backends
 
 	servers := make([]*algorithm.Server, len(currentBackends))
 	for i, backend := range currentBackends {
@@ -179,6 +206,10 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 // UpdateBackends completely replaces the backend list
 func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealthCheck *config.HealthCheckConfig) error {
 	newBackends := make([]*Backend, 0, len(configs))
+	newBackendCache := make(map[string]*Backend, len(configs))
+
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	currentBackendsMap := currentSnapshot.BackendCache
 
 	for _, cfg := range configs {
 		url, err := url.Parse(cfg.URL)
@@ -187,23 +218,19 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealt
 		}
 
 		// Check if backend already exists in current backends
-		currentBackends := s.backends.Load().([]*Backend)
 		var existing *Backend
-		for _, b := range currentBackends {
-			if b.URL.String() == url.String() {
-				existing = b
-				break
-			}
-		}
-
-		if existing != nil {
+		if b, exists := currentBackendsMap[url.String()]; exists {
+			existing = b
 			// Update existing backend
 			existing.Weight = cfg.Weight
-			existing.MaxConnections = cfg.MaxConnections
+			if cfg.MaxConnections != 0 {
+				existing.MaxConnections = cfg.MaxConnections
+			}
 			if cfg.HealthCheck.Type != "" {
 				existing.HealthCheckCfg = cfg.HealthCheck
 			}
 			newBackends = append(newBackends, existing)
+			newBackendCache[url.String()] = existing
 		} else {
 			// Create new backend
 			proxy := &httputil.ReverseProxy{}
@@ -214,9 +241,15 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealt
 				s.log,
 			)
 
+			maxConns := cfg.MaxConnections
+			if maxConns == 0 {
+				maxConns = s.GetMaxConnections()
+			}
+
 			backend := &Backend{
 				URL:            url,
 				Weight:         cfg.Weight,
+				MaxConnections: maxConns,
 				Proxy:          rp,
 				HealthCheckCfg: serviceHealthCheck,
 			}
@@ -224,11 +257,16 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealt
 			atomic.StoreInt32(&backend.FailureCount, 0)
 			backend.Alive.Store(true)
 			newBackends = append(newBackends, backend)
+			newBackendCache[url.String()] = backend
 		}
 	}
 
-	// Atomically replace entire backend list
-	s.backends.Store(newBackends)
+	// Create a new snapshot and atomically replace it
+	newSnapshot := &BackendSnapshot{
+		Backends:     newBackends,
+		BackendCache: newBackendCache,
+	}
+	s.backends.Store(newSnapshot)
 	return nil
 }
 
@@ -241,18 +279,13 @@ func (s *ServerPool) GetNextProxy(r *http.Request) *URLRewriteProxy {
 }
 
 func (s *ServerPool) GetBackendByURL(url string) *Backend {
-	currentBackends := s.backends.Load().([]*Backend)
-
-	for _, backend := range currentBackends {
-		if backend.URL.String() == url {
-			return backend
-		}
-	}
-	return nil
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	return currentSnapshot.BackendCache[url]
 }
 
 func (s *ServerPool) GetAllBackends() []*Backend {
-	return s.backends.Load().([]*Backend)
+	currentSnapshot := s.backends.Load().(*BackendSnapshot)
+	return currentSnapshot.Backends
 }
 
 func (s *ServerPool) UpdateConfig(update PoolConfig) {

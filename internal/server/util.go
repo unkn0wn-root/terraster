@@ -7,6 +7,23 @@ import (
 	"strings"
 )
 
+func (s *Server) hostNameNoPort(host string) string {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return ""
+	}
+
+	return h
+}
+
+func (s *Server) servicePort(port int) int {
+	if port != 0 {
+		return port
+	}
+
+	return DefaultHTTPPort
+}
+
 func parseHostPort(hostPort string, tlsState *tls.ConnectionState) (host string, port int, err error) {
 	// Fast path for common case: no port specified
 	if !strings.Contains(hostPort, ":") {
