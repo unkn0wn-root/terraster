@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -362,10 +363,17 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 		if redirectPort == 0 {
 			redirectPort = DefaultHTTPSPort
 		}
+
 		// Construct the target HTTPS URL with the appropriate port and request URI.
-		target := "https://" + net.JoinHostPort(svc.Host, strconv.Itoa(redirectPort)) + r.URL.RequestURI()
+		u := &url.URL{
+			Scheme:   "https",
+			Host:     net.JoinHostPort(svc.Host, strconv.Itoa(redirectPort)),
+			Path:     r.URL.Path,
+			RawQuery: r.URL.RawQuery,
+			Fragment: r.URL.Fragment,
+		}
 		// Perform a permanent redirect to the HTTPS URL.
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 	})
 }
 
