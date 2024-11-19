@@ -168,13 +168,17 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 	return nil
 }
 
-func (m *Manager) GetService(host, path string, hostOnly bool) (*ServiceInfo, *LocationInfo, error) {
+func (m *Manager) GetService(
+	host, path string,
+	port int,
+	hostOnly bool,
+) (*ServiceInfo, *LocationInfo, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var matchedService *ServiceInfo
 	for _, service := range m.services {
-		if matchHost(service.Host, host) {
+		if matchHost(service.Host, host) && service.Port == port {
 			if hostOnly {
 				return service, nil, nil
 			}

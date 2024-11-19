@@ -357,20 +357,45 @@ func (s *Server) setupMiddleware() http.Handler {
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	host := middleware.GetTargetHost(r)
-	// find the appropriate service for this path
-	_, service, err := s.serviceManager.GetService(host, r.URL.Path, false)
+	_, port, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		http.Error(w, "Invalid host + port", http.StatusBadRequest)
+		return
+	}
+
+	// determine the protocol of the request to be able to match to the correct service
+	// checking if request is comming on TLS should be enough to determine the protocol
+	protocol := service.HTTP
+	if r.TLS != nil {
+		protocol = service.HTTPS
+	}
+
+	// if no port, we have to assume that request is either http or https
+	// so based on the protocol we can determine the port to use
+	pn, _ := strconv.Atoi(port)
+	if pn == 0 {
+		if protocol == service.HTTPS {
+			pn = DefaultHTTPSPort
+		} else {
+			pn = DefaultHTTPPort
+		}
+	}
+
+	// find the appropriate service for this path matching host and port
+	_, service, err := s.serviceManager.GetService(host, r.URL.Path, pn, false)
 	if err != nil {
 		http.Error(w, "Service not found", http.StatusNotFound)
 		return
 	}
 
-	// get backend for the service's server pool
+	// find the appropriate backend for this path based on configured algorithm
 	backendAlgo := service.Algorithm.NextServer(service.ServerPool, r)
 	if backendAlgo == nil {
 		http.Error(w, "No service available right now", http.StatusServiceUnavailable)
 		return
 	}
 
+	// find correct peer URL
 	backend := service.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
 		http.Error(w, "No peers available", http.StatusServiceUnavailable)
