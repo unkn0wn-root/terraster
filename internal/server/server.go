@@ -212,7 +212,7 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 
 // startAdminServer sets up and starts the admin HTTP server.
 func (s *Server) startAdminServer() error {
-	var adminApiHost string
+	adminApiHost := s.config.AdminAPI.Host
 	if s.config.AdminAPI.Host == "" {
 		adminApiHost = "localhost"
 	}
