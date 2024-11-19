@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/unkn0wn-root/terraster/internal/admin"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
 	"github.com/unkn0wn-root/terraster/internal/config"
@@ -59,7 +58,7 @@ type Server struct {
 	tlsConfigs     map[string]*tls.Certificate
 	serverPool     *pool.ServerPool
 	servers        []*http.Server
-	serviceCache   *lru.Cache
+	serviceCache   *sync.Map
 	portServers    map[int]*http.Server
 	logger         *zap.Logger
 	logManager     *logger.LoggerManager
@@ -83,11 +82,6 @@ func NewServer(
 		return nil, err
 	}
 
-	cache, err := lru.New(100)
-	if err != nil {
-		log.Fatalf("Failed to create service cache: %v", err)
-	}
-
 	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
@@ -98,7 +92,7 @@ func NewServer(
 		ctx:            ctx,
 		cancel:         cancel,
 		servers:        make([]*http.Server, 0),
-		serviceCache:   cache,
+		serviceCache:   &sync.Map{},
 		portServers:    make(map[int]*http.Server),
 		errorChan:      make(chan error),
 		logger:         zLog,
@@ -385,7 +379,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		Protocol: protocol,
 	}.String()
 
-	cachedService, found := s.serviceCache.Get(key)
+	cachedService, found := s.serviceCache.Load(key)
 	var srvc *service.LocationInfo
 	if found {
 		srvc = cachedService.(*service.LocationInfo)
@@ -398,7 +392,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		// service found, assign and cache it for future requests
 		srvc = sr
-		s.serviceCache.Add(key, sr)
+		s.serviceCache.Store(key, sr)
 	}
 
 	// find the appropriate backend for this path based on configured algorithm
