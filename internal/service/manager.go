@@ -39,6 +39,7 @@ type ServiceInfo struct {
 	Port         int
 	TLS          *config.TLSConfig
 	HTTPRedirect bool
+	RedirectPort int
 	HealthCheck  *config.HealthCheckConfig
 	Locations    []*LocationInfo
 }
@@ -157,9 +158,10 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		Host:         service.Host,
 		Port:         service.Port,
 		TLS:          service.TLS,
-		HTTPRedirect: service.HTTPRedirect,
+		HTTPRedirect: service.HTTPRedirect, // redirect from http to https
+		RedirectPort: service.RedirectPort, // use custom port if service resides on diffrent port http:80 -> https:8080
 		HealthCheck:  serviceHealthCheck,
-		Locations:    locations,
+		Locations:    locations, // backends
 	}
 	m.mu.Unlock()
 
@@ -172,7 +174,10 @@ func (m *Manager) GetService(host, path string, hostOnly bool) (*ServiceInfo, *L
 
 	var matchedService *ServiceInfo
 	for _, service := range m.services {
-		if matchHost(service.Host, host) {
+		// convert to lowercase for case-insensitive matching
+		srvc := strings.ToLower(service.Host)
+		host = strings.ToLower(host)
+		if matchHost(srvc, host) {
 			if hostOnly {
 				return service, nil, nil
 			}

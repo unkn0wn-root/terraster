@@ -88,7 +88,6 @@ func NewServer(
 		healthCheckers: make(map[string]*health.Checker),
 		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
 		serviceManager: serviceManager,
-		tlsConfigs:     make(map[string]*tls.Certificate),
 		ctx:            ctx,
 		cancel:         cancel,
 		servers:        make([]*http.Server, 0),
@@ -138,13 +137,15 @@ func (s *Server) Start() error {
 	// setup main middleware handler
 	mainHandler := s.setupMiddleware()
 
-	// imuutable cache for storing services certificates
-	svcsCerts := make(map[string]*tls.Certificate)
+	// We need to fast read TLS configurtion for each service request
+	// if multiple services are running on the same port
+	// with diffrent host name so using cache to load all certficates
+	s.tlsConfigCache = newTLSCache()
 
 	// get all services
 	services := s.serviceManager.GetServices()
 	// Load all certificates during initialization
-
+	// to avoid any delay during request processing
 	for _, svc := range services {
 		// check if serivce requires HTTPS
 		if svc.ServiceType() == service.HTTPS {
@@ -153,21 +154,18 @@ func (s *Server) Start() error {
 				return fmt.Errorf("failed to load certificate for %s: %w", svc.Host, err)
 			}
 
-			svcsCerts[svc.Host] = &cert
-			s.logger.Info("Loaded certificate", zap.String("host", svc.Host))
+			s.tlsConfigCache.certs[svc.Host] = &cert
+			s.logger.Info("Certificate loaded into cache", zap.String("host", svc.Host))
 		}
+	}
 
+	for _, svc := range services {
 		// start each service server
 		if err := s.startServiceServer(svc, mainHandler); err != nil {
 			s.cancel()
 			return err
 		}
 	}
-
-	// We need to fast read TLS configurtion for each service request
-	// if multiple services are running on the same port
-	// with diffrent host name so using cache to load all certficates
-	s.tlsConfigCache = &tlsCache{certs: svcsCerts}
 
 	if err := s.startAdminServer(); err != nil {
 		s.cancel()
@@ -214,7 +212,7 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 
 // startAdminServer sets up and starts the admin HTTP server.
 func (s *Server) startAdminServer() error {
-	var adminApiHost string
+	adminApiHost := s.config.AdminAPI.Host
 	if s.config.AdminAPI.Host == "" {
 		adminApiHost = "localhost"
 	}
@@ -303,7 +301,11 @@ func (s *Server) runServer(
 // createRedirectHandler creates a handler that redirects HTTP to HTTPS.
 func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		target := "https://" + net.JoinHostPort(svc.Host, strconv.Itoa(s.servicePort(svc.Port))) + r.URL.RequestURI()
+		redirectPort := svc.RedirectPort
+		if redirectPort == 0 {
+			redirectPort = DefaultHTTPSPort // assume deffaut HTTPS port (443) if redirect is set but redirect port is not
+		}
+		target := "https://" + net.JoinHostPort(svc.Host, strconv.Itoa(redirectPort)) + r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 }
