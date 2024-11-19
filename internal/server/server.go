@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/unkn0wn-root/terraster/internal/admin"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
 	"github.com/unkn0wn-root/terraster/internal/config"
@@ -58,6 +59,7 @@ type Server struct {
 	tlsConfigs     map[string]*tls.Certificate
 	serverPool     *pool.ServerPool
 	servers        []*http.Server
+	serviceCache   *lru.Cache
 	portServers    map[int]*http.Server
 	logger         *zap.Logger
 	logManager     *logger.LoggerManager
@@ -81,6 +83,11 @@ func NewServer(
 		return nil, err
 	}
 
+	cache, err := lru.New(100)
+	if err != nil {
+		log.Fatalf("Failed to create service cache: %v", err)
+	}
+
 	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
@@ -91,6 +98,7 @@ func NewServer(
 		ctx:            ctx,
 		cancel:         cancel,
 		servers:        make([]*http.Server, 0),
+		serviceCache:   cache,
 		portServers:    make(map[int]*http.Server),
 		errorChan:      make(chan error),
 		logger:         zLog,
@@ -357,7 +365,7 @@ func (s *Server) setupMiddleware() http.Handler {
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	host := middleware.GetTargetHost(r)
-	_, port, err := net.SplitHostPort(r.Host)
+	host, port, err := parseHostPort(r.Host, r.TLS)
 	if err != nil {
 		http.Error(w, "Invalid host + port", http.StatusBadRequest)
 		return
@@ -370,33 +378,38 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		protocol = service.HTTPS
 	}
 
-	// if no port, we have to assume that request is either http or https
-	// so based on the protocol we can determine the port to use
-	pn, _ := strconv.Atoi(port)
-	if pn == 0 {
-		if protocol == service.HTTPS {
-			pn = DefaultHTTPSPort
-		} else {
-			pn = DefaultHTTPPort
-		}
-	}
+	// build service key which later be cached or retrieved from cache if found
+	key := service.ServiceKey{
+		Host:     host,
+		Port:     port,
+		Protocol: protocol,
+	}.String()
 
-	// find the appropriate service for this path matching host and port
-	_, service, err := s.serviceManager.GetService(host, r.URL.Path, pn, false)
-	if err != nil {
-		http.Error(w, "Service not found", http.StatusNotFound)
-		return
+	cachedService, found := s.serviceCache.Get(key)
+	var srvc *service.LocationInfo
+	if found {
+		srvc = cachedService.(*service.LocationInfo)
+	} else {
+		// find the appropriate service for this path matching host and port
+		_, sr, err := s.serviceManager.GetService(host, r.URL.Path, port, false)
+		if err != nil {
+			http.Error(w, "Service not found", http.StatusNotFound)
+			return
+		}
+		// service found, assign and cache it for future requests
+		srvc = sr
+		s.serviceCache.Add(key, sr)
 	}
 
 	// find the appropriate backend for this path based on configured algorithm
-	backendAlgo := service.Algorithm.NextServer(service.ServerPool, r)
+	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r)
 	if backendAlgo == nil {
 		http.Error(w, "No service available right now", http.StatusServiceUnavailable)
 		return
 	}
 
 	// find correct peer URL
-	backend := service.ServerPool.GetBackendByURL(backendAlgo.URL)
+	backend := srvc.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
 		http.Error(w, "No peers available", http.StatusServiceUnavailable)
 		return
@@ -416,7 +429,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	duration := time.Since(start)
 
 	// record response time for least-response-time algorithm
-	if lrt, ok := service.Algorithm.(*algorithm.LeastResponseTime); ok {
+	if lrt, ok := srvc.Algorithm.(*algorithm.LeastResponseTime); ok {
 		lrt.UpdateResponseTime(backend.URL.String(), duration)
 	}
 }

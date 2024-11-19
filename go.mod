@@ -7,6 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hashicorp/golang-lru v1.0.2
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.17.0
