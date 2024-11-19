@@ -174,10 +174,7 @@ func (m *Manager) GetService(host, path string, hostOnly bool) (*ServiceInfo, *L
 
 	var matchedService *ServiceInfo
 	for _, service := range m.services {
-		// convert to lowercase for case-insensitive matching
-		srvc := strings.ToLower(service.Host)
-		host = strings.ToLower(host)
-		if matchHost(srvc, host) {
+		if matchHost(service.Host, host) {
 			if hostOnly {
 				return service, nil, nil
 			}
@@ -257,7 +254,7 @@ func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *con
 
 func matchHost(pattern, host string) bool {
 	if !strings.Contains(pattern, "*") {
-		return pattern == host
+		return strings.EqualFold(pattern, host)
 	}
 
 	if pattern == "*" {
