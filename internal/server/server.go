@@ -313,7 +313,7 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		redirectPort := svc.RedirectPort
 		if redirectPort == 0 {
-			redirectPort = DefaultHTTPSPort // assume deffaut HTTPS port (443) if redirect is set but redirect port is not
+			redirectPort = DefaultHTTPSPort // assume default HTTPS port (443) if redirect is set but redirect port is not
 		}
 		target := "https://" + net.JoinHostPort(svc.Host, strconv.Itoa(redirectPort)) + r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusMovedPermanently)

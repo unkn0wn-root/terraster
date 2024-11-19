@@ -133,9 +133,9 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 	}
 
 	//use host as key, if empty use service name
-	k := service.Host
+	k := service.Name
 	if k == "" {
-		k = service.Name
+		k = service.Host
 	}
 
 	if k == "" {
