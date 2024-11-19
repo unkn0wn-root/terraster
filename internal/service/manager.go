@@ -85,7 +85,8 @@ func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 		// Define the default service with a generic path and the provided backends.
 		defaultService := config.Service{
 			Name: "default",
-			Host: "",
+			Host: "localhost",
+			Port: 8080,
 			Locations: []config.Location{
 				{
 					Path:         "",

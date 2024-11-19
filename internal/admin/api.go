@@ -18,6 +18,7 @@ import (
 
 // AdminAPI represents the administrative API for managing the load balancer.
 type AdminAPI struct {
+	enabled        bool
 	serviceManager *service.Manager
 	mux            *http.ServeMux
 	config         *config.Config
@@ -28,13 +29,20 @@ type AdminAPI struct {
 
 // NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
 // It initializes the HTTP mux and registers all API routes.
-func NewAdminAPI(manager *service.Manager, cfg *config.Config, authService *auth_service.AuthService) *AdminAPI {
+func NewAdminAPI(
+	manager *service.Manager,
+	cfg *config.Config,
+	authService *auth_service.AuthService,
+	logger *zap.Logger,
+) *AdminAPI {
 	api := &AdminAPI{
+		enabled:        cfg.AdminAPI.Enabled,
 		serviceManager: manager,
 		mux:            http.NewServeMux(),
 		config:         cfg,
 		authService:    authService,
 		authHandler:    handlers.NewAuthHandler(authService),
+		logger:         logger,
 	}
 	api.registerRoutes()
 	return api

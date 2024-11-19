@@ -65,6 +65,7 @@ type PoolConfig struct {
 
 type AdminAPIConfig struct {
 	Host      string          `yaml:"host"`
+	Enabled   bool            `yaml:"enabled"`
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 }
 

@@ -100,7 +100,7 @@ func NewServer(
 	s := &Server{
 		config:         cfg,
 		healthCheckers: make(map[string]*health.Checker),
-		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc),
+		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc, zLog),
 		serviceManager: serviceManager,
 		ctx:            ctx,
 		cancel:         cancel,
@@ -249,6 +249,11 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 // It supports both HTTP and HTTPS based on the server's TLS configuration.
 // Returns an error if the admin server fails to start.
 func (s *Server) startAdminServer() error {
+	if !s.config.AdminAPI.Enabled {
+		s.logger.Warn("Admin API is not enabled. Bypassing admin server setup")
+		return nil
+	}
+
 	// Determine the host for the admin API, defaulting to localhost if not specified.
 	adminApiHost := s.config.AdminAPI.Host
 	if s.config.AdminAPI.Host == "" {
