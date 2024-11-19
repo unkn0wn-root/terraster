@@ -263,7 +263,7 @@ func matchHost(pattern, host string) bool {
 
 	if strings.HasPrefix(pattern, "*.") {
 		suffix := pattern[1:] // Remove *
-		return strings.HasSuffix(host, suffix)
+		return strings.HasSuffix(strings.ToLower(host), strings.ToLower(suffix))
 	}
 
 	return false
