@@ -84,7 +84,6 @@ func (a *AdminAPI) Handler() http.Handler {
 		middleware.NewRateLimiterMiddleware(
 			a.config.AdminAPI.RateLimit.RequestsPerSecond,
 			a.config.AdminAPI.RateLimit.Burst),
-		middleware.NewServerHostMiddleware(),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)

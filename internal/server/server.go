@@ -350,7 +350,6 @@ func (s *Server) setupMiddleware() http.Handler {
 			s.config.RateLimit.RequestsPerSecond,
 			s.config.RateLimit.Burst,
 		),
-		middleware.NewServerHostMiddleware(),
 		logger,
 	)
 
@@ -358,7 +357,6 @@ func (s *Server) setupMiddleware() http.Handler {
 }
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	host := middleware.GetTargetHost(r)
 	host, port, err := parseHostPort(r.Host, r.TLS)
 	if err != nil {
 		http.Error(w, "Invalid host + port", http.StatusBadRequest)
