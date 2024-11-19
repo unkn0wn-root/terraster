@@ -182,7 +182,17 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 	// to reuse the same underlying HTTP instance.
 	// This will route then based on HTTP host header
 	port := s.servicePort(svc.Port)
+	protocol := svc.ServiceType()
 	if server := s.portServers[port]; server != nil {
+		// we can't risk mixing HTTP and HTTPS connection to the same port
+		// for existing server, protocol must match
+		if (server.TLSConfig != nil) != (protocol == service.HTTPS) {
+			return fmt.Errorf(
+				"protocol mismatch: cannot mix HTTP and HTTPS on port %d for service %s",
+				port,
+				svc.Name,
+			)
+		}
 		s.logger.Info("Service port already registred. Bounding to the same socket",
 			zap.String("service", svc.Name),
 			zap.String("host", svc.Host),
