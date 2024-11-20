@@ -10,19 +10,22 @@ import (
 )
 
 type Config struct {
-	Port        int                `yaml:"port"`
-	HTTPPort    int                `yaml:"http_port"`
-	HTTPSPort   int                `yaml:"https_port"`
-	AdminPort   int                `yaml:"admin_port"`
-	TLS         TLSConfig          `yaml:"tls"`
-	Algorithm   string             `yaml:"algorithm"`
-	RateLimit   RateLimitConfig    `yaml:"rate_limit"`
-	ConnPool    PoolConfig         `yaml:"connection_pool"`
-	Backends    []BackendConfig    `yaml:"backends"`
-	Auth        APIAuthConfig      `yaml:"auth"`
-	AdminAPI    AdminAPIConfig     `yaml:"admin_api"`
-	HealthCheck *HealthCheckConfig `yaml:"health_check"`
-	Services    []Service          `yaml:"services"`
+	Port           int                `yaml:"port"`
+	HTTPPort       int                `yaml:"http_port"`
+	HTTPSPort      int                `yaml:"https_port"`
+	AdminPort      int                `yaml:"admin_port"`
+	TLS            TLSConfig          `yaml:"tls"`
+	Algorithm      string             `yaml:"algorithm"`
+	RateLimit      *RateLimitConfig   `yaml:"rate_limit"`
+	ConnPool       PoolConfig         `yaml:"connection_pool"`
+	Backends       []BackendConfig    `yaml:"backends"`
+	Auth           APIAuthConfig      `yaml:"auth"`
+	AdminAPI       AdminAPIConfig     `yaml:"admin_api"`
+	HealthCheck    *HealthCheckConfig `yaml:"health_check"`
+	Services       []Service          `yaml:"services"`
+	CircuitBreaker *CircuitBreaker    `yaml:"circuit_breaker"`
+	Security       *SecurityConfig    `yaml:"security"`
+	CORS           *CORS              `yaml:"cors"`
 }
 
 type TLSConfig struct {
@@ -94,6 +97,30 @@ type Location struct {
 	Redirect     string          `yaml:"redirect"`
 	LoadBalancer string          `yaml:"lb_policy"`
 	Backends     []BackendConfig `yaml:"backends"`
+}
+
+type CircuitBreaker struct {
+	FailureThreshold int
+	ResetTimeout     time.Duration
+}
+
+type SecurityConfig struct {
+	HSTS                  bool
+	HSTSMaxAge            int
+	HSTSIncludeSubDomains bool
+	HSTSPreload           bool
+	FrameOptions          string
+	ContentTypeOptions    bool
+	XSSProtection         bool
+}
+
+type CORS struct {
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	ExposedHeaders   []string
+	AllowCredentials bool
+	MaxAge           int
 }
 
 var DefaultHealthCheck = HealthCheckConfig{

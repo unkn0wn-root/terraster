@@ -375,14 +375,10 @@ func (s *Server) setupMiddleware() http.Handler {
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
 
-	chain := middleware.NewMiddlewareChain(
-		middleware.NewCircuitBreaker(5, 3*time.Second),
-		middleware.NewRateLimiterMiddleware(
-			s.config.RateLimit.RequestsPerSecond,
-			s.config.RateLimit.Burst,
-		),
-		logger,
-	)
+	// chain configured middlewares from config file
+	chain := middleware.NewMiddlewareChain()
+	chain.AddConfiguredMiddlewars(s.config)
+	chain.Use(logger)
 
 	return chain.Then(baseHandler)
 }
