@@ -18,13 +18,13 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
   - [x] Adaptive Load Balancing
 
 - Advanced Features
-  - [ ] WebSocket Support
+  - [ ] WebSocket Support - WIP
   - [x] SSL/TLS
-  - [ ] Automatic certificate management
+  - [ ] Automatic certificate management - WIP
   - [x] Connection pooling
   - [x] Circuit breaker
   - [x] Rate limiting
-  - [ ] Compression
+  - [ ] Compression - WIP
 
 - Monitoring
   - [x] Health checking
