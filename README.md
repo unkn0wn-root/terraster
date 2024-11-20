@@ -26,7 +26,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
   - [x] Rate limiting
   - [ ] Compression - WIP
   - [ ] Custom Request Headers
-  - [ ] Dynamic middleware plug-in
+  - [x] Dynamic middleware plug-in
 
 - Monitoring
   - [x] Health checking
