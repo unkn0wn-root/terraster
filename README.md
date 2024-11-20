@@ -8,29 +8,30 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 ## Features
 
 - Multiple load balancing algorithms
-  - Round Robin
-  - Weighted Round Robin
-  - Least Connections
-  - Weighted Least Connections
-  - Response Time Based
-  - IP Hash
-  - Consistent Hashing
-  - Adaptive Load Balancing
+  - [x] Round Robin
+  - [x] Weighted Round Robin
+  - [x] Least Connections
+  - [x] Weighted Least Connections
+  - [x] Response Time Based
+  - [x] IP Hash
+  - [x] Consistent Hashing
+  - [x] Adaptive Load Balancing
 
 - Advanced Features
-  - WebSocket Support
-  - SSL/TLS with automatic certificate management
-  - Connection pooling
-  - Circuit breaker
-  - Rate limiting
-  - Compression
+  - [ ] WebSocket Support
+  - [x] SSL/TLS
+  - [ ] Automatic certificate management
+  - [x] Connection pooling
+  - [x] Circuit breaker
+  - [x] Rate limiting
+  - [ ] Compression
 
 - Monitoring
-  - Health checking
+  - [x] Health checking
 
 - Administration
-  - Dynamic configuration via Admin API
-  - Graceful shutdown
+  - [x] Dynamic configuration via Admin API
+  - [x] Graceful shutdown
 
 ## Quick Start
 
