@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/unkn0wn-root/terraster/internal/config"
+	"go.uber.org/zap"
 )
 
 // Middleware defines an interface for HTTP middleware.
@@ -98,6 +100,20 @@ func (c *MiddlewareChain) Use(middleware Middleware) {
 	c.middlewares = append(c.middlewares, middleware)
 }
 
+// Iterate over the existing middleware in the chain
+// and replace the middleware service configured with the same type
+func (c *MiddlewareChain) Replace(middleware Middleware) {
+	for i, mw := range c.middlewares {
+		if reflect.TypeOf(mw) == reflect.TypeOf(middleware) {
+			c.middlewares[i] = middleware
+			return
+		}
+	}
+
+	// If the middleware doesn't exist, add it to the chain
+	c.Use(middleware)
+}
+
 // Then applies the middleware chain to the final HTTP handler.
 // It wraps the final handler with each middleware in reverse order, so that the first middleware added
 // is the first to process the request.
@@ -117,38 +133,49 @@ func (c *MiddlewareChain) Then(final http.Handler) http.Handler {
 // AddConfiguredMiddlewars adds middleware to the chain based on the provided configuration.
 // It checks the configuration for enabled middleware features like Circuit Breaker, Rate Limiting, and Security,
 // and adds the corresponding middleware to the chain.
-func (c *MiddlewareChain) AddConfiguredMiddlewars(config *config.Config) {
-	// Circuit Breaker Middleware
-	if config.CircuitBreaker != nil {
-		var threshold int
-		var resetTimeout time.Duration
-		if config.CircuitBreaker.FailureThreshold == 0 {
-			threshold = 5
+func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Config, logger *zap.Logger) {
+	for _, mw := range config.Middleware {
+		switch {
+		// Circuit Breaker Middleware
+		case mw.CircuitBreaker != nil:
+			cir := mw.CircuitBreaker
+			threshold := cir.FailureThreshold
+			resetTimeout := cir.ResetTimeout
+			if threshold == 0 {
+				threshold = 5
+			}
+
+			if resetTimeout == 0 {
+				resetTimeout = 30 * time.Second
+			}
+
+			cb := NewCircuitBreaker(threshold, resetTimeout)
+			c.Use(cb)
+
+			logger.Info("Global Circuit Breaker middleware configured",
+				zap.Int("failure_threshold", threshold),
+				zap.Duration("reset_timeout", resetTimeout))
+		// Rate Limiting Middleware
+		case mw.RateLimit != nil:
+			rml := mw.RateLimit
+			rl := NewRateLimiterMiddleware(rml.RequestsPerSecond, rml.Burst)
+			c.Use(rl)
+
+			logger.Info("Global Rate Limiter middleware configured",
+				zap.Float64("requests_per_second", rml.RequestsPerSecond),
+				zap.Int("burst", rml.Burst))
+		// Security Middleware (HTTP Headers)
+		case mw.Security != nil:
+			sec := NewSecurityMiddleware(config)
+			c.Use(sec)
+
+			logger.Info("Global Security middleware configured")
+		// CORS Middleware (Cross-Origin Resource Sharing)
+		case mw.CORS != nil:
+			cors := NewCORSMiddleware(config)
+			c.Use(cors)
+
+			logger.Info("Global CORS middleware enabled configured")
 		}
-
-		if config.CircuitBreaker.ResetTimeout == 0 {
-			resetTimeout = 30 * time.Second
-		}
-
-		cb := NewCircuitBreaker(threshold, resetTimeout)
-		c.Use(cb)
-	}
-
-	// Rate Limiting Middleware
-	if config.RateLimit != nil {
-		rl := NewRateLimiterMiddleware(config.RateLimit.RequestsPerSecond, config.RateLimit.Burst)
-		c.Use(rl)
-	}
-
-	// Security Middleware
-	if config.Security != nil {
-		sec := NewSecurityMiddleware(config)
-		c.Use(sec)
-	}
-
-	// CORS Middleware
-	if config.CORS != nil {
-		cors := NewCORSMiddleware(config)
-		c.Use(cors)
 	}
 }

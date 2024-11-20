@@ -22,14 +22,22 @@ type ServerSecurity struct {
 // NewSecurityMiddleware initializes and returns a new ServerSecurity instance based on the provided configuration.
 // It reads security-related settings from the configuration and sets up the corresponding fields.
 func NewSecurityMiddleware(cfg *config.Config) *ServerSecurity {
+	var config *config.SecurityConfig
+	for _, mw := range cfg.Middleware {
+		if mw.Security != nil {
+			config = mw.Security
+			break
+		}
+	}
+
 	return &ServerSecurity{
-		HSTS:                  cfg.Security.HSTS,
-		HSTSMaxAge:            cfg.Security.HSTSMaxAge,
-		HSTSIncludeSubDomains: cfg.Security.HSTSIncludeSubDomains,
-		HSTSPreload:           cfg.Security.HSTSPreload,
-		FrameOptions:          cfg.Security.FrameOptions,
-		ContentTypeOptions:    cfg.Security.ContentTypeOptions,
-		XSSProtection:         cfg.Security.XSSProtection,
+		HSTS:                  config.HSTS,
+		HSTSMaxAge:            config.HSTSMaxAge,
+		HSTSIncludeSubDomains: config.HSTSIncludeSubDomains,
+		HSTSPreload:           config.HSTSPreload,
+		FrameOptions:          config.FrameOptions,
+		ContentTypeOptions:    config.ContentTypeOptions,
+		XSSProtection:         config.XSSProtection,
 	}
 }
 

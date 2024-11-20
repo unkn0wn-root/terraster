@@ -50,6 +50,7 @@ type ServiceInfo struct {
 	RedirectPort int                       // The port to which HTTP requests are redirected for HTTPS.
 	HealthCheck  *config.HealthCheckConfig // Health check configuration specific to the service.
 	Locations    []*LocationInfo           // A slice of LocationInfo representing different routing paths for the service.
+	Middleware   []config.Middleware       // Middleware configurations for the service.
 }
 
 // ServiceType determines the protocol type of the service based on its TLS configuration.
@@ -181,6 +182,7 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		RedirectPort: service.RedirectPort, // Custom port for redirection if applicable.
 		HealthCheck:  serviceHealthCheck,
 		Locations:    locations, // Associated locations with their backends.
+		Middleware:   service.Middleware,
 	}
 	m.mu.Unlock()
 

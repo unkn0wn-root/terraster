@@ -10,22 +10,19 @@ import (
 )
 
 type Config struct {
-	Port           int                `yaml:"port"`
-	HTTPPort       int                `yaml:"http_port"`
-	HTTPSPort      int                `yaml:"https_port"`
-	AdminPort      int                `yaml:"admin_port"`
-	TLS            TLSConfig          `yaml:"tls"`
-	Algorithm      string             `yaml:"algorithm"`
-	RateLimit      *RateLimitConfig   `yaml:"rate_limit"`
-	ConnPool       PoolConfig         `yaml:"connection_pool"`
-	Backends       []BackendConfig    `yaml:"backends"`
-	Auth           APIAuthConfig      `yaml:"auth"`
-	AdminAPI       AdminAPIConfig     `yaml:"admin_api"`
-	HealthCheck    *HealthCheckConfig `yaml:"health_check"`
-	Services       []Service          `yaml:"services"`
-	CircuitBreaker *CircuitBreaker    `yaml:"circuit_breaker"`
-	Security       *SecurityConfig    `yaml:"security"`
-	CORS           *CORS              `yaml:"cors"`
+	Port        int                `yaml:"port"`
+	HTTPPort    int                `yaml:"http_port"`
+	HTTPSPort   int                `yaml:"https_port"`
+	AdminPort   int                `yaml:"admin_port"`
+	TLS         TLSConfig          `yaml:"tls"`
+	Algorithm   string             `yaml:"algorithm"`
+	ConnPool    PoolConfig         `yaml:"connection_pool"`
+	Backends    []BackendConfig    `yaml:"backends"`
+	Auth        APIAuthConfig      `yaml:"auth"`
+	AdminAPI    AdminAPIConfig     `yaml:"admin_api"`
+	HealthCheck *HealthCheckConfig `yaml:"health_check"`
+	Services    []Service          `yaml:"services"`
+	Middleware  []Middleware       `yaml:"middleware"`
 }
 
 type TLSConfig struct {
@@ -88,7 +85,15 @@ type Service struct {
 	HTTPRedirect bool               `yaml:"http_redirect"`
 	RedirectPort int                `yaml:"redirect_port"`
 	HealthCheck  *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
+	Middleware   []Middleware       `yaml:"middleware"`
 	Locations    []Location         `yaml:"locations"`
+}
+
+type Middleware struct {
+	RateLimit      *RateLimitConfig `yaml:"rate_limit"`
+	CircuitBreaker *CircuitBreaker  `yaml:"circuit_breaker"`
+	Security       *SecurityConfig  `yaml:"security"`
+	CORS           *CORS            `yaml:"cors"`
 }
 
 type Location struct {
