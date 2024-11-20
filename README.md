@@ -25,6 +25,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
   - [x] Circuit breaker
   - [x] Rate limiting
   - [ ] Compression - WIP
+  - [ ] Custom Request Headers
 
 - Monitoring
   - [x] Health checking
