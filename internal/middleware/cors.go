@@ -20,13 +20,25 @@ type CORS struct {
 // Initializes and returns a new CORS instance based on the provided configuration.
 // It reads CORS-related settings from the configuration and sets up the corresponding fields.
 func NewCORSMiddleware(cfg *config.Config) *CORS {
+	var config *config.CORS
+	for _, mw := range cfg.Middleware {
+		if mw.CORS != nil {
+			config = mw.CORS
+			break
+		}
+	}
+
+	if config == nil {
+		return nil
+	}
+
 	return &CORS{
-		AllowedOrigins:   cfg.CORS.AllowedOrigins,
-		AllowedMethods:   cfg.CORS.AllowedMethods,
-		AllowedHeaders:   cfg.CORS.AllowedHeaders,
-		ExposedHeaders:   cfg.CORS.ExposedHeaders,
-		AllowCredentials: cfg.CORS.AllowCredentials,
-		MaxAge:           cfg.CORS.MaxAge,
+		AllowedOrigins:   config.AllowedOrigins,
+		AllowedMethods:   config.AllowedMethods,
+		AllowedHeaders:   config.AllowedHeaders,
+		ExposedHeaders:   config.ExposedHeaders,
+		AllowCredentials: config.AllowCredentials,
+		MaxAge:           config.MaxAge,
 	}
 }
 

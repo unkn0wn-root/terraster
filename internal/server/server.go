@@ -147,8 +147,6 @@ func (s *Server) Start() error {
 		}(svcName, hc)
 	}
 
-	mainHandler := s.setupMiddleware()
-
 	s.tlsConfigCache = newTLSCache()
 
 	services := s.serviceManager.GetServices()
@@ -166,7 +164,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svc := range services {
-		if err := s.startServiceServer(svc, mainHandler); err != nil {
+		if err := s.startServiceServer(svc); err != nil {
 			s.cancel()
 			return err
 		}
@@ -184,7 +182,7 @@ func (s *Server) Start() error {
 // It ensures that services sharing the same port use the same underlying server instance to optimize resource usage.
 // It also handles protocol mismatches and logs appropriate information.
 // Returns an error if the server fails to start or if there is a protocol mismatch.
-func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handler) error {
+func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	port := s.servicePort(svc.Port)
 	protocol := svc.ServiceType()
 
@@ -206,7 +204,7 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 	}
 
 	svcType := svc.ServiceType()
-	server, err := s.createServer(svc, handler, svcType)
+	server, err := s.createServer(svc, svcType)
 	if err != nil {
 		return fmt.Errorf("failed to create server for port %d: %w", port, err)
 	}
@@ -266,7 +264,6 @@ func (s *Server) startAdminServer() error {
 // Returns the configured http.Server instance or an error if configuration fails.
 func (s *Server) createServer(
 	svc *service.ServiceInfo,
-	handler http.Handler,
 	protocol service.ServiceType,
 ) (*http.Server, error) {
 	server := &http.Server{
@@ -281,6 +278,8 @@ func (s *Server) createServer(
 		return server, nil
 	}
 
+	// Create the middleware chain for the service
+	handler := s.createServiceMiddleware(svc)
 	server.Handler = handler
 
 	server.TLSConfig = &tls.Config{
@@ -354,33 +353,6 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("Hello, World!"))
-}
-
-// setupMiddleware constructs the middleware chain for handling incoming HTTP requests.
-// It includes logging, rate limiting, and circuit breaker functionalities to enhance request handling.
-// Returns the final HTTP handler after applying all middleware layers.
-func (s *Server) setupMiddleware() http.Handler {
-	baseHandler := http.HandlerFunc(s.handleRequest)
-
-	requestsLogger, err := s.logManager.GetLogger("request")
-	if err != nil {
-		s.logger.Error("Failed to get request logger", zap.Error(err))
-	}
-
-	logger := middleware.NewLoggingMiddleware(
-		requestsLogger,
-		middleware.WithLogLevel(zap.InfoLevel),
-		middleware.WithHeaders(),
-		middleware.WithQueryParams(),
-		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
-	)
-
-	// chain configured middlewares from config file
-	chain := middleware.NewMiddlewareChain()
-	chain.AddConfiguredMiddlewars(s.config)
-	chain.Use(logger)
-
-	return chain.Then(baseHandler)
 }
 
 // handleRequest processes incoming HTTP requests by determining the appropriate backend service.
