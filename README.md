@@ -26,6 +26,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
   - [x] Rate limiting
   - [ ] Compression - WIP
   - [ ] Custom Request Headers
+  - [ ] Dynamic middleware plug-in
 
 - Monitoring
   - [x] Health checking
@@ -182,16 +183,6 @@ connection_pool:
   max_idle: 100
   max_open: 1000
   idle_timeout: 90s
-
-cors:
-  allowed_origins:
-    - https://example.com
-  allowed_methods:
-    - GET
-    - POST
-  allowed_headers:
-    - Content-Type
-  max_age: 3600
 
 security:
   hsts: true
