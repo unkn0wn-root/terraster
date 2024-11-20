@@ -6,7 +6,7 @@ import "sync"
 // It is designed to minimize memory allocations by reusing buffers, which can significantly
 // improve performance in high-throughput scenarios such as proxy servers or data processing pipelines.
 type BufferPool struct {
-	sync.Pool // Embeds sync.Pool to leverage its concurrency-safe pooling mechanisms.
+	sync.Pool
 }
 
 // NewBufferPool initializes and returns a new instance of BufferPool.
@@ -16,7 +16,6 @@ func NewBufferPool() *BufferPool {
 	return &BufferPool{
 		Pool: sync.Pool{
 			New: func() interface{} {
-				// Allocate a new byte slice of 32KB when the pool is empty.
 				return make([]byte, 32*1024) // 32KB default size
 			},
 		},

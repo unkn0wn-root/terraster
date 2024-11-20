@@ -22,13 +22,10 @@ import (
 // It also sets up graceful shutdown handling to ensure all services terminate properly.
 func main() {
 	var configPath *string
-	// Define command-line flags for specifying the path to the configuration file.
 	configPath = flag.String("config", "config.yaml", "path to config file")
 	configPath = flag.String("c", "config.yaml", "path to config file")
 	flag.Parse()
 
-	// Initialize the logger manager with the specified logging configuration file.
-	// The application will terminate if the logger fails to initialize.
 	logManager, err := logger.NewLoggerManager("log.config.json")
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
@@ -41,26 +38,20 @@ func main() {
 		}
 	}()
 
-	// Retrieve the main application logger from the logger manager.
 	logger, err := logManager.GetLogger("main")
 	if err != nil {
 		log.Fatalf("Failed to get logger: %v", err)
 	}
 
-	// Load the main application configuration from the specified configuration file.
-	// The application will terminate if the configuration fails to load or is invalid.
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	// Validate the loaded configuration to ensure all required fields and settings are correct.
 	if err := cfg.Validate(); err != nil {
 		logger.Fatal("Invalid config", zap.Error(err))
 	}
 
-	// Initialize the authentication database using the provided database path from the configuration.
-	// The application will terminate if the database fails to initialize.
 	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
 	if err != nil {
 		logger.Fatal("Failed to initialize database", zap.Error(err))
@@ -90,13 +81,10 @@ func main() {
 	// Ensure that the authentication service cleans up any background tasks or resources when the application exits.
 	defer authService.Close()
 
-	// Create a cancellable context that can be used to signal shutdown across all components.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize a channel to receive error notifications from the server.
 	errChan := make(chan error, 1)
-	// Create a new server instance with the provided context, error channel, configuration, authentication service, and loggers.
 	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger, logManager)
 	if err != nil {
 		logger.Fatal("Failed to initialize server", zap.Error(err))
@@ -106,7 +94,6 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start the server in a separate goroutine to allow the main goroutine to listen for shutdown signals.
 	go func() {
 		if err := srv.Start(); err != nil {
 			errChan <- err // Send any server start errors to the error channel.
@@ -116,22 +103,17 @@ func main() {
 	// Listen for shutdown signals, server errors, or context cancellations.
 	select {
 	case <-sigChan:
-		// Received an OS signal to terminate the application.
 		logger.Info("Shutdown signal received, starting graceful shutdown")
-		cancel() // Cancel the context to signal all components to begin shutdown.
+		cancel()
 	case err := <-errChan:
-		// Received an error from the server, initiating shutdown.
 		logger.Fatal("Server error triggered shutdown", zap.Error(err))
 	case <-ctx.Done():
-		// Context was canceled, possibly by another part of the application.
 		logger.Info("Context cancelled")
 	}
 
-	// Create a context with a timeout to ensure that the shutdown process does not hang indefinitely.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
-	// Attempt to gracefully shut down the server, allowing up to 15 seconds for active connections to close.
 	if err := srv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
 		logger.Fatal("Error during shutdown", zap.Error(err))
 	} else {

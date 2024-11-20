@@ -87,16 +87,13 @@ func NewServer(
 	zLog *zap.Logger,
 	logManager *logger.LoggerManager,
 ) (*Server, error) {
-	// Initialize the service manager with the given configuration and logger.
 	serviceManager, err := service.NewManager(cfg, zLog)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create a cancellable context derived from the provided server context.
 	ctx, cancel := context.WithCancel(srvCtx)
 
-	// Instantiate the Server struct with initialized fields.
 	s := &Server{
 		config:         cfg,
 		healthCheckers: make(map[string]*health.Checker),
@@ -112,19 +109,15 @@ func NewServer(
 		logManager:     logManager,
 	}
 
-	// Initialize health checkers for each service managed by the service manager.
 	for _, svc := range serviceManager.GetServices() {
 		hcCfg := svc.HealthCheck
-		// Use global health check configuration if service-specific config is not provided.
 		if (&config.HealthCheckConfig{}) == hcCfg {
 			hcCfg = cfg.HealthCheck
 		}
 
-		// Create a prefixed logger for the health checker.
 		prefix := "[HealthChecker-" + svc.Name + "]"
 		lc := logger.NewZapWriter(zLog, zap.InfoLevel, prefix)
 
-		// Instantiate a new health checker with the specified interval and timeout.
 		hc := health.NewChecker(
 			hcCfg.Interval,
 			hcCfg.Timeout,
@@ -132,7 +125,6 @@ func NewServer(
 		)
 		s.healthCheckers[svc.Name] = hc
 
-		// Register all server pools associated with the service to the health checker.
 		for _, loc := range svc.Locations {
 			hc.RegisterPool(loc.ServerPool)
 		}
@@ -146,7 +138,6 @@ func NewServer(
 // Also starts all health checkers in separate goroutines.
 // Returns an error if any server fails to start.
 func (s *Server) Start() error {
-	// Start all health checkers in separate goroutines.
 	for svcName, hc := range s.healthCheckers {
 		s.wg.Add(1)
 		go func(name string, checker *health.Checker) {
@@ -156,17 +147,13 @@ func (s *Server) Start() error {
 		}(svcName, hc)
 	}
 
-	// Set up the main middleware handler chain.
 	mainHandler := s.setupMiddleware()
 
-	// Initialize the TLS configuration cache to handle TLS certificate retrieval efficiently.
 	s.tlsConfigCache = newTLSCache()
 
-	// Retrieve all services managed by the service manager.
 	services := s.serviceManager.GetServices()
 	// Preload all TLS certificates to prevent delays during request processing.
 	for _, svc := range services {
-		// Only load certificates for services that require HTTPS.
 		if svc.ServiceType() == service.HTTPS {
 			cert, err := tls.LoadX509KeyPair(svc.TLS.CertFile, svc.TLS.KeyFile)
 			if err != nil {
@@ -178,7 +165,6 @@ func (s *Server) Start() error {
 		}
 	}
 
-	// Start an HTTP/HTTPS server for each service.
 	for _, svc := range services {
 		if err := s.startServiceServer(svc, mainHandler); err != nil {
 			s.cancel()
@@ -186,7 +172,6 @@ func (s *Server) Start() error {
 		}
 	}
 
-	// Start the admin HTTP server.
 	if err := s.startAdminServer(); err != nil {
 		s.cancel()
 		return err
@@ -200,7 +185,6 @@ func (s *Server) Start() error {
 // It also handles protocol mismatches and logs appropriate information.
 // Returns an error if the server fails to start or if there is a protocol mismatch.
 func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handler) error {
-	// Determine the port on which the service should run.
 	port := s.servicePort(svc.Port)
 	protocol := svc.ServiceType()
 
@@ -221,18 +205,15 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo, handler http.Handl
 		return nil
 	}
 
-	// Create a new HTTP or HTTPS server based on the service's protocol.
 	svcType := svc.ServiceType()
 	server, err := s.createServer(svc, handler, svcType)
 	if err != nil {
 		return fmt.Errorf("failed to create server for port %d: %w", port, err)
 	}
 
-	// Register the new server in the portServers map and the servers slice.
 	s.portServers[port] = server
 	s.servers = append(s.servers, server)
 
-	// Start the server in a new goroutine.
 	s.wg.Add(1)
 	go s.runServer(server, s.errorChan, svc.Name, svcType)
 
@@ -254,13 +235,11 @@ func (s *Server) startAdminServer() error {
 		return nil
 	}
 
-	// Determine the host for the admin API, defaulting to localhost if not specified.
 	adminApiHost := s.config.AdminAPI.Host
 	if s.config.AdminAPI.Host == "" {
 		adminApiHost = "localhost"
 	}
 
-	// Construct the address for the admin server.
 	adminAddr := net.JoinHostPort(adminApiHost, strconv.Itoa(s.servicePort(s.config.AdminPort)))
 	s.adminServer = &http.Server{
 		Addr:         adminAddr,
@@ -270,13 +249,11 @@ func (s *Server) startAdminServer() error {
 		IdleTimeout:  IdleTimeout,
 	}
 
-	// Determine the protocol for the admin server based on TLS settings.
 	admSvcType := service.HTTP
 	if s.config.TLS.Enabled {
 		admSvcType = service.HTTPS
 	}
 
-	// Start the admin server in a new goroutine.
 	s.wg.Add(1)
 	go s.runServer(s.adminServer, s.errorChan, "admin", admSvcType)
 
@@ -292,7 +269,6 @@ func (s *Server) createServer(
 	handler http.Handler,
 	protocol service.ServiceType,
 ) (*http.Server, error) {
-	// Initialize the HTTP server with address and timeout configurations.
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.servicePort(svc.Port)),
 		ReadTimeout:  ReadTimeout,
@@ -300,21 +276,16 @@ func (s *Server) createServer(
 		IdleTimeout:  IdleTimeout,
 	}
 
-	// If the service requires HTTP to HTTPS redirection, set up the redirect handler.
 	if svc.HTTPRedirect && protocol == service.HTTP {
 		server.Handler = s.createRedirectHandler(svc)
 		return server, nil
 	}
 
-	// Assign the main handler to the server.
 	server.Handler = handler
 
-	// Configure TLS settings for HTTPS servers.
 	server.TLSConfig = &tls.Config{
 		MinVersion: TLSMinVersion,
-		// GetCertificate is a callback to retrieve the appropriate TLS certificate based on the client's SNI.
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			// Retrieve the certificate from the cache using the server name from the client's hello.
 			if cert := s.tlsConfigCache.certs[hello.ServerName]; cert != nil {
 				return cert, nil
 			}
@@ -340,14 +311,12 @@ func (s *Server) runServer(
 	s.logger.Info("Server started", zap.String("name", n), zap.String("server_addr", server.Addr))
 
 	var err error
-	// Start the server based on its protocol.
 	if serviceType == service.HTTPS {
 		err = server.ListenAndServeTLS("", "")
 	} else {
 		err = server.ListenAndServe()
 	}
 
-	// Handle server errors, excluding graceful shutdown.
 	if err != nil && err != http.ErrServerClosed {
 		s.logger.Error("Error starting server", zap.String("server_name", n), zap.Error(err))
 		defer s.cancel()
@@ -363,13 +332,11 @@ func (s *Server) runServer(
 // This ensures that all traffic is secured over HTTPS.
 func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Determine the port to redirect to, defaulting to 443 if not specified.
 		redirectPort := svc.RedirectPort
 		if redirectPort == 0 {
 			redirectPort = DefaultHTTPSPort
 		}
 
-		// Construct the target HTTPS URL with the appropriate port and request URI.
 		u := &url.URL{
 			Scheme:   "https",
 			Host:     net.JoinHostPort(svc.Host, strconv.Itoa(redirectPort)),
@@ -377,7 +344,7 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 			RawQuery: r.URL.RawQuery,
 			Fragment: r.URL.Fragment,
 		}
-		// Perform a permanent redirect to the HTTPS URL.
+
 		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 	})
 }
@@ -393,16 +360,13 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 // It includes logging, rate limiting, and circuit breaker functionalities to enhance request handling.
 // Returns the final HTTP handler after applying all middleware layers.
 func (s *Server) setupMiddleware() http.Handler {
-	// Base handler that processes the request after passing through all middleware.
 	baseHandler := http.HandlerFunc(s.handleRequest)
 
-	// Retrieve the request logger from the log manager.
 	requestsLogger, err := s.logManager.GetLogger("request")
 	if err != nil {
 		s.logger.Error("Failed to get request logger", zap.Error(err))
 	}
 
-	// Initialize the logging middleware with desired configurations.
 	logger := middleware.NewLoggingMiddleware(
 		requestsLogger,
 		middleware.WithLogLevel(zap.InfoLevel),
@@ -411,7 +375,6 @@ func (s *Server) setupMiddleware() http.Handler {
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
 
-	// Create a middleware chain with circuit breaker, rate limiter, and logging middleware.
 	chain := middleware.NewMiddlewareChain(
 		middleware.NewCircuitBreaker(5, 3*time.Second),
 		middleware.NewRateLimiterMiddleware(
@@ -421,7 +384,6 @@ func (s *Server) setupMiddleware() http.Handler {
 		logger,
 	)
 
-	// Apply the middleware chain to the base handler.
 	return chain.Then(baseHandler)
 }
 
@@ -429,29 +391,26 @@ func (s *Server) setupMiddleware() http.Handler {
 // It handles service discovery, load balancing, and proxying requests to backend servers.
 // Additionally, it manages connection counts and records response times for performance monitoring.
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	// Parse the host and port from the request's Host header.
 	host, port, err := parseHostPort(r.Host, r.TLS)
 	if err != nil {
 		http.Error(w, "Invalid host + port", http.StatusBadRequest)
 		return
 	}
 
-	// Determine the protocol (HTTP or HTTPS) based on the TLS information.
 	protocol := getProtocol(r)
 
-	// Construct a unique service key for caching purposes.
+	// Construct a unique service key for caching services
 	key := getServiceKey(host, port, protocol)
 
-	// Attempt to retrieve the service information from the cache.
 	srvc, err := s.getServiceFromCache(key)
 	if err != nil {
-		// If the service is not cached, retrieve it from the service manager.
+		// If not cache hit - retrieve it from the service manager.
 		srvc, err = s.getServiceFromManager(host, r.URL.Path, port)
 		if err != nil {
 			http.Error(w, "Service not found", http.StatusNotFound)
 			return
 		}
-		// Cache the retrieved service information for future requests.
+
 		s.cacheService(key, srvc)
 	}
 
@@ -469,13 +428,10 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer backend.DecrementConnections()
 
-	// Record the start time to measure response duration.
 	start := time.Now()
-	// Proxy the request to the selected backend, injecting the backend URL into the request context.
 	backend.Proxy.ServeHTTP(w, r.WithContext(
 		context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())),
 	)
-	// Calculate the duration taken to serve the request.
 	duration := time.Since(start)
 
 	// Record the response time for performance-based load balancing algorithms.
@@ -530,13 +486,11 @@ func (s *Server) getServiceFromManager(host, path string, port int) (*service.Lo
 // getBackend selects an appropriate backend server from the service's server pool based on the load balancing algorithm.
 // Returns the selected backend or an error if no suitable backend is available.
 func (s *Server) getBackend(srvc *service.LocationInfo, r *http.Request) (*pool.Backend, error) {
-	// Use the service's load balancing algorithm to select the next backend.
 	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r)
 	if backendAlgo == nil {
 		return nil, errors.New("no service available")
 	}
 
-	// Retrieve the backend instance by its URL.
 	backend := srvc.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
 		return nil, errors.New("no peers available")
@@ -557,11 +511,9 @@ func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, dura
 // It also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
 // Returns an error if the shutdown process is interrupted or fails.
 func (s *Server) Shutdown(ctx context.Context) error {
-	// Cancel the server's context to signal all goroutines to stop.
 	s.cancel()
 	var wg sync.WaitGroup
 
-	// Initiate shutdown of the admin server.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -26,7 +26,7 @@ func NewConnectionPool(maxIdle, maxOpen int, idleTimeout time.Duration) *Connect
 		maxIdle:     maxIdle,
 		maxOpen:     maxOpen,
 		idleTimeout: idleTimeout,
-		conns:       make(chan *http.Client, maxIdle), // Initialize the channel with the capacity of maxIdle.
+		conns:       make(chan *http.Client, maxIdle),
 	}
 }
 
@@ -38,20 +38,18 @@ func NewConnectionPool(maxIdle, maxOpen int, idleTimeout time.Duration) *Connect
 func (p *ConnectionPool) Get() *http.Client {
 	select {
 	case client := <-p.conns:
-		// An idle client is available; return it for immediate use.
 		return client
 	default:
-		// No idle clients are available; attempt to create a new client if below maxOpen.
 		p.mu.Lock()
 		if p.numOpen >= p.maxOpen {
 			p.mu.Unlock()
 			// Pool has reached its maximum number of open clients; wait for a client to become available.
 			return <-p.conns
 		}
-		// Increment the count of open clients as we are about to create a new one.
+
 		p.numOpen++
 		p.mu.Unlock()
-		// Create and return a new HTTP client.
+
 		return p.createClient()
 	}
 }
@@ -62,9 +60,7 @@ func (p *ConnectionPool) Get() *http.Client {
 func (p *ConnectionPool) Put(client *http.Client) {
 	select {
 	case p.conns <- client:
-		// Successfully returned the client to the pool for future reuse.
 	default:
-		// The pool is full; discard the client and decrement the count of open clients.
 		p.mu.Lock()
 		p.numOpen--
 		p.mu.Unlock()
@@ -81,6 +77,6 @@ func (p *ConnectionPool) createClient() *http.Client {
 			MaxIdleConnsPerHost: 100,              // Maximum number of idle (keep-alive) connections per host.
 			IdleConnTimeout:     90 * time.Second, // Time after which idle connections are closed.
 		},
-		Timeout: 30 * time.Second, // Timeout for HTTP requests made by this client.
+		Timeout: 30 * time.Second,
 	}
 }

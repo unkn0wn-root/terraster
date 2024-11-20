@@ -82,7 +82,6 @@ func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 
 	// If no services are defined in the config but backends are provided, create a default service.
 	if len(cfg.Services) == 0 && len(cfg.Backends) > 0 {
-		// Define the default service with a generic path and the provided backends.
 		defaultService := config.Service{
 			Name: "default",
 			Host: "localhost",
@@ -95,19 +94,16 @@ func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 				},
 			},
 		}
-		// Attempt to add the default service to the manager.
 		if err := m.AddService(defaultService, cfg.HealthCheck); err != nil {
 			return nil, err
 		}
 	} else {
-		// Iterate over each service defined in the configuration and add it to the manager.
 		for _, svc := range cfg.Services {
 			// Use the global health check configuration if the service does not have a specific one.
 			hcCfg := svc.HealthCheck
 			if hcCfg == nil {
 				hcCfg = cfg.HealthCheck
 			}
-			// Attempt to add the service to the manager.
 			if err := m.AddService(svc, hcCfg); err != nil {
 				return nil, err
 			}
@@ -121,13 +117,9 @@ func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 // It processes each location within the service, creates corresponding server pools, and ensures no duplicate services or locations exist.
 // Returns an error if the service already exists, if there are duplicate locations, or if required fields are missing.
 func (m *Manager) AddService(service config.Service, globalHealthCheck *config.HealthCheckConfig) error {
-	// Initialize a slice to hold processed LocationInfo instances.
 	locations := make([]*LocationInfo, 0, len(service.Locations))
-	// Map to track unique location paths to prevent duplicates.
 	locationPaths := make(map[string]bool)
-	// Iterate over each location defined in the service configuration.
 	for _, location := range service.Locations {
-		// Default the path to "/" if it is not specified.
 		if location.Path == "" {
 			location.Path = "/"
 		}
@@ -143,16 +135,13 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 				service.Name, location.Path)
 		}
 
-		// Mark the path as seen to prevent future duplicates.
 		locationPaths[location.Path] = true
 
-		// Create a server pool for the current location.
 		serverPool, err := m.createServerPool(location, globalHealthCheck)
 		if err != nil {
 			return err
 		}
 
-		// Append the processed LocationInfo to the locations slice.
 		locations = append(locations, &LocationInfo{
 			Path:       location.Path,
 			Algorithm:  algorithm.CreateAlgorithm(location.LoadBalancer),
@@ -167,12 +156,10 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		k = service.Host
 	}
 
-	// Return an error if neither name nor host is defined for the service.
 	if k == "" {
 		return ErrNotDefined
 	}
 
-	// Check if the service already exists in the manager to prevent duplicates.
 	if _, exist := m.services[k]; exist {
 		return ErrServiceAlreadyExists
 	}
@@ -184,7 +171,6 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		serviceHealthCheck = service.HealthCheck
 	}
 
-	// Acquire a write lock to safely add the new service to the services map.
 	m.mu.Lock()
 	m.services[k] = &ServiceInfo{
 		Name:         service.Name,
@@ -209,12 +195,10 @@ func (m *Manager) GetService(
 	port int,
 	hostOnly bool,
 ) (*ServiceInfo, *LocationInfo, error) {
-	// Acquire a read lock to safely access the services map.
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var matchedService *ServiceInfo
-	// Iterate over all services to find a match based on host and port.
 	for _, service := range m.services {
 		if matchHost(service.Host, host) && service.Port == port {
 			if hostOnly {
@@ -225,14 +209,12 @@ func (m *Manager) GetService(
 		}
 	}
 
-	// Return an error if no matching service is found.
 	if matchedService == nil {
 		return nil, nil, fmt.Errorf("service not found for host %s", host)
 	}
 
 	var matchedLocation *LocationInfo
 	var matchedLen int
-	// Iterate over the locations within the matched service to find the best path match.
 	for _, location := range matchedService.Locations {
 		if strings.HasPrefix(path, location.Path) && len(location.Path) > matchedLen {
 			matchedLocation = location
@@ -240,7 +222,6 @@ func (m *Manager) GetService(
 		}
 	}
 
-	// Return an error if no matching location is found within the service.
 	if matchedLocation == nil {
 		return nil, nil, fmt.Errorf("location not found for path %s", path)
 	}
@@ -251,11 +232,9 @@ func (m *Manager) GetService(
 // GetServiceByName retrieves a service based on its unique name.
 // It returns the ServiceInfo if found, otherwise returns nil.
 func (m *Manager) GetServiceByName(name string) *ServiceInfo {
-	// Acquire a read lock to safely access the services map.
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Iterate over all services to find a match by name.
 	for _, service := range m.services {
 		if service.Name == name {
 			return service
@@ -268,16 +247,14 @@ func (m *Manager) GetServiceByName(name string) *ServiceInfo {
 // GetServices returns a slice of all services managed by the Manager.
 // It provides a thread-safe way to access the current list of services.
 func (m *Manager) GetServices() []*ServiceInfo {
-	// Acquire a read lock to safely access the services map.
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Initialize a slice with the capacity equal to the number of services.
 	services := make([]*ServiceInfo, 0, len(m.services))
-	// Append each service to the slice.
 	for _, service := range m.services {
 		services = append(services, service)
 	}
+
 	return services
 }
 
@@ -285,13 +262,11 @@ func (m *Manager) GetServices() []*ServiceInfo {
 // It sets up the load balancing algorithm and adds all backends associated with the location to the pool.
 // Returns the configured ServerPool or an error if backend initialization fails.
 func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *config.HealthCheckConfig) (*pool.ServerPool, error) {
-	// Initialize a new server pool with the provided logger.
 	serverPool := pool.NewServerPool(m.logger)
-	// Update the server pool configuration with the specified load balancing algorithm.
 	serverPool.UpdateConfig(pool.PoolConfig{
 		Algorithm: srvc.LoadBalancer,
 	})
-	// Iterate over each backend defined in the location to add them to the server pool.
+
 	for _, backend := range srvc.Backends {
 		rc := pool.RouteConfig{
 			Path:          srvc.Path,             // The path associated with the backend.
@@ -300,17 +275,16 @@ func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *con
 			SkipTLSVerify: backend.SkipTLSVerify, // TLS verification settings for the backend.
 		}
 
-		// Determine the health check configuration for the backend.
 		backendHealthCheck := serviceHealthCheck
 		if backend.HealthCheck != nil {
 			backendHealthCheck = backend.HealthCheck
 		}
 
-		// Attempt to add the backend to the server pool with the specified route configuration and health checks.
 		if err := serverPool.AddBackend(backend, rc, backendHealthCheck); err != nil {
 			return nil, err
 		}
 	}
+
 	return serverPool, nil
 }
 
@@ -318,12 +292,10 @@ func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *con
 // It supports wildcard patterns, allowing for flexible host matching.
 // Returns true if the host matches the pattern, otherwise false.
 func matchHost(pattern, host string) bool {
-	// If the pattern does not contain a wildcard, perform a case-insensitive exact match.
 	if !strings.Contains(pattern, "*") {
 		return strings.EqualFold(pattern, host)
 	}
 
-	// A single asterisk matches any host.
 	if pattern == "*" {
 		return true
 	}
@@ -334,6 +306,5 @@ func matchHost(pattern, host string) bool {
 		return strings.HasSuffix(strings.ToLower(host), strings.ToLower(suffix))
 	}
 
-	// If the pattern contains a wildcard in an unsupported position, do not match.
 	return false
 }

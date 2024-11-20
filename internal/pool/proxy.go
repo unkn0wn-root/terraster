@@ -63,14 +63,13 @@ type RouteConfig struct {
 
 // Transport wraps an http.RoundTripper to allow for custom transport configurations.
 type Transport struct {
-	transport http.RoundTripper // transport is the underlying RoundTripper used to execute HTTP requests.
+	transport http.RoundTripper
 }
 
 // NewTransport creates a new Transport instance with the provided RoundTripper.
 // It configures the TLS settings based on the skipTLSVerify parameter.
 // If skipTLSVerify is true, the Transport will not verify the server's TLS certificate.
 func NewTransport(transport http.RoundTripper, skipTLSVerify bool) *Transport {
-	// Type assertion to *http.Transport is necessary to modify TLS settings.
 	transport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: skipTLSVerify}
 	return &Transport{transport: transport}
 }
@@ -100,14 +99,12 @@ func NewReverseProxy(
 	logger *zap.Logger,
 	opts ...ProxyOption,
 ) *URLRewriteProxy {
-	// Initialize the rewrite configuration based on the provided RouteConfig.
 	rewriteConfig := RewriteConfig{
 		ProxyPath:  config.Path,
 		RewriteURL: config.RewriteURL,
 		Redirect:   config.Redirect,
 	}
 
-	// Enhance the logger with a "PROXY" prefix for clearer log messages.
 	proxyLogger := logger.With(zap.String("prefix", "PROXY"))
 	prx := &URLRewriteProxy{
 		target:     target,
@@ -118,36 +115,27 @@ func NewReverseProxy(
 		proxy:      px,
 	}
 
-	// Apply any additional proxy options provided.
 	for _, opt := range opts {
 		opt(prx)
 	}
 
-	// Initialize the URLRewriter if it hasn't been set by the proxy options.
 	if prx.urlRewriter == nil {
 		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
 	}
 
-	// Log the creation of the proxy with its target and rewrite configurations.
 	prx.logger.Info("Creating proxy",
 		zap.String("target", target.String()),
 		zap.String("path", config.Path),
 		zap.String("rewriteURL", config.RewriteURL),
 	)
 
-	// Configure the reverse proxy's Director to modify incoming requests.
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
-	// Configure the reverse proxy's ModifyResponse to handle response modifications such as redirects.
 	reverseProxy.ModifyResponse = prx.modifyResponse
-	// Set the custom Transport with TLS verification settings.
 	reverseProxy.Transport = NewTransport(http.DefaultTransport, config.SkipTLSVerify)
-	// Set the custom ErrorHandler to manage proxy errors gracefully.
 	reverseProxy.ErrorHandler = prx.errorHandler
-	// Assign a buffer pool to optimize memory usage during request handling.
 	reverseProxy.BufferPool = NewBufferPool()
 
-	// Update the proxy's ReverseProxy instance with the configured settings.
 	prx.proxy = reverseProxy
 
 	return prx
@@ -157,28 +145,24 @@ func NewReverseProxy(
 // If a redirect is necessary based on the URLRewriter's logic, it performs the redirection.
 // Otherwise, it forwards the request to the configured backend proxy.
 func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Determine if the request should be redirected based on the URLRewriter's rules.
 	if shouldRedirect, redirectPath := p.urlRewriter.shouldRedirect(r); shouldRedirect {
 		scheme := "http"
 		if r.TLS != nil {
 			scheme = "https"
 		}
-		// Construct the full redirect URL preserving the original host and the new redirect path.
 		redirectURL := fmt.Sprintf("%s://%s%s", scheme, r.Host, redirectPath)
-		// Perform a permanent redirect to the new URL.
 		http.Redirect(w, r, redirectURL, http.StatusMovedPermanently)
 		return
 	}
 
-	// If no redirect is needed, proxy the request to the backend server.
 	p.proxy.ServeHTTP(w, r)
 }
 
 // director modifies the incoming HTTP request before it is sent to the backend server.
 // It updates request headers and rewrites the request URL based on the proxy's configuration.
 func (p *URLRewriteProxy) director(req *http.Request) {
-	p.updateRequestHeaders(req)                    // Update necessary request headers.
-	p.urlRewriter.rewriteRequestURL(req, p.target) // Rewrite the request URL to target the backend server.
+	p.updateRequestHeaders(req)
+	p.urlRewriter.rewriteRequestURL(req, p.target)
 }
 
 // RoundTrip implements the RoundTripper interface for the Transport type.
@@ -198,8 +182,8 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 // handleRedirect processes HTTP redirect responses from the backend server.
 // It rewrites the Location header if the redirect is to the same host, ensuring consistent proxy behavior.
 func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
-	location := resp.Header.Get(HeaderLocation) // Retrieve the Location header from the response.
-	locURL, err := url.Parse(location)          // Parse the Location URL.
+	location := resp.Header.Get(HeaderLocation)
+	locURL, err := url.Parse(location)
 	if err != nil {
 		return &ProxyError{Op: "parse_redirect_url", Err: err} // Return a ProxyError if parsing fails.
 	}
@@ -210,29 +194,30 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 		return nil
 	}
 
-	originalHost := resp.Request.Header.Get(HeaderXForwardedHost) // Retrieve the original host from request headers.
-	p.urlRewriter.rewriteRedirectURL(locURL, originalHost)        // Rewrite the redirect URL based on the original host.
-	resp.Header.Set(HeaderLocation, locURL.String())              // Update the Location header with the rewritten URL.
+	originalHost := resp.Request.Header.Get(HeaderXForwardedHost)
+	p.urlRewriter.rewriteRedirectURL(locURL, originalHost)
+	resp.Header.Set(HeaderLocation, locURL.String())
+
 	return nil
 }
 
 // modifyResponse is a callback function that modifies the HTTP response received from the backend server.
 // It handles redirects and updates response headers to remove or set specific headers for security and consistency.
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
-	if isRedirect(resp.StatusCode) { // Check if the response status code indicates a redirect.
-		p.handleRedirect(resp) // Handle the redirect by potentially rewriting the Location header.
+	if isRedirect(resp.StatusCode) {
+		p.handleRedirect(resp)
 	}
 
-	p.updateResponseHeaders(resp) // Update response headers as needed.
+	p.updateResponseHeaders(resp)
 	return nil
 }
 
 // updateResponseHeaders modifies the HTTP response headers before sending the response to the client.
 // It removes headers that might leak server information and sets custom proxy headers.
 func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
-	resp.Header.Del(HeaderServer)                      // Remove the Server header to prevent disclosing server details.
-	resp.Header.Del(HeaderXPoweredBy)                  // Remove the X-Powered-By header to obscure underlying technologies.
-	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel) // Set a custom X-Proxy-By header to identify the proxy.
+	resp.Header.Del(HeaderServer)
+	resp.Header.Del(HeaderXPoweredBy)
+	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
 }
 
 // isRedirect checks if the provided HTTP status code is one that indicates a redirection.
@@ -250,6 +235,6 @@ func isRedirect(statusCode int) bool {
 // errorHandler is a custom error handler for the reverse proxy.
 // It logs unexpected errors and sends a generic error response to the client.
 func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	p.logger.Error("Unexpected error in proxy", zap.Error(err))           // Log the error with context.
-	http.Error(w, "Something went wrong", http.StatusInternalServerError) // Send a generic error response to the client.
+	p.logger.Error("Unexpected error in proxy", zap.Error(err))
+	http.Error(w, "Something went wrong", http.StatusInternalServerError)
 }

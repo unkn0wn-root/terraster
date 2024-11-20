@@ -72,13 +72,12 @@ func (b *Backend) IncrementConnections() bool {
 	for {
 		current := atomic.LoadInt32(&b.ConnectionCount)
 		if current >= int32(b.MaxConnections) {
-			return false // Backend has reached its maximum allowed connections.
+			return false
 		}
-		// Attempt to atomically increment the connection count.
+
 		if atomic.CompareAndSwapInt32(&b.ConnectionCount, current, current+1) {
-			return true // Successfully incremented the connection count.
+			return true
 		}
-		// If the CAS operation failed, retry.
 	}
 }
 
@@ -86,5 +85,5 @@ func (b *Backend) IncrementConnections() bool {
 // This should be called when a connection to the backend is closed or terminated.
 // It ensures that the connection count accurately reflects the current load.
 func (b *Backend) DecrementConnections() {
-	atomic.AddInt32(&b.ConnectionCount, -1) // Atomically decrement the connection count.
+	atomic.AddInt32(&b.ConnectionCount, -1)
 }

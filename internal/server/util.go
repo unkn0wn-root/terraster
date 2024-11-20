@@ -18,10 +18,10 @@ import (
 func (s *Server) hostNameNoPort(host string) string {
 	h, _, err := net.SplitHostPort(host)
 	if err != nil {
-		return "" // Return empty string if the host string does not contain a valid port.
+		return ""
 	}
 
-	return h // Return the hostname without the port.
+	return h
 }
 
 // servicePort determines the port number to use for a service.
@@ -35,10 +35,10 @@ func (s *Server) hostNameNoPort(host string) string {
 // - int: The port number to use for the service.
 func (s *Server) servicePort(port int) int {
 	if port != 0 {
-		return port // Return the specified port if it's non-zero.
+		return port
 	}
 
-	return DefaultHTTPPort // Default to the standard HTTP port (e.g., 80) if no port is specified.
+	return DefaultHTTPPort
 }
 
 // hasHTTPSRedirects checks if any of the configured services require HTTP to HTTPS redirection.
@@ -65,24 +65,23 @@ func (s *Server) hasHTTPSRedirects() bool {
 // - port: The determined port number (either extracted from the hostPort or a default based on TLS).
 // - err: An error if the hostPort string is malformed or the port is not a valid integer.
 func parseHostPort(hostPort string, tlsState *tls.ConnectionState) (host string, port int, err error) {
-	// Fast path for the common case where no port is specified in the host string.
 	if !strings.Contains(hostPort, ":") {
 		if tlsState != nil {
-			return hostPort, DefaultHTTPSPort, nil // Default to HTTPS port if TLS is enabled.
+			return hostPort, DefaultHTTPSPort, nil
 		}
-		return hostPort, DefaultHTTPPort, nil // Default to HTTP port if TLS is not enabled.
+		return hostPort, DefaultHTTPPort, nil
 	}
 
 	// Slow path: parse the host and port from the hostPort string.
 	host, portStr, err := net.SplitHostPort(hostPort)
 	if err != nil {
-		return "", 0, err // Return error if hostPort is not in a valid "host:port" format.
+		return "", 0, err
 	}
 
 	port, err = strconv.Atoi(portStr)
 	if err != nil {
-		return "", 0, err // Return error if the port part is not a valid integer.
+		return "", 0, err
 	}
 
-	return host, port, nil // Return the parsed hostname and port.
+	return host, port, nil
 }
