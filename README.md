@@ -54,6 +54,11 @@ services:
     tls: # service tls configuration
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
+    # service specific middlewares - will override global
+    middleware:
+      - rate_limit:
+          requests_per_second: 2500
+          burst: 500
     # service health check configuration - will be used by each location
     # can be overwrite by location config
     health_check:
@@ -132,9 +137,20 @@ admin_api:
     requests_per_second: 10
     burst: 20
 
-rate_limit: # global rate limit for each service if not defined in the service
-  requests_per_second: 100
-  burst: 150
+# global middlewares enabled for all services
+middleware:
+  - rate_limit: # global rate limit for each service if not defined in the service
+      requests_per_second: 100
+      burst: 150
+  - security:
+      hsts: true
+      hsts_max_age: 31536000
+      frame_options: DENY
+      content_type_options: true
+      xss_protection: true
+  - circuit_breaker:
+      threshold: 5
+      timeout: 60s
 
 connection_pool:
   max_idle: 100
@@ -158,39 +174,6 @@ backends:
   - url: http://localhost:8082
 ```
 
-### Advanced Configuration
-```yaml
-port: 8080
-admin_port: 8081
-algorithm: adaptive
-
-tls:
-  enabled: true
-  domains:
-    - example.com
-  cert_dir: /etc/certs
-  auto_cert: true
-
-rate_limit:
-  requests_per_second: 1000
-  burst: 50
-
-circuit_breaker:
-  threshold: 5
-  timeout: 60s
-
-connection_pool:
-  max_idle: 100
-  max_open: 1000
-  idle_timeout: 90s
-
-security:
-  hsts: true
-  hsts_max_age: 31536000
-  frame_options: DENY
-  content_type_options: true
-  xss_protection: true
-```
 ## API Examples
 
 ### Admin API
