@@ -100,27 +100,27 @@ type Location struct {
 }
 
 type CircuitBreaker struct {
-	FailureThreshold int
-	ResetTimeout     time.Duration
+	FailureThreshold int           `yaml:"failure_threshold"`
+	ResetTimeout     time.Duration `yaml:"reset_timeout"`
 }
 
 type SecurityConfig struct {
-	HSTS                  bool
-	HSTSMaxAge            int
-	HSTSIncludeSubDomains bool
-	HSTSPreload           bool
-	FrameOptions          string
-	ContentTypeOptions    bool
-	XSSProtection         bool
+	HSTS                  bool   `yaml:"hsts"`
+	HSTSMaxAge            int    `yaml:"hsts_max_age"`
+	HSTSIncludeSubDomains bool   `yaml:"hsts_include_subdomains"`
+	HSTSPreload           bool   `yaml:"hsts_preload"`
+	FrameOptions          string `yaml:"frame_options"`
+	ContentTypeOptions    bool   `yaml:"content_type_options"`
+	XSSProtection         bool   `yaml:"xss_protection"`
 }
 
 type CORS struct {
-	AllowedOrigins   []string
-	AllowedMethods   []string
-	AllowedHeaders   []string
-	ExposedHeaders   []string
-	AllowCredentials bool
-	MaxAge           int
+	AllowedOrigins   []string `yaml:"allowed_origins"`
+	AllowedMethods   []string `yaml:"allowed_methods"`
+	AllowedHeaders   []string `yaml:"allowed_headers"`
+	ExposedHeaders   []string `yaml:"exposed_headers"`
+	AllowCredentials bool     `yaml:"allow_credentials"`
+	MaxAge           int      `yaml:"max_age"`
 }
 
 var DefaultHealthCheck = HealthCheckConfig{
