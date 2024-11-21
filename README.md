@@ -24,7 +24,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
   - [x] Connection pooling
   - [x] Circuit breaker
   - [x] Rate limiting
-  - [ ] Compression - WIP
+  - [x] Compression
   - [ ] Custom Request Headers
   - [x] Dynamic middleware plug-in
 
