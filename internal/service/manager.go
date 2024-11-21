@@ -83,10 +83,16 @@ func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 
 	// If no services are defined in the config but backends are provided, create a default service.
 	if len(cfg.Services) == 0 && len(cfg.Backends) > 0 {
+		host := cfg.Host
+		if host == "" {
+			host = "localhost"
+		}
+
 		defaultService := config.Service{
 			Name: "default",
-			Host: "localhost",
+			Host: host,
 			Port: 8080,
+			TLS:  &cfg.TLS,
 			Locations: []config.Location{
 				{
 					Path:         "",

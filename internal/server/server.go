@@ -482,15 +482,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.cancel()
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := s.adminServer.Shutdown(ctx); err != nil {
-			s.logger.Error("Admin server shutdown error", zap.Error(err))
-		} else {
-			s.logger.Info("Admin server shutdown successfully")
-		}
-	}()
+	// admin server is optional so checking if enabled first
+	if s.adminServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.adminServer.Shutdown(ctx); err != nil {
+				s.logger.Error("Admin server shutdown error", zap.Error(err))
+			} else {
+				s.logger.Info("Admin server shutdown successfully")
+			}
+		}()
+	}
 
 	// Initiate shutdown of all service servers.
 	for _, srv := range s.servers {

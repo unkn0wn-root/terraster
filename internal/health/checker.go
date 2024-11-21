@@ -86,7 +86,6 @@ func (c *Checker) Stop() {
 		c.cancel()
 		c.wg.Wait()
 		c.running.Store(false)
-		c.logger.Println("Health checker stopped")
 	}
 }
 
