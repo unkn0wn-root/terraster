@@ -59,6 +59,7 @@ middleware:
       requests_per_second: 100
       burst: 30
 
+# this can be omitted/removed or changed to 'false' if you only want your load balancer on http (for any reason)
 tls:
   enabled: true
   cert_file: "./certificates/my_cert.pem"
