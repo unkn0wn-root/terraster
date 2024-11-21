@@ -254,7 +254,7 @@ func (s *Server) startAdminServer() error {
 	}
 
 	admSvcType := service.HTTP
-	if s.config.TLS.Enabled {
+	if s.apiConfig.AdminAPI.TLS.Enabled {
 		admSvcType = service.HTTPS
 	}
 
