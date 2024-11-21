@@ -18,7 +18,7 @@ import (
 
 // AdminAPI represents the administrative API for managing the load balancer.
 type AdminAPI struct {
-	Enabled        bool
+	enabled        bool
 	serviceManager *service.Manager
 	mux            *http.ServeMux
 	config         *config.APIConfig
@@ -36,7 +36,7 @@ func NewAdminAPI(
 	logger *zap.Logger,
 ) *AdminAPI {
 	api := &AdminAPI{
-		Enabled:        cfg.AdminAPI.Enabled,
+		enabled:        cfg.AdminAPI.Enabled,
 		serviceManager: manager,
 		mux:            http.NewServeMux(),
 		config:         cfg,
