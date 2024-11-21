@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	apierr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/auth/service"
 	"golang.org/x/time/rate"
 )
@@ -48,9 +49,9 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		claims, err := m.authService.ValidateToken(tokenParts[1])
 		if err != nil {
 			switch err {
-			case service.ErrRevokedToken:
+			case apierr.ErrRevokedToken:
 				http.Error(w, "Token has been revoked", http.StatusUnauthorized)
-			case service.ErrInvalidToken:
+			case apierr.ErrInvalidToken:
 				http.Error(w, "Invalid token", http.StatusUnauthorized)
 			default:
 				http.Error(w, "Authentication failed", http.StatusUnauthorized)
