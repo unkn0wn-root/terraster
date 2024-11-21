@@ -2,7 +2,7 @@ package health
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/terraster/internal/pool"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Supported health check types
@@ -26,14 +28,15 @@ type Checker struct {
 	pools    []*pool.ServerPool
 	mu       sync.RWMutex
 	client   *http.Client
-	logger   *log.Logger
+	logger   *zap.Logger
 	running  atomic.Bool
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
+	prefix   string
 }
 
 // creates a new health checker with the given interval and timeout.
-func NewChecker(interval, timeout time.Duration, logger *log.Logger) *Checker {
+func NewChecker(interval, timeout time.Duration, logger *zap.Logger, prefix string) *Checker {
 	return &Checker{
 		interval: interval,
 		timeout:  timeout,
@@ -42,6 +45,7 @@ func NewChecker(interval, timeout time.Duration, logger *log.Logger) *Checker {
 			Timeout: timeout,
 		},
 		logger: logger,
+		prefix: prefix,
 	}
 }
 
@@ -54,7 +58,7 @@ func (c *Checker) RegisterPool(p *pool.ServerPool) {
 // begins the health checking process.
 func (c *Checker) Start(ctx context.Context) {
 	if !c.running.CompareAndSwap(false, true) {
-		c.logger.Println("Health checker already running")
+		c.logf(zapcore.InfoLevel, "Health checker already running")
 		return
 	}
 
@@ -67,13 +71,14 @@ func (c *Checker) Start(ctx context.Context) {
 		ticker := time.NewTicker(c.interval)
 		defer ticker.Stop()
 
-		c.logger.Println("Health checker started")
+		c.logf(zapcore.InfoLevel, "Health checker started")
+
 		for {
 			select {
 			case <-ticker.C:
 				c.checkAllPools()
 			case <-ctx.Done():
-				c.logger.Println("Health checker stopping")
+				c.logf(zapcore.InfoLevel, "Health checker stopping")
 				return
 			}
 		}
@@ -129,7 +134,7 @@ func (c *Checker) checkBackend(b *pool.Backend) {
 	case HealthCheckTypeTCP:
 		c.performTCPHealthCheck(b)
 	default:
-		c.logger.Printf("Unsupported health check type '%s' for backend %s", b.HealthCheckCfg.Type, b.URL)
+		c.logf(zap.WarnLevel, "Unsupported health check type '%s' for backend %s", b.HealthCheckCfg.Type, b.URL)
 		c.updateBackendHealth(b, false)
 	}
 }
@@ -146,14 +151,14 @@ func (c *Checker) performHTTPHealthCheck(b *pool.Backend) {
 
 	req, err := http.NewRequest("GET", healthURL.String(), nil)
 	if err != nil {
-		c.logger.Printf("Failed to create HTTP health check request for %s: %v", b.URL, err)
+		c.logf(zap.WarnLevel, "Failed to create HTTP health check request for %s: %v", b.URL, err)
 		c.updateBackendHealth(b, false)
 		return
 	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		c.logger.Printf("HTTP health check failed for %s: %v", b.URL, err)
+		c.logf(zap.WarnLevel, "HTTP health check failed for %s: %v", b.URL, err)
 		c.updateBackendHealth(b, false)
 		return
 	}
@@ -162,7 +167,7 @@ func (c *Checker) performHTTPHealthCheck(b *pool.Backend) {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		c.updateBackendHealth(b, true)
 	} else {
-		c.logger.Printf("HTTP health check returned non-2xx for %s: %d", b.URL, resp.StatusCode)
+		c.logf(zap.WarnLevel, "HTTP health check returned non-2xx for %s: %d", b.URL, resp.StatusCode)
 		c.updateBackendHealth(b, false)
 	}
 }
@@ -184,7 +189,7 @@ func (c *Checker) performTCPHealthCheck(b *pool.Backend) {
 
 	conn, err := net.DialTimeout("tcp", tcpAddress, c.timeout)
 	if err != nil {
-		c.logger.Printf("TCP health check failed for %s: %v", b.URL, err)
+		c.logf(zap.WarnLevel, "TCP health check failed for %s: %v", b.URL, err)
 		c.updateBackendHealth(b, false)
 		return
 	}
@@ -199,7 +204,7 @@ func (c *Checker) updateBackendHealth(b *pool.Backend, healthy bool) {
 		atomic.StoreInt32(&b.FailureCount, 0)
 		if newSuccess >= int32(b.HealthCheckCfg.Thresholds.Healthy) {
 			if !b.Alive.Load() {
-				c.logger.Printf("Backend %s marked as healthy", b.URL)
+				c.logf(zap.InfoLevel, "Backend %s marked as healthy", b.URL)
 				s := findServerPool(c.pools, b)
 				if s != nil {
 					s.MarkBackendStatus(b.URL, true)
@@ -211,13 +216,26 @@ func (c *Checker) updateBackendHealth(b *pool.Backend, healthy bool) {
 		atomic.StoreInt32(&b.SuccessCount, 0)
 		if newFailure >= int32(b.HealthCheckCfg.Thresholds.Unhealthy) {
 			if b.Alive.Load() {
-				c.logger.Printf("Backend %s marked as unhealthy", b.URL)
+				c.logf(zap.WarnLevel, "Backend %s marked as unhealthy", b.URL)
 				s := findServerPool(c.pools, b)
 				if s != nil {
 					s.MarkBackendStatus(b.URL, false)
 				}
 			}
 		}
+	}
+}
+
+// Helper method to log with prefix
+func (c *Checker) logf(level zapcore.Level, template string, args ...interface{}) {
+	msg := fmt.Sprintf(template, args...)
+	switch level {
+	case zapcore.InfoLevel:
+		c.logger.Info(msg, zap.String("prefix", c.prefix))
+	case zapcore.WarnLevel:
+		c.logger.Warn(msg, zap.String("prefix", c.prefix))
+	case zapcore.ErrorLevel:
+		c.logger.Error(msg, zap.String("prefix", c.prefix))
 	}
 }
 

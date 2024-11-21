@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -118,12 +117,11 @@ func NewServer(
 		}
 
 		prefix := "[HealthChecker-" + svc.Name + "]"
-		lc := logger.NewZapWriter(zLog, zap.InfoLevel, prefix)
-
 		hc := health.NewChecker(
 			hcCfg.Interval,
 			hcCfg.Timeout,
-			log.New(lc, "", 0),
+			zLog,
+			prefix,
 		)
 		s.healthCheckers[svc.Name] = hc
 
