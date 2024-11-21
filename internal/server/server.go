@@ -93,6 +93,11 @@ func NewServer(
 		return nil, err
 	}
 
+	var adminAPI *admin.AdminAPI
+	if apiCfg.AdminAPI.Enabled {
+		adminAPI = admin.NewAdminAPI(serviceManager, apiCfg, authSrvc, zLog)
+	}
+
 	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
@@ -100,6 +105,7 @@ func NewServer(
 		apiConfig:      apiCfg,
 		healthCheckers: make(map[string]*health.Checker),
 		serviceManager: serviceManager,
+		adminAPI:       adminAPI,
 		ctx:            ctx,
 		cancel:         cancel,
 		servers:        make([]*http.Server, 0),
@@ -128,10 +134,6 @@ func NewServer(
 		for _, loc := range svc.Locations {
 			hc.RegisterPool(loc.ServerPool)
 		}
-	}
-
-	if s.apiConfig.AdminAPI.Enabled {
-		s.adminAPI = admin.NewAdminAPI(serviceManager, apiCfg, authSrvc, zLog)
 	}
 
 	return s, nil
@@ -174,7 +176,7 @@ func (s *Server) Start() error {
 		}
 	}
 
-	if !s.apiConfig.AdminAPI.Enabled {
+	if s.adminAPI == nil {
 		s.logger.Warn("Admin API is not enabled. Bypassing admin server setup")
 		return nil
 	}
