@@ -251,13 +251,8 @@ func (s *Server) startAdminServer() error {
 		IdleTimeout:  IdleTimeout,
 	}
 
-	admSvcType := service.HTTP
-	if s.apiConfig.AdminAPI.TLS.Enabled {
-		admSvcType = service.HTTPS
-	}
-
 	s.wg.Add(1)
-	go s.runServer(s.adminServer, s.errorChan, "admin", admSvcType)
+	go s.runServer(s.adminServer, s.errorChan, "admin", service.HTTP) // if you need TLS - use LB
 
 	return nil
 }
