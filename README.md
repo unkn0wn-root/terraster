@@ -169,9 +169,20 @@ connection_pool:
 ```yaml
 port: 8080
 algorithm: round-robin
+host: "lb.domain.com"
 backends:
   - url: http://localhost:8081
   - url: http://localhost:8082
+
+middleware:
+  - rate_limit:
+      requests_per_second: 100
+      burst: 30
+
+tls:
+  enabled: true
+  cert_file: "./certificates/my_cert.pem"
+  key_file: "./certificates/my_cert_privatekey.key"
 ```
 
 ## API Examples

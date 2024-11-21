@@ -59,6 +59,10 @@ func (s *Server) createServiceMiddleware(svc *service.ServiceInfo) http.Handler 
 
 				s.logger.Info("Service CORS middleware overridden",
 					zap.String("service", svc.Name))
+			case mw.Compression:
+				// If a compression configuration is provided, create and replace the existing compression middleware.
+				compressor := middleware.NewCompressionMiddleware()
+				chain.Replace(compressor)
 			}
 		}
 	}

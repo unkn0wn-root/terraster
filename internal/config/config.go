@@ -121,6 +121,7 @@ type Middleware struct {
 	CircuitBreaker *CircuitBreaker  `yaml:"circuit_breaker"` // Circuit breaker configuration.
 	Security       *SecurityConfig  `yaml:"security"`        // Security headers configuration.
 	CORS           *CORS            `yaml:"cors"`            // CORS (Cross-Origin Resource Sharing) configuration.
+	Compression    bool             `yaml:"compression"`     // Enables compression if true.
 }
 
 // Location defines the routing and backend configurations for a specific path within a service.
