@@ -2,7 +2,6 @@ package service
 
 import (
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,27 +10,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	autherr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/auth/database"
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 	"github.com/unkn0wn-root/terraster/internal/auth/validation"
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	// ErrUserLocked is returned when a user's account is temporarily locked due to excessive failed login attempts.
-	ErrUserLocked = errors.New("account is temporarily locked")
-	// ErrInvalidToken is returned when a provided token is invalid or has expired.
-	ErrInvalidToken = errors.New("invalid or expired token")
-	// ErrRevokedToken is returned when a token has been explicitly revoked.
-	ErrRevokedToken = errors.New("token has been revoked")
-	// ErrMaxTokensReached is returned when a user has reached the maximum number of active tokens allowed.
-	ErrMaxTokensReached = errors.New("maximum number of active tokens reached")
-	// ErrInvalidCredentials is returned when a user provides incorrect authentication credentials.
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	// ErrUsernameTaken is returned when attempting to create a user with a username that already exists.
-	ErrUsernameTaken = errors.New("username already exists")
-	// ErrPasswordExpired is returned when a user's password has expired and needs to be changed.
-	ErrPasswordExpired = errors.New("password has expired")
 )
 
 // AuthConfig holds the configuration settings for the authentication service.
@@ -66,6 +49,14 @@ type AuthService struct {
 // It sets up the authentication service with the provided database and configuration,
 // and starts a background routine for cleaning up expired tokens.
 func NewAuthService(db *database.SQLiteDB, config AuthConfig) *AuthService {
+	if config.PasswordExpiryDays == 0 {
+		config.PasswordExpiryDays = 1
+	}
+
+	if config.PasswordHistoryLimit == 0 {
+		config.PasswordHistoryLimit = 5
+	}
+
 	s := &AuthService{
 		db:              db,
 		config:          config,
@@ -94,6 +85,8 @@ func (s *AuthService) Close() {
 // IsPasswordExpired checks whether a user's password has expired based on the PasswordChangedAt timestamp.
 // It returns true if the password is older than the configured passwordExpiry duration.
 func (s *AuthService) IsPasswordExpired(user *models.User) bool {
+	fmt.Println("Password Changed At: ", user.PasswordChangedAt)
+	fmt.Println("Password Expiry: ", s.passwordExpiry)
 	return time.Since(user.PasswordChangedAt) > s.passwordExpiry
 }
 
@@ -207,10 +200,10 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 func (s *AuthService) CreateUser(username, password string, role models.Role) error {
 	existing, err := s.db.GetUserByUsername(username)
 	if err == nil && existing != nil {
-		return ErrUsernameTaken
+		return autherr.ErrUsernameTaken
 	}
 
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, autherr.ErrUserNotFound) {
 		return fmt.Errorf("error checking username: %w", err)
 	}
 
@@ -242,11 +235,11 @@ func (s *AuthService) CreateUser(username, password string, role models.Role) er
 func (s *AuthService) AuthenticateUser(username, password string, r *http.Request) (*models.Token, error) {
 	user, err := s.db.GetUserByUsername(username)
 	if err != nil {
-		return nil, ErrInvalidCredentials
+		return nil, autherr.ErrInvalidCredentials
 	}
 
 	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
-		return nil, ErrUserLocked
+		return nil, autherr.ErrUserLocked
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
@@ -258,11 +251,11 @@ func (s *AuthService) AuthenticateUser(username, password string, r *http.Reques
 		}
 
 		s.db.UpdateUser(user)
-		return nil, ErrInvalidCredentials
+		return nil, autherr.ErrInvalidCredentials
 	}
 
 	if s.IsPasswordExpired(user) {
-		return nil, ErrPasswordExpired
+		return nil, autherr.ErrPasswordExpired
 	}
 
 	user.FailedAttempts = 0
@@ -293,7 +286,7 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 	}
 
 	if activeTokens >= s.config.MaxActiveTokens {
-		return nil, ErrMaxTokensReached
+		return nil, autherr.ErrMaxTokensReached
 	}
 
 	jwtID, err := generateRandomString(32)
@@ -344,21 +337,21 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 func (s *AuthService) RefreshToken(refreshToken string, r *http.Request) (*models.Token, error) {
 	claims, err := s.validateRefreshToken(refreshToken)
 	if err != nil {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	userID, ok := claims["user_id"].(float64)
 	if !ok {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	oldToken, err := s.db.GetTokenByRefreshToken(refreshToken, int64(userID))
 	if err != nil {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	if oldToken.RevokedAt != nil {
-		return nil, ErrRevokedToken
+		return nil, autherr.ErrRevokedToken
 	}
 
 	user, err := s.db.GetUserByID(oldToken.UserID)
@@ -396,29 +389,29 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 	})
 
 	if err != nil || !token.Valid {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	// Extract the claims from the token.
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	// Retrieve the JWT ID (JTI) from the claims.
 	jti, ok := claims["jti"].(string)
 	if !ok {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	// Validate the token against the database to ensure it's not revoked.
 	dbToken, err := s.db.GetTokenByJTI(jti)
 	if err != nil {
-		return nil, ErrInvalidToken
+		return nil, autherr.ErrInvalidToken
 	}
 
 	if dbToken.RevokedAt != nil {
-		return nil, ErrRevokedToken
+		return nil, autherr.ErrRevokedToken
 	}
 
 	// Update the last used timestamp of the token.
@@ -462,12 +455,12 @@ func (s *AuthService) RevokeToken(tokenString string) error {
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return ErrInvalidToken
+		return autherr.ErrInvalidToken
 	}
 
 	jti, ok := claims["jti"].(string)
 	if !ok {
-		return ErrInvalidToken
+		return autherr.ErrInvalidToken
 	}
 
 	dbToken, err := s.db.GetTokenByJTI(jti)

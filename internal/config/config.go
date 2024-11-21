@@ -18,13 +18,10 @@ type Config struct {
 	Host        string             `yaml:"host"`            // The host on which the main server listens.
 	HTTPPort    int                `yaml:"http_port"`       // The port for handling HTTP (non-TLS) traffic.
 	HTTPSPort   int                `yaml:"https_port"`      // The port for handling HTTPS (TLS) traffic.
-	AdminPort   int                `yaml:"admin_port"`      // The port for the administrative API.
 	TLS         TLSConfig          `yaml:"tls"`             // TLS configuration settings.
 	Algorithm   string             `yaml:"algorithm"`       // The load balancing algorithm to use (e.g., "round-robin").
 	ConnPool    PoolConfig         `yaml:"connection_pool"` // Configuration for the connection pool.
 	Backends    []BackendConfig    `yaml:"backends"`        // A list of backend services.
-	Auth        APIAuthConfig      `yaml:"auth"`            // Authentication configuration for the API.
-	AdminAPI    AdminAPIConfig     `yaml:"admin_api"`       // Configuration for the administrative API.
 	HealthCheck *HealthCheckConfig `yaml:"health_check"`    // Global health check configuration.
 	Services    []Service          `yaml:"services"`        // A list of services with their specific configurations.
 	Middleware  []Middleware       `yaml:"middleware"`      // Global middleware configurations.
@@ -79,14 +76,6 @@ type PoolConfig struct {
 	MaxIdle     int           `yaml:"max_idle"`     // Maximum number of idle connections in the pool.
 	MaxOpen     int           `yaml:"max_open"`     // Maximum number of open connections allowed.
 	IdleTimeout time.Duration `yaml:"idle_timeout"` // Duration after which idle connections are closed. e.g., "90s"
-}
-
-// AdminAPIConfig holds configuration settings for the administrative API.
-// It includes the host address, enable flag, and rate limiting parameters.
-type AdminAPIConfig struct {
-	Host      string          `yaml:"host"`       // Host address for the admin API.
-	Enabled   bool            `yaml:"enabled"`    // Indicates whether the admin API is enabled.
-	RateLimit RateLimitConfig `yaml:"rate_limit"` // Rate limiting configuration for the admin API.
 }
 
 // Service represents a single service with its specific configurations.

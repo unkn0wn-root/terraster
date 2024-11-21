@@ -1,5 +1,4 @@
 port: 443
-admin_port: 4433
 
 services:
   - name: backend-api # service name
@@ -58,18 +57,6 @@ health_check:
   interval: 10s
   timeout: 2s
   path: /health
-
-# api authentication
-auth:
-  jwt_secret: mySecretKey
-  db_path: ./auth.db
-  password_expiry_days: 7
-  password_history_size: 5
-
-admin_api:
-  rate_limit:
-    requests_per_second: 10
-    burst: 20
 
 rate_limit: # global rate limit for each service if not defined in the service
   requests_per_second: 100

@@ -70,20 +70,12 @@ tls:
 ```yaml
 ### GLOBAL CONFIG ###
 port: 443
-admin_port: 4433
 
 # global health check will be used by every service that don't have health_check specified
 health_check:
   interval: 10s
   timeout: 2s
   path: /health
-
-# enables Admin API - if you omit this, admin api will be disabled (off by default)
-admin_api:
-  enabled: true
-  rate_limit:
-    requests_per_second: 10
-    burst: 20
 
 # global middlewares enabled for all services
 middleware:
@@ -190,20 +182,28 @@ services:
 ### Admin API
 
 1. Database setup
-- First, you need to create database config or use provided in repo.
+- First, you need to create database configuration file or use provided in repo.
 ```yaml
-db_path: "./auth.db"
-jwt_secret: "HelloFormTheOtherSide"
-token_cleanup_interval: "1h"
+api:
+  enabled: true
+  host: localhost
+  port: 8081
+
+database:
+  path: "./api.db"
+
+auth:
+  jwt_secret: "HelloFormTheOtherSide"
+  token_cleanup_interval: "7h"
+  password_expiry_days: 3
 ```
 
 - Then, create API admin user
 ```console
-go run scripts/database/api_util.go --config ./db.yaml -username "lb_admin" -password "Test953.Hello" -role "admin"
+go run scripts/database/api_util.go --config ./api.config.yaml -username "lb_admin" -password "Test953.Hello" -role "admin"
 ```
 
-- And remember to enable Admin API in main config --> 'enabled: true'
-
+- Admin API is disabled by default so you need to set 'enabled: true' in API configuration to enable it
 
 2. Get Backend Status:
 ```bash

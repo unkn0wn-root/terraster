@@ -21,7 +21,7 @@ type AdminAPI struct {
 	enabled        bool
 	serviceManager *service.Manager
 	mux            *http.ServeMux
-	config         *config.Config
+	config         *config.APIConfig
 	authService    *auth_service.AuthService
 	authHandler    *handlers.AuthHandler
 	logger         *zap.Logger
@@ -31,7 +31,7 @@ type AdminAPI struct {
 // It initializes the HTTP mux and registers all API routes.
 func NewAdminAPI(
 	manager *service.Manager,
-	cfg *config.Config,
+	cfg *config.APIConfig,
 	authService *auth_service.AuthService,
 	logger *zap.Logger,
 ) *AdminAPI {
@@ -89,9 +89,6 @@ func (a *AdminAPI) Handler() http.Handler {
 	middlewares = append(middlewares,
 		logger,
 		NewAdminAccessLogMiddleware(),
-		middleware.NewRateLimiterMiddleware(
-			a.config.AdminAPI.RateLimit.RequestsPerSecond,
-			a.config.AdminAPI.RateLimit.Burst),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)

@@ -29,7 +29,7 @@ func main() {
 		password   = flag.String("password", "", "Password for the new user")
 		role       = flag.String("role", "reader", "Role for the new user (admin or reader)")
 		listUsers  = flag.Bool("list", false, "List all users")
-		configPath = flag.String("config", "./db.yaml", "Path to configuration file")
+		configPath = flag.String("config", "./api.config.yaml", "Path to configuration file")
 	)
 	flag.Parse()
 	if *configPath == "" {
@@ -43,10 +43,10 @@ func main() {
 
 	// Initialize configuration
 	apiCfg := Config{
-		DBPath:               cfg.DBPath,
-		JWTSecret:            cfg.JWTSecret,
-		PasswordMinLength:    cfg.PasswordMinLength,
-		TokenCleanupInterval: cfg.TokenCleanupInterval,
+		DBPath:               cfg.AdminDatabase.Path,
+		JWTSecret:            cfg.AdminAuth.JWTSecret,
+		PasswordMinLength:    cfg.AdminAuth.PasswordMinLength,
+		TokenCleanupInterval: cfg.AdminAuth.TokenCleanupInterval,
 		RequireUppercase:     true,
 		RequireNumber:        true,
 		RequireSpecialChar:   true,

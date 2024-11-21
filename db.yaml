@@ -1,4 +1,0 @@
-db_path: "./auth.db"
-jwt_secret: "HelloFormTheOtherSide"
-token_cleanup_interval: "1h"
-

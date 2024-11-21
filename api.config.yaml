@@ -1,0 +1,13 @@
+api:
+  enabled: true
+  host: localhost
+  port: 8081
+
+database:
+  path: "./auth.db"
+
+auth:
+  jwt_secret: "HelloFormTheOtherSide"
+  token_cleanup_interval: "7h"
+  password_expiry_days: 3
+

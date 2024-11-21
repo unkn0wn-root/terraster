@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -64,6 +65,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		case service.ErrInvalidCredentials:
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		default:
+			fmt.Println(err)
 			http.Error(w, "Authentication failed", http.StatusInternalServerError)
 		}
 		return
