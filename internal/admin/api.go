@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/unkn0wn-root/terraster/internal/auth/handlers"
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"

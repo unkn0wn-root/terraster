@@ -14,12 +14,13 @@ import (
 )
 
 type Config struct {
-	DBPath             string
-	JWTSecret          string
-	PasswordMinLength  int
-	RequireUppercase   bool
-	RequireNumber      bool
-	RequireSpecialChar bool
+	DBPath               string
+	JWTSecret            string
+	PasswordMinLength    int
+	TokenCleanupInterval string
+	RequireUppercase     bool
+	RequireNumber        bool
+	RequireSpecialChar   bool
 }
 
 func main() {
@@ -28,46 +29,53 @@ func main() {
 		password   = flag.String("password", "", "Password for the new user")
 		role       = flag.String("role", "reader", "Role for the new user (admin or reader)")
 		listUsers  = flag.Bool("list", false, "List all users")
-		configPath = flag.String("config", "./config.yaml", "Path to configuration file")
+		configPath = flag.String("config", "./db.yaml", "Path to configuration file")
 	)
 	flag.Parse()
 	if *configPath == "" {
 		log.Fatalf("Config file path is required")
 	}
 
-	cfg, err := config.Load(*configPath)
+	cfg, err := config.LoadAPIConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Initialize configuration
-	config := Config{
-		DBPath:             cfg.Auth.DBPath,
-		JWTSecret:          cfg.Auth.JWTSecret,
-		PasswordMinLength:  12,
-		RequireUppercase:   true,
-		RequireNumber:      true,
-		RequireSpecialChar: true,
+	apiCfg := Config{
+		DBPath:               cfg.DBPath,
+		JWTSecret:            cfg.JWTSecret,
+		PasswordMinLength:    cfg.PasswordMinLength,
+		TokenCleanupInterval: cfg.TokenCleanupInterval,
+		RequireUppercase:     true,
+		RequireNumber:        true,
+		RequireSpecialChar:   true,
 	}
 
 	// Initialize database
-	db, err := database.NewSQLiteDB(config.DBPath)
+	db, err := database.NewSQLiteDB(apiCfg.DBPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	tokenDuration, err := time.ParseDuration(apiCfg.TokenCleanupInterval)
+	if err != nil {
+		tokenDuration = 24 * time.Hour
+	}
+
 	// Initialize auth service
 	authService := service.NewAuthService(db, service.AuthConfig{
-		JWTSecret:          []byte(config.JWTSecret),
-		TokenExpiry:        7 * 24 * 60 * 60,   // 7 days
-		RefreshTokenExpiry: 7 * 24 * time.Hour, // 7-day refresh token
-		MaxLoginAttempts:   5,
-		LockDuration:       15 * 60, // 15 minutes
-		MaxActiveTokens:    5,
-		PasswordMinLength:  config.PasswordMinLength,
-		RequireUppercase:   config.RequireUppercase,
-		RequireNumber:      config.RequireNumber,
-		RequireSpecialChar: config.RequireSpecialChar,
+		JWTSecret:            []byte(apiCfg.JWTSecret),
+		TokenExpiry:          7 * 24 * 60 * 60, // 7 days
+		TokenCleanupInterval: tokenDuration,
+		RefreshTokenExpiry:   7 * 24 * time.Hour, // 7-day refresh token
+		MaxLoginAttempts:     5,
+		LockDuration:         15 * 60, // 15 minutes
+		MaxActiveTokens:      5,
+		PasswordMinLength:    apiCfg.PasswordMinLength,
+		RequireUppercase:     apiCfg.RequireUppercase,
+		RequireNumber:        apiCfg.RequireNumber,
+		RequireSpecialChar:   apiCfg.RequireSpecialChar,
 	})
 
 	// Handle list users command

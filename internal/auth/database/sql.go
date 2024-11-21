@@ -11,50 +11,51 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 )
 
+// Schema for SQLite database defining the tables for users, tokens, and audit logs
+// Includes foreign key constraints, default values, and indexing for optimized queries
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT NOT NULL,
-    last_login_at DATETIME,
-    last_login_ip TEXT,
-    failed_attempts INTEGER DEFAULT 0,
-    locked_until DATETIME,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    password_changed_at DATETIME NOT NULL,
-    previous_passwords TEXT -- Store as JSON array of hashed passwords
+    username TEXT UNIQUE NOT NULL,       -- Username must be unique.
+    password TEXT NOT NULL,              -- Stores hashed passwords.
+    role TEXT NOT NULL,                  -- Role of the user (e.g., admin, user).
+    last_login_at DATETIME,              -- Tracks the last login timestamp.
+    last_login_ip TEXT,                  -- IP address of the last login.
+    failed_attempts INTEGER DEFAULT 0,   -- Tracks failed login attempts.
+    locked_until DATETIME,               -- If set, user is locked until this time.
+    created_at DATETIME NOT NULL,        -- User creation timestamp.
+    updated_at DATETIME NOT NULL,        -- Timestamp for the last update.
+    password_changed_at DATETIME,        -- Tracks last password change time.
+    previous_passwords TEXT              -- JSON array of hashed previous passwords.
 );
 
 CREATE TABLE IF NOT EXISTS tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    token TEXT UNIQUE NOT NULL,
-    refresh_token_expires_at DATETIME,
-    jti TEXT UNIQUE NOT NULL,
-    expires_at DATETIME NOT NULL,
-    created_at DATETIME NOT NULL,
-    last_used_at DATETIME NOT NULL,
-    revoked_at DATETIME,
-    client_ip TEXT NOT NULL,
-    user_agent TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users (id)
+    user_id INTEGER NOT NULL,                -- References the user owning the token.
+    token TEXT UNIQUE NOT NULL,              -- JWT or similar token.
+    refresh_token_expires_at DATETIME,       -- Expiration timestamp of the refresh token.
+    jti TEXT UNIQUE NOT NULL,                -- Unique token identifier.
+    expires_at DATETIME NOT NULL,            -- Expiration timestamp of the token.
+    created_at DATETIME NOT NULL,            -- Token creation time.
+    last_used_at DATETIME NOT NULL,          -- Timestamp when the token was last used.
+    revoked_at DATETIME,                     -- Timestamp if the token was revoked.
+    client_ip TEXT NOT NULL,                 -- IP address associated with the token.
+    user_agent TEXT NOT NULL,                -- User agent string.
+    FOREIGN KEY (user_id) REFERENCES users (id) -- Foreign key linking to users.
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    action TEXT NOT NULL,
-    resource TEXT NOT NULL,
-    status TEXT NOT NULL,
-    ip TEXT NOT NULL,
-    user_agent TEXT NOT NULL,
-    details TEXT,
-    created_at DATETIME NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users (id)
+    user_id INTEGER,                         -- User associated with the log.
+    action TEXT NOT NULL,                    -- Action performed (e.g., login, update).
+    resource TEXT NOT NULL,                  -- Resource affected.
+    status TEXT NOT NULL,                    -- Status of the action (e.g., success, failure).
+    ip TEXT NOT NULL,                        -- IP address of the action initiator.
+    user_agent TEXT NOT NULL,                -- User agent of the initiator.
+    details TEXT,                            -- Additional details about the action.
+    created_at DATETIME NOT NULL,            -- Timestamp when the action occurred.
+    FOREIGN KEY (user_id) REFERENCES users (id) -- Foreign key linking to users.
 );
-
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_jti ON tokens(jti);
@@ -66,12 +67,16 @@ type SQLiteDB struct {
 	db *sql.DB
 }
 
+// NewSQLiteDB initializes a new SQLiteDB instance.
+// - Enables foreign key support.
+// - Ensures schema is created.
 func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 
+	// Ensures the connection to the database is valid
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
@@ -90,35 +95,37 @@ func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
 }
 
 // User methods
+// CreateUser inserts a new user into the users table.
 func (s *SQLiteDB) CreateUser(user *models.User) error {
 	_, err := s.db.Exec(`
         INSERT INTO users (
-            username, password, role, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?)
-    `, user.Username, user.Password, user.Role, time.Now(), time.Now())
+            username, password, role, created_at, updated_at, password_changed_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    `, user.Username, user.Password, user.Role, time.Now(), time.Now(), time.Now())
 	return err
 }
 
+// GetUserByUsername retrieves a user by their username.
+// - Returns the user record or an error if not found.
 func (s *SQLiteDB) GetUserByUsername(username string) (*models.User, error) {
 	var user models.User
 	err := s.db.QueryRow(`
-        SELECT id, username, password, role, last_login_at, last_login_ip,
-               failed_attempts, locked_until, created_at, updated_at
+        SELECT id, username, password, role, last_login_at,
+               failed_attempts, locked_until, created_at, updated_at, password_changed_at
         FROM users WHERE username = ?
     `, username).Scan(
 		&user.ID, &user.Username, &user.Password, &user.Role,
-		&user.LastLoginAt, &user.LastLoginIP, &user.FailedAttempts,
-		&user.LockedUntil, &user.CreatedAt, &user.UpdatedAt,
+		&user.LastLoginAt, &user.FailedAttempts,
+		&user.LockedUntil, &user.CreatedAt, &user.UpdatedAt, &user.PasswordChangedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, errors.New("user not found")
-		}
 		return nil, err
 	}
+
 	return &user, nil
 }
 
+// GetUserByID retrieves a user by their ID.
 func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 	var user models.User
 	err := s.db.QueryRow(`
@@ -143,13 +150,14 @@ func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, errors.New("user not found")
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
 	return &user, nil
 }
 
+// UpdateUser updates user-specific details such as last login and failed attempts.
 func (s *SQLiteDB) UpdateUser(user *models.User) error {
 	_, err := s.db.Exec(`
         UPDATE users SET
@@ -165,6 +173,7 @@ func (s *SQLiteDB) UpdateUser(user *models.User) error {
 }
 
 // Token methods
+// CreateToken inserts a new token into the tokens table.
 func (s *SQLiteDB) CreateToken(token *models.Token) error {
 	_, err := s.db.Exec(`
         INSERT INTO tokens (
@@ -176,6 +185,7 @@ func (s *SQLiteDB) CreateToken(token *models.Token) error {
 	return err
 }
 
+// GetTokenByJTI retrieves a token by its unique identifier.
 func (s *SQLiteDB) GetTokenByJTI(jti string) (*models.Token, error) {
 	var token models.Token
 	err := s.db.QueryRow(`
@@ -193,6 +203,7 @@ func (s *SQLiteDB) GetTokenByJTI(jti string) (*models.Token, error) {
 	return &token, nil
 }
 
+// UpdateToken updates a token's last used and revoked timestamps.
 func (s *SQLiteDB) UpdateToken(token *models.Token) error {
 	_, err := s.db.Exec(`
         UPDATE tokens SET
@@ -203,6 +214,7 @@ func (s *SQLiteDB) UpdateToken(token *models.Token) error {
 	return err
 }
 
+// CountActiveTokens returns the number of active tokens for a user.
 func (s *SQLiteDB) CountActiveTokens(userID int64) (int, error) {
 	var count int
 	err := s.db.QueryRow(`
@@ -214,6 +226,7 @@ func (s *SQLiteDB) CountActiveTokens(userID int64) (int, error) {
 	return count, err
 }
 
+// CleanupExpiredTokens removes tokens that have expired or were revoked.
 func (s *SQLiteDB) CleanupExpiredTokens() error {
 	_, err := s.db.Exec(`
         DELETE FROM tokens
@@ -224,6 +237,7 @@ func (s *SQLiteDB) CleanupExpiredTokens() error {
 }
 
 // Audit methods
+// CreateAuditLog inserts a new audit log into the audit_logs table.
 func (s *SQLiteDB) CreateAuditLog(log *models.AuditLog) error {
 	_, err := s.db.Exec(`
         INSERT INTO audit_logs (
@@ -235,6 +249,7 @@ func (s *SQLiteDB) CreateAuditLog(log *models.AuditLog) error {
 	return err
 }
 
+// GetUserSessions retrieves all active sessions for a user.
 func (s *SQLiteDB) GetUserSessions(userID int64) ([]models.Session, error) {
 	rows, err := s.db.Query(`
         SELECT token, expires_at, last_used_at, revoked_at,
@@ -277,6 +292,7 @@ func (s *SQLiteDB) GetUserSessions(userID int64) ([]models.Session, error) {
 	return sessions, nil
 }
 
+// UpdateUserPassword updates a user's password and previous passwords.
 func (s *SQLiteDB) UpdateUserPassword(user *models.User) error {
 	_, err := s.db.Exec(`
         UPDATE users SET
@@ -289,6 +305,7 @@ func (s *SQLiteDB) UpdateUserPassword(user *models.User) error {
 	return err
 }
 
+// RevokeAllUserTokens revokes all active tokens for a user.
 func (s *SQLiteDB) RevokeAllUserTokens(userID int64) error {
 	now := time.Now()
 	_, err := s.db.Exec(`
@@ -300,6 +317,7 @@ func (s *SQLiteDB) RevokeAllUserTokens(userID int64) error {
 	return err
 }
 
+// ListUsers retrieves a list of all users in the database.
 func (s *SQLiteDB) ListUsers() ([]models.User, error) {
 	rows, err := s.db.Query(`
         SELECT id, username, role, created_at, last_login_at
@@ -330,6 +348,7 @@ func (s *SQLiteDB) ListUsers() ([]models.User, error) {
 	return users, nil
 }
 
+// GetTokenByRefreshToken retrieves a token by its refresh token and user ID.
 func (s *SQLiteDB) GetTokenByRefreshToken(refreshToken string, userID int64) (*models.Token, error) {
 	var token models.Token
 	err := s.db.QueryRow(`

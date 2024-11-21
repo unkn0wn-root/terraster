@@ -89,16 +89,6 @@ type AdminAPIConfig struct {
 	RateLimit RateLimitConfig `yaml:"rate_limit"` // Rate limiting configuration for the admin API.
 }
 
-// APIAuthConfig defines the authentication configuration for the API.
-// It includes JWT secrets, database paths, token management settings, and password policies.
-type APIAuthConfig struct {
-	JWTSecret            string `yaml:"jwt_secret"`             // Secret key used for signing JWT tokens.
-	DBPath               string `yaml:"db_path"`                // Path to the authentication database.
-	TokenCleanupInterval int    `yaml:"token_cleanup_interval"` // Interval for cleaning up expired tokens.
-	PasswordExpiryDays   int    `yaml:"password_expiry_days"`   // Number of days after which passwords expire.
-	PasswordHistoryLimit int    `yaml:"password_history_limit"` // Number of previous passwords to remember and prevent reuse.
-}
-
 // Service represents a single service with its specific configurations.
 // It includes service identification, routing settings, TLS configurations,
 // redirection policies, health checks, middleware, and associated locations.
