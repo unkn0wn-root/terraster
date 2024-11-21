@@ -149,9 +149,6 @@ func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 		&user.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, sql.ErrNoRows
-		}
 		return nil, err
 	}
 	return &user, nil
