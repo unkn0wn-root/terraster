@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/golang-jwt/jwt/v4"
+	apierr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/auth/handlers"
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
@@ -341,9 +342,9 @@ func (a *AdminAPI) requireAuth(next http.Handler) http.Handler {
 		claims, err := a.authService.ValidateToken(token)
 		if err != nil {
 			switch err {
-			case auth_service.ErrInvalidToken:
+			case apierr.ErrInvalidToken:
 				http.Error(w, "Invalid token", http.StatusUnauthorized)
-			case auth_service.ErrRevokedToken:
+			case apierr.ErrRevokedToken:
 				http.Error(w, "Token has been revoked", http.StatusUnauthorized)
 			default:
 				http.Error(w, "Authentication failed", http.StatusUnauthorized)

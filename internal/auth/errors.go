@@ -1,4 +1,4 @@
-package autherr
+package apierr
 
 import "errors"
 

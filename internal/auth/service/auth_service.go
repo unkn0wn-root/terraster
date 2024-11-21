@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	autherr "github.com/unkn0wn-root/terraster/internal/auth"
+	apierr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/auth/database"
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 	"github.com/unkn0wn-root/terraster/internal/auth/validation"
@@ -200,10 +200,10 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 func (s *AuthService) CreateUser(username, password string, role models.Role) error {
 	existing, err := s.db.GetUserByUsername(username)
 	if err == nil && existing != nil {
-		return autherr.ErrUsernameTaken
+		return apierr.ErrUsernameTaken
 	}
 
-	if err != nil && !errors.Is(err, autherr.ErrUserNotFound) {
+	if err != nil && !errors.Is(err, apierr.ErrUserNotFound) {
 		return fmt.Errorf("error checking username: %w", err)
 	}
 
@@ -235,11 +235,11 @@ func (s *AuthService) CreateUser(username, password string, role models.Role) er
 func (s *AuthService) AuthenticateUser(username, password string, r *http.Request) (*models.Token, error) {
 	user, err := s.db.GetUserByUsername(username)
 	if err != nil {
-		return nil, autherr.ErrInvalidCredentials
+		return nil, apierr.ErrInvalidCredentials
 	}
 
 	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
-		return nil, autherr.ErrUserLocked
+		return nil, apierr.ErrUserLocked
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
@@ -251,11 +251,11 @@ func (s *AuthService) AuthenticateUser(username, password string, r *http.Reques
 		}
 
 		s.db.UpdateUser(user)
-		return nil, autherr.ErrInvalidCredentials
+		return nil, apierr.ErrInvalidCredentials
 	}
 
 	if s.IsPasswordExpired(user) {
-		return nil, autherr.ErrPasswordExpired
+		return nil, apierr.ErrPasswordExpired
 	}
 
 	user.FailedAttempts = 0
@@ -286,7 +286,7 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 	}
 
 	if activeTokens >= s.config.MaxActiveTokens {
-		return nil, autherr.ErrMaxTokensReached
+		return nil, apierr.ErrMaxTokensReached
 	}
 
 	jwtID, err := generateRandomString(32)
@@ -337,21 +337,21 @@ func (s *AuthService) generateToken(user *models.User, r *http.Request) (*models
 func (s *AuthService) RefreshToken(refreshToken string, r *http.Request) (*models.Token, error) {
 	claims, err := s.validateRefreshToken(refreshToken)
 	if err != nil {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	userID, ok := claims["user_id"].(float64)
 	if !ok {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	oldToken, err := s.db.GetTokenByRefreshToken(refreshToken, int64(userID))
 	if err != nil {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	if oldToken.RevokedAt != nil {
-		return nil, autherr.ErrRevokedToken
+		return nil, apierr.ErrRevokedToken
 	}
 
 	user, err := s.db.GetUserByID(oldToken.UserID)
@@ -389,29 +389,29 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 	})
 
 	if err != nil || !token.Valid {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	// Extract the claims from the token.
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	// Retrieve the JWT ID (JTI) from the claims.
 	jti, ok := claims["jti"].(string)
 	if !ok {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	// Validate the token against the database to ensure it's not revoked.
 	dbToken, err := s.db.GetTokenByJTI(jti)
 	if err != nil {
-		return nil, autherr.ErrInvalidToken
+		return nil, apierr.ErrInvalidToken
 	}
 
 	if dbToken.RevokedAt != nil {
-		return nil, autherr.ErrRevokedToken
+		return nil, apierr.ErrRevokedToken
 	}
 
 	// Update the last used timestamp of the token.
@@ -455,12 +455,12 @@ func (s *AuthService) RevokeToken(tokenString string) error {
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return autherr.ErrInvalidToken
+		return apierr.ErrInvalidToken
 	}
 
 	jti, ok := claims["jti"].(string)
 	if !ok {
-		return autherr.ErrInvalidToken
+		return apierr.ErrInvalidToken
 	}
 
 	dbToken, err := s.db.GetTokenByJTI(jti)

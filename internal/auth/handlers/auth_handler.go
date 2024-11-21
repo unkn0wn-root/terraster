@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	apierr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 	"github.com/unkn0wn-root/terraster/internal/auth/service"
 )
@@ -60,9 +61,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	token, err := h.authService.AuthenticateUser(req.Username, req.Password, r)
 	if err != nil {
 		switch err {
-		case service.ErrUserLocked:
+		case apierr.ErrUserLocked:
 			http.Error(w, "Account is temporarily locked", http.StatusForbidden)
-		case service.ErrInvalidCredentials:
+		case apierr.ErrInvalidCredentials:
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		default:
 			fmt.Println(err)
@@ -149,9 +150,9 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	token, err := h.authService.RefreshToken(req.RefreshToken, r)
 	if err != nil {
 		switch err {
-		case service.ErrInvalidToken:
+		case apierr.ErrInvalidToken:
 			http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
-		case service.ErrRevokedToken:
+		case apierr.ErrRevokedToken:
 			http.Error(w, "Refresh token has been revoked", http.StatusUnauthorized)
 		default:
 			http.Error(w, "Error refreshing token", http.StatusInternalServerError)
@@ -238,9 +239,9 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.authService.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {
 		switch err {
-		case service.ErrPasswordExpired:
+		case apierr.ErrPasswordExpired:
 			http.Error(w, "Password has expired and must be changed", http.StatusForbidden)
-		case service.ErrInvalidCredentials:
+		case apierr.ErrInvalidCredentials:
 			http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
 		default:
 			http.Error(w, err.Error(), http.StatusBadRequest)
