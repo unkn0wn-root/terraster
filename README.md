@@ -45,7 +45,17 @@ go build -o terraster cmd/main.go
 
 ### Create a configuration file (or use provided in repo):
 
-#### Basic Configuration
+There are only 3 fields that are required - <b>port, host and backends</b>. Everything else is optional:
+
+```yaml
+port: 8080
+host: "lb.domain.com"
+backends:
+  - url: http://localhost:8081
+  - url: http://localhost:8082
+```
+
+#### Basic Configuration with TLS offloading (load balancer in SSL and backend in HTTP)
 ```yaml
 port: 8080
 algorithm: round-robin
