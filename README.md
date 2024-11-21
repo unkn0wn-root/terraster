@@ -198,11 +198,6 @@ api:
   enabled: true
   host: localhost
   port: 8081
-  # optional
-  tls:
-    enabled: true
-    cert_file: "./certs/krogsveen-2024-chained-no-key.pem"
-    key_file: "./certs/privkey_key.key"
 
 database:
   path: "./api.db"
