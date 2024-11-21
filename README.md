@@ -38,16 +38,74 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 
 ## Quick Start
 
-1. Build Terraster:
+### Build Terraster:
 ```bash
 go build -o terraster cmd/main.go
 ```
 
-2. Create a configuration file or use provided in repo (config.yaml):
+### Create a configuration file (or use provided in repo):
+
+#### Basic Configuration
 ```yaml
+port: 8080
+algorithm: round-robin
+host: "lb.domain.com"
+backends:
+  - url: http://localhost:8081
+  - url: http://localhost:8082
+
+middleware:
+  - rate_limit:
+      requests_per_second: 100
+      burst: 30
+
+tls:
+  enabled: true
+  cert_file: "./certificates/my_cert.pem"
+  key_file: "./certificates/my_cert_privatekey.key"
+```
+
+#### Advanced Configuration
+```yaml
+### GLOBAL CONFIG ###
 port: 443
 admin_port: 4433
 
+# global health check will be used by every service that don't have health_check specified
+health_check:
+  interval: 10s
+  timeout: 2s
+  path: /health
+
+# enables Admin API - if you omit this, admin api will be disabled (off by default)
+admin_api:
+  enabled: true
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
+# global middlewares enabled for all services
+middleware:
+  - rate_limit: # global rate limit for each service if not defined in the service
+      requests_per_second: 100
+      burst: 150
+  - security:
+      hsts: true
+      hsts_max_age: 31536000
+      frame_options: DENY
+      content_type_options: true
+      xss_protection: true
+  - circuit_breaker:
+      threshold: 5
+      timeout: 60s
+
+connection_pool:
+  max_idle: 100
+  max_open: 1000
+  idle_timeout: 90s
+
+
+### ADVANCED LOAD BALANCER CONFIG ###
 services:
   - name: backend-api # service name
     host: internal-api1.local.com # service listener hostname
@@ -119,44 +177,6 @@ services:
     port: 80
     http_redirect: true
     redirect_port: 8455 # this will redirect to 8455 - mark host field
-
-# global health check will be used by every service that don't have health_check configuration
-health_check:
-  interval: 10s
-  timeout: 2s
-  path: /health
-
-# api authentication
-auth:
-  jwt_secret: mySecretKey
-  db_path: ./auth.db
-  password_expiry_days: 7
-  password_history_size: 5
-
-admin_api:
-  rate_limit:
-    requests_per_second: 10
-    burst: 20
-
-# global middlewares enabled for all services
-middleware:
-  - rate_limit: # global rate limit for each service if not defined in the service
-      requests_per_second: 100
-      burst: 150
-  - security:
-      hsts: true
-      hsts_max_age: 31536000
-      frame_options: DENY
-      content_type_options: true
-      xss_protection: true
-  - circuit_breaker:
-      threshold: 5
-      timeout: 60s
-
-connection_pool:
-  max_idle: 100
-  max_open: 1000
-  idle_timeout: 90s
 ```
 
 3. Run the load balancer:
@@ -164,40 +184,34 @@ connection_pool:
 ./terraster --config config.yaml
 ```
 
-## Configuration Examples
-
-### Basic Configuration
-```yaml
-port: 8080
-algorithm: round-robin
-host: "lb.domain.com"
-backends:
-  - url: http://localhost:8081
-  - url: http://localhost:8082
-
-middleware:
-  - rate_limit:
-      requests_per_second: 100
-      burst: 30
-
-tls:
-  enabled: true
-  cert_file: "./certificates/my_cert.pem"
-  key_file: "./certificates/my_cert_privatekey.key"
-```
-
 ## API Examples
 
 ### Admin API
 
-1. Get Backend Status:
+1. Database setup
+- First, you need to create database config or use provided in repo.
+```yaml
+db_path: "./auth.db"
+jwt_secret: "HelloFormTheOtherSide"
+token_cleanup_interval: "1h"
+```
+
+- Then, create API admin user
+```console
+go run scripts/database/api_util.go --config ./db.yaml -username "lb_admin" -password "Test953.Hello" -role "admin"
+```
+
+- And remember to enable Admin API in main config --> 'enabled: true'
+
+
+2. Get Backend Status:
 ```bash
 curl http://localhost:8081/api/backends \
     -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
     -H "Content-Type: application/json"
 ```
 
-2. Add Backend to service:
+3. Add Backend to service:
 ```bash
 curl -X POST http://localhost:8081/api/backends?service_name=backend-api \
   -H "Content-Type: application/json" \
