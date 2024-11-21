@@ -18,10 +18,10 @@ import (
 
 // AdminAPI represents the administrative API for managing the load balancer.
 type AdminAPI struct {
-	enabled        bool
+	Enabled        bool
 	serviceManager *service.Manager
 	mux            *http.ServeMux
-	config         *config.Config
+	config         *config.APIConfig
 	authService    *auth_service.AuthService
 	authHandler    *handlers.AuthHandler
 	logger         *zap.Logger
@@ -31,12 +31,12 @@ type AdminAPI struct {
 // It initializes the HTTP mux and registers all API routes.
 func NewAdminAPI(
 	manager *service.Manager,
-	cfg *config.Config,
+	cfg *config.APIConfig,
 	authService *auth_service.AuthService,
 	logger *zap.Logger,
 ) *AdminAPI {
 	api := &AdminAPI{
-		enabled:        cfg.AdminAPI.Enabled,
+		Enabled:        cfg.AdminAPI.Enabled,
 		serviceManager: manager,
 		mux:            http.NewServeMux(),
 		config:         cfg,
@@ -89,9 +89,6 @@ func (a *AdminAPI) Handler() http.Handler {
 	middlewares = append(middlewares,
 		logger,
 		NewAdminAccessLogMiddleware(),
-		middleware.NewRateLimiterMiddleware(
-			a.config.AdminAPI.RateLimit.RequestsPerSecond,
-			a.config.AdminAPI.RateLimit.Burst),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)

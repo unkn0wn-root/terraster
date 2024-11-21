@@ -56,6 +56,7 @@ func newTLSCache() *tlsCache {
 // It manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
 type Server struct {
 	config         *config.Config              // Configuration settings for the server
+	apiConfig      *config.APIConfig           // API configuration settings
 	healthChecker  *health.Checker             // Global health checker (if any)
 	adminAPI       *admin.AdminAPI             // Admin API handler
 	adminServer    *http.Server                // HTTP server for admin API
@@ -83,6 +84,7 @@ func NewServer(
 	srvCtx context.Context,
 	errChan chan<- error,
 	cfg *config.Config,
+	apiCfg *config.APIConfig,
 	authSrvc *auth_service.AuthService,
 	zLog *zap.Logger,
 	logManager *logger.LoggerManager,
@@ -96,8 +98,8 @@ func NewServer(
 
 	s := &Server{
 		config:         cfg,
+		apiConfig:      apiCfg,
 		healthCheckers: make(map[string]*health.Checker),
-		adminAPI:       admin.NewAdminAPI(serviceManager, cfg, authSrvc, zLog),
 		serviceManager: serviceManager,
 		ctx:            ctx,
 		cancel:         cancel,
@@ -128,6 +130,10 @@ func NewServer(
 		for _, loc := range svc.Locations {
 			hc.RegisterPool(loc.ServerPool)
 		}
+	}
+
+	if s.apiConfig.AdminAPI.Enabled {
+		s.adminAPI = admin.NewAdminAPI(serviceManager, apiCfg, authSrvc, zLog)
 	}
 
 	return s, nil
@@ -168,6 +174,11 @@ func (s *Server) Start() error {
 			s.cancel()
 			return err
 		}
+	}
+
+	if !s.apiConfig.AdminAPI.Enabled {
+		s.logger.Warn("Admin API is not enabled. Bypassing admin server setup")
+		return nil
 	}
 
 	if err := s.startAdminServer(); err != nil {
@@ -228,17 +239,12 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 // It supports both HTTP and HTTPS based on the server's TLS configuration.
 // Returns an error if the admin server fails to start.
 func (s *Server) startAdminServer() error {
-	if !s.config.AdminAPI.Enabled {
-		s.logger.Warn("Admin API is not enabled. Bypassing admin server setup")
-		return nil
+	adminApiHost := s.apiConfig.AdminAPI.Host
+	if adminApiHost == "" {
+		s.apiConfig.AdminAPI.Host = "localhost"
 	}
 
-	adminApiHost := s.config.AdminAPI.Host
-	if s.config.AdminAPI.Host == "" {
-		adminApiHost = "localhost"
-	}
-
-	adminAddr := net.JoinHostPort(adminApiHost, strconv.Itoa(s.servicePort(s.config.AdminPort)))
+	adminAddr := net.JoinHostPort(adminApiHost, strconv.Itoa(s.servicePort(s.apiConfig.AdminAPI.Port)))
 	s.adminServer = &http.Server{
 		Addr:         adminAddr,
 		Handler:      s.adminAPI.Handler(),

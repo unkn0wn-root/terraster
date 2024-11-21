@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -17,13 +18,117 @@ import (
 	"go.uber.org/zap"
 )
 
-// main is the entry point of the Terraster application.
-// It initializes configurations, logging, authentication services, and the main server.
-// It also sets up graceful shutdown handling to ensure all services terminate properly.
+// ConfigManager handles configuration loading and provides defaults
+type ConfigManager struct {
+	logger *zap.Logger
+}
+
+func NewConfigManager(logger *zap.Logger) *ConfigManager {
+	return &ConfigManager{
+		logger: logger,
+	}
+}
+
+// LoadAPIConfig loads the API configuration with graceful fallback to set admin api as disabled
+func (cm *ConfigManager) LoadAPIConfig(path string) *config.APIConfig {
+	cfg, err := config.LoadAPIConfig(path)
+	if err != nil {
+		cm.logger.Warn("Failed to load Admin API configuration file. Admin API is disabled",
+			zap.Error(err),
+			zap.String("path", path))
+
+		return &config.APIConfig{
+			AdminAPI: config.API{
+				Enabled: false,
+			},
+		}
+	}
+
+	return cfg
+}
+
+type ServerBuilder struct {
+	config     *config.Config
+	apiConfig  *config.APIConfig
+	logger     *zap.Logger
+	logManager *logger.LoggerManager
+}
+
+func NewServerBuilder(
+	cfg *config.Config,
+	apiCfg *config.APIConfig,
+	logger *zap.Logger,
+	logManager *logger.LoggerManager,
+) *ServerBuilder {
+	return &ServerBuilder{
+		config:     cfg,
+		apiConfig:  apiCfg,
+		logger:     logger,
+		logManager: logManager,
+	}
+}
+
+// BuildServer constructs the server with all necessary components
+func (sb *ServerBuilder) BuildServer(ctx context.Context, errChan chan<- error) (*server.Server, error) {
+	var db *database.SQLiteDB
+	var authService *service.AuthService
+
+	if sb.apiConfig.AdminAPI.Enabled {
+		var err error
+		db, err = database.NewSQLiteDB(sb.apiConfig.AdminDatabase.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize database: %w", err)
+		}
+
+		authService = service.NewAuthService(db, sb.buildAuthConfig())
+	}
+
+	srv, err := server.NewServer(
+		ctx,
+		errChan,
+		sb.config,
+		sb.apiConfig,
+		authService,
+		sb.logger,
+		sb.logManager,
+	)
+
+	if err != nil {
+		// If server creation fails, we need to clean up the auth service
+		if authService != nil {
+			authService.Close()
+		}
+		return nil, err
+	}
+
+	return srv, nil
+}
+
+func (sb *ServerBuilder) buildAuthConfig() service.AuthConfig {
+	return service.AuthConfig{
+		JWTSecret:            []byte(sb.apiConfig.AdminAuth.JWTSecret),
+		TokenExpiry:          15 * time.Minute,
+		RefreshTokenExpiry:   7 * 24 * time.Hour,
+		MaxLoginAttempts:     5,
+		LockDuration:         15 * time.Minute,
+		MaxActiveTokens:      5,
+		TokenCleanupInterval: 7 * time.Hour,
+		PasswordMinLength:    12,
+		RequireUppercase:     true,
+		RequireNumber:        true,
+		RequireSpecialChar:   true,
+		PasswordExpiryDays:   sb.apiConfig.AdminAuth.PasswordExpiryDays,
+		PasswordHistoryLimit: sb.apiConfig.AdminAuth.PasswordHistoryLimit,
+	}
+}
+
 func main() {
 	var configPath *string
 	configPath = flag.String("config", "config.yaml", "path to config file")
 	configPath = flag.String("c", "config.yaml", "path to config file")
+	apiConfigPath := flag.String("api_config", "api.config.yaml", "path to API config file")
+	apiConfigPath = flag.String("ac", "api.config.yaml", "path to API config file")
+
 	flag.Parse()
 
 	logManager, err := logger.NewLoggerManager("log.config.json")
@@ -38,6 +143,8 @@ func main() {
 		}
 	}()
 
+	// this logger is main log for both admin api and application logging
+	// proxy/r,w gets own logger
 	logger, err := logManager.GetLogger("main")
 	if err != nil {
 		log.Fatalf("Failed to get logger: %v", err)
@@ -52,40 +159,15 @@ func main() {
 		logger.Fatal("Invalid config", zap.Error(err))
 	}
 
-	db, err := database.NewSQLiteDB(cfg.Auth.DBPath)
-	if err != nil {
-		logger.Fatal("Failed to initialize database", zap.Error(err))
-	}
-
-	// Configure the authentication service with the necessary settings.
-	// These settings include JWT secrets, token expiry durations, password policies, and more.
-	authConfig := service.AuthConfig{
-		JWTSecret:            []byte(cfg.Auth.JWTSecret),
-		TokenExpiry:          15 * time.Minute,              // Short-lived access token.
-		RefreshTokenExpiry:   7 * 24 * time.Hour,            // 7-day refresh token.
-		MaxLoginAttempts:     5,                             // Maximum number of login attempts before locking the account.
-		LockDuration:         15 * time.Minute,              // Duration for which the account is locked after exceeding login attempts.
-		MaxActiveTokens:      5,                             // Maximum number of active tokens per user.
-		TokenCleanupInterval: 7 * time.Hour,                 // Interval for cleaning up expired tokens.
-		PasswordMinLength:    12,                            // Minimum required length for passwords.
-		RequireUppercase:     true,                          // Enforce inclusion of uppercase letters in passwords.
-		RequireNumber:        true,                          // Enforce inclusion of numbers in passwords.
-		RequireSpecialChar:   true,                          // Enforce inclusion of special characters in passwords.
-		PasswordExpiryDays:   cfg.Auth.PasswordExpiryDays,   // Number of days after which passwords expire.
-		PasswordHistoryLimit: cfg.Auth.PasswordHistoryLimit, // Number of previous passwords to remember and prevent reuse.
-	}
-
-	// Initialize the authentication service with the database and configuration.
-	// The service is responsible for handling user authentication, token management, and related functionalities.
-	authService := service.NewAuthService(db, authConfig)
-	// Ensure that the authentication service cleans up any background tasks or resources when the application exits.
-	defer authService.Close()
-
+	errChan := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	errChan := make(chan error, 1)
-	srv, err := server.NewServer(ctx, errChan, cfg, authService, logger, logManager)
+	configManager := NewConfigManager(logger)
+	apiConfig := configManager.LoadAPIConfig(*apiConfigPath)
+
+	builder := NewServerBuilder(cfg, apiConfig, logger, logManager)
+	srv, err := builder.BuildServer(ctx, errChan)
 	if err != nil {
 		logger.Fatal("Failed to initialize server", zap.Error(err))
 	}

@@ -8,6 +8,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	autherr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/auth/models"
 )
 
@@ -119,6 +120,10 @@ func (s *SQLiteDB) GetUserByUsername(username string) (*models.User, error) {
 		&user.LockedUntil, &user.CreatedAt, &user.UpdatedAt, &user.PasswordChangedAt,
 	)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, autherr.ErrUserNotFound
+		}
+
 		return nil, err
 	}
 
