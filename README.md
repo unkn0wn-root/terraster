@@ -198,6 +198,10 @@ api:
   enabled: true
   host: localhost
   port: 8081
+  # this is optional. You can also use services in main config to use load balancer to guard api
+  tls:
+    cert_file: "./certs/admin.pem"
+    key_file: "./certs/admin_key.key"
 
 database:
   path: "./api.db"
