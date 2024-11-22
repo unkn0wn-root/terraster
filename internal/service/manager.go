@@ -13,26 +13,20 @@ import (
 )
 
 var (
-	// ErrServiceAlreadyExists is returned when attempting to add a service that already exists in the manager.
 	ErrServiceAlreadyExists = errors.New("service already exists")
-	// ErrDuplicateLocation is returned when a service is configured with duplicate location paths.
-	ErrDuplicateLocation = errors.New("duplicate location path")
-	// ErrNotDefined is returned when a service does not have either a host or name defined.
-	ErrNotDefined = errors.New("service must have either host or name defined")
+	ErrDuplicateLocation    = errors.New("duplicate location path")
+	ErrNotDefined           = errors.New("service must have either host or name defined")
 )
 
 // ServiceType represents the type of service protocol, either HTTP or HTTPS.
 type ServiceType string
 
 const (
-	// HTTP represents the HTTP protocol for a service.
-	HTTP ServiceType = "http"
-	// HTTPS represents the HTTPS protocol for a service.
+	HTTP  ServiceType = "http"
 	HTTPS ServiceType = "https"
 )
 
 // Manager is responsible for managing all the services within the Terraster application.
-// It handles the addition, retrieval, and configuration of services, ensuring thread-safe access.
 type Manager struct {
 	services map[string]*ServiceInfo // A map of service identifiers to their corresponding ServiceInfo.
 	logger   *zap.Logger             // Logger instance for logging service manager activities.
@@ -40,7 +34,6 @@ type Manager struct {
 }
 
 // ServiceInfo contains comprehensive information about a service, including its routing and backend configurations.
-// It encapsulates details such as the service's name, host, port, TLS settings, and associated locations.
 type ServiceInfo struct {
 	Name         string                    // The unique name of the service.
 	Host         string                    // The host address where the service is accessible.
@@ -63,7 +56,7 @@ func (s *ServiceInfo) ServiceType() ServiceType {
 }
 
 // LocationInfo contains routing and backend information for a specific path within a service.
-// It defines how incoming requests matching the path should be handled and which backend servers to proxy to.
+// Defines how incoming requests matching the path should be handled and which backend servers to proxy to.
 type LocationInfo struct {
 	Path       string              // The URL path that this location handles.
 	Rewrite    string              // The URL rewrite rule applied to incoming requests.
@@ -74,7 +67,6 @@ type LocationInfo struct {
 // NewManager initializes and returns a new instance of Manager.
 // It sets up services based on the provided configuration and initializes their respective server pools.
 // If no services are defined in the configuration but backends are provided, it creates a default service.
-// Returns an error if any service fails to be added during initialization.
 func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 	m := &Manager{
 		services: make(map[string]*ServiceInfo),
@@ -121,8 +113,7 @@ func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
 }
 
 // AddService adds a new service to the Manager with the provided configuration and health check settings.
-// It processes each location within the service, creates corresponding server pools, and ensures no duplicate services or locations exist.
-// Returns an error if the service already exists, if there are duplicate locations, or if required fields are missing.
+// Processes each location within the service, creates corresponding server pools, and ensures no duplicate services or locations exist.
 func (m *Manager) AddService(service config.Service, globalHealthCheck *config.HealthCheckConfig) error {
 	locations := make([]*LocationInfo, 0, len(service.Locations))
 	locationPaths := make(map[string]bool)
@@ -197,7 +188,6 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 
 // GetService retrieves the service and location information based on the provided host, path, and port.
 // If hostOnly is true, it returns only the ServiceInfo without matching a specific location.
-// It returns an error if the service or location is not found.
 func (m *Manager) GetService(
 	host, path string,
 	port int,
@@ -238,7 +228,6 @@ func (m *Manager) GetService(
 }
 
 // GetServiceByName retrieves a service based on its unique name.
-// It returns the ServiceInfo if found, otherwise returns nil.
 func (m *Manager) GetServiceByName(name string) *ServiceInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -253,7 +242,6 @@ func (m *Manager) GetServiceByName(name string) *ServiceInfo {
 }
 
 // GetServices returns a slice of all services managed by the Manager.
-// It provides a thread-safe way to access the current list of services.
 func (m *Manager) GetServices() []*ServiceInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -268,7 +256,6 @@ func (m *Manager) GetServices() []*ServiceInfo {
 
 // createServerPool initializes and configures a ServerPool for a given service location.
 // It sets up the load balancing algorithm and adds all backends associated with the location to the pool.
-// Returns the configured ServerPool or an error if backend initialization fails.
 func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *config.HealthCheckConfig) (*pool.ServerPool, error) {
 	serverPool := pool.NewServerPool(m.logger)
 	serverPool.UpdateConfig(pool.PoolConfig{
@@ -297,8 +284,7 @@ func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *con
 }
 
 // matchHost determines if the provided host matches the given pattern.
-// It supports wildcard patterns, allowing for flexible host matching.
-// Returns true if the host matches the pattern, otherwise false.
+// Supports wildcard patterns, allowing for flexible host matching.
 func matchHost(pattern, host string) bool {
 	if !strings.Contains(pattern, "*") {
 		return strings.EqualFold(pattern, host)

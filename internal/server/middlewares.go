@@ -11,12 +11,6 @@ import (
 // createServiceMiddleware constructs and configures the middleware chain for a specific service.
 // It applies global middleware based on the server's configuration and allows overriding or adding
 // middleware specific to the service. Finally, it appends a logging middleware to the chain.
-//
-// Parameters:
-// - svc: *service.ServiceInfo represents the service information, including any service-specific middleware configurations.
-//
-// Returns:
-// - http.Handler: The final handler with the middleware chain applied.
 func (s *Server) createServiceMiddleware(svc *service.ServiceInfo) http.Handler {
 	baseHandler := http.HandlerFunc(s.handleRequest)
 

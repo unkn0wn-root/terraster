@@ -7,8 +7,6 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/config"
 )
 
-// ServerSecurity encapsulates various HTTP security headers configurations.
-// It determines which security headers should be set on HTTP responses to enhance security.
 type ServerSecurity struct {
 	HSTS                  bool   // Enables HTTP Strict Transport Security (HSTS).
 	HSTSMaxAge            int    // Specifies the duration (in seconds) for which the browser should remember that the site is only to be accessed using HTTPS.
@@ -20,7 +18,7 @@ type ServerSecurity struct {
 }
 
 // NewSecurityMiddleware initializes and returns a new ServerSecurity instance based on the provided configuration.
-// It reads security-related settings from the configuration and sets up the corresponding fields.
+// Reads security-related settings from the configuration and sets up the corresponding fields.
 func NewSecurityMiddleware(cfg *config.Config) *ServerSecurity {
 	var config *config.SecurityConfig
 	for _, mw := range cfg.Middleware {

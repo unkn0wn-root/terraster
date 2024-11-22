@@ -28,14 +28,7 @@ type RewriteConfig struct {
 }
 
 // NewURLRewriter initializes and returns a new instance of URLRewriter based on the provided configuration.
-// It determines whether the path prefix should be stripped and sets up the necessary rewrite and redirect rules.
-//
-// Parameters:
-// - config: RewriteConfig defines the rules for path matching, rewriting, and redirection.
-// - backendURL: *url.URL represents the target backend service's URL.
-//
-// Returns:
-// - *URLRewriter: A configured URLRewriter instance ready to handle URL transformations.
+// Determines whether the path prefix should be stripped and sets up the necessary rewrite and redirect rules.
 func NewURLRewriter(config RewriteConfig, backendURL *url.URL) *URLRewriter {
 	backendPath := backendURL.Path
 	if backendPath == "" {
@@ -60,14 +53,7 @@ func NewURLRewriter(config RewriteConfig, backendURL *url.URL) *URLRewriter {
 }
 
 // shouldRedirect determines whether the incoming HTTP request should be redirected based on the URLRewriter's configuration.
-// It checks if redirection is enabled and if the request matches the criteria for redirection.
-//
-// Parameters:
-// - req: *http.Request represents the incoming HTTP request.
-//
-// Returns:
-// - bool: Indicates whether a redirect should occur.
-// - string: The path to redirect the request to, if redirection is needed.
+// checks if redirection is enabled and if the request matches the criteria for redirection.
 func (r *URLRewriter) shouldRedirect(req *http.Request) (bool, string) {
 	if r.redirect == "" {
 		return false, ""
@@ -81,11 +67,7 @@ func (r *URLRewriter) shouldRedirect(req *http.Request) (bool, string) {
 }
 
 // rewriteRequestURL modifies the incoming HTTP request's URL to target the backend service.
-// It updates the scheme and host, and conditionally strips the path prefix based on the URLRewriter's settings.
-//
-// Parameters:
-// - req: *http.Request represents the incoming HTTP request to be rewritten.
-// - targetURL: *url.URL is the backend service's URL to which the request should be forwarded.
+// updates the scheme and host, and conditionally strips the path prefix based on the URLRewriter's settings.
 func (r *URLRewriter) rewriteRequestURL(req *http.Request, targetURL *url.URL) {
 	req.URL.Scheme = targetURL.Scheme
 	req.URL.Host = targetURL.Host
@@ -96,10 +78,6 @@ func (r *URLRewriter) rewriteRequestURL(req *http.Request, targetURL *url.URL) {
 }
 
 // stripPathPrefix removes the configured path prefix from the incoming HTTP request's URL path.
-// It adjusts the path based on whether a rewrite URL is specified.
-//
-// Parameters:
-// - req: *http.Request represents the incoming HTTP request whose URL path is to be modified.
 func (r *URLRewriter) stripPathPrefix(req *http.Request) {
 	if !r.shouldStripPath {
 		return
@@ -130,11 +108,7 @@ func (r *URLRewriter) stripPathPrefix(req *http.Request) {
 }
 
 // rewriteRedirectURL modifies the Location header in HTTP redirect responses to ensure consistency with the original host.
-// It updates the host and path of the redirect URL based on the original request and the URLRewriter's configuration.
-//
-// Parameters:
-// - locURL: *url.URL is the URL specified in the Location header of the redirect response.
-// - originalHost: string is the original host from the incoming request, used to maintain consistency in redirects.
+// Updates the host and path of the redirect URL based on the original request and the URLRewriter's configuration.
 func (r *URLRewriter) rewriteRedirectURL(locURL *url.URL, originalHost string) {
 	locURL.Host = originalHost
 

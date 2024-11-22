@@ -11,20 +11,13 @@ import (
 )
 
 // Constants representing various HTTP status codes used for redirection.
-// These constants are aliases for the standard http.Status codes for clarity and ease of use.
 const (
-	// StatusMovedPermanently indicates that the resource has been permanently moved to a new URL.
-	StatusMovedPermanently = http.StatusMovedPermanently
-	// StatusFound indicates that the resource has been found at a different URI.
-	StatusFound = http.StatusFound
-	// StatusSeeOther indicates that the response can be found under a different URI using a GET request.
-	StatusSeeOther = http.StatusSeeOther
-	// StatusTemporaryRedirect indicates that the resource resides temporarily under a different URI.
+	StatusMovedPermanently  = http.StatusMovedPermanently
+	StatusFound             = http.StatusFound
+	StatusSeeOther          = http.StatusSeeOther
 	StatusTemporaryRedirect = http.StatusTemporaryRedirect
-	// StatusPermanentRedirect indicates that the resource has been permanently moved to a new URI.
 	StatusPermanentRedirect = http.StatusPermanentRedirect
 
-	// Header keys used for manipulating HTTP request and response headers.
 	HeaderServer         = "Server"           // The Server header identifies the server software handling the request.
 	HeaderXPoweredBy     = "X-Powered-By"     // The X-Powered-By header indicates technologies supporting the server.
 	HeaderXProxyBy       = "X-Proxy-By"       // The X-Proxy-By header identifies the proxy handling the request.
@@ -33,27 +26,22 @@ const (
 	HeaderXForwardedHost = "X-Forwarded-Host" // The X-Forwarded-Host header identifies the original host requested by the client.
 	HeaderHost           = "Host"             // The Host header specifies the domain name of the server and the TCP port number on which the server is listening.
 
-	// DefaultScheme defines the default URL scheme used when none is specified.
-	DefaultScheme = "http"
-	// DefaultProxyLabel is a label used to identify the proxy server in response headers.
+	DefaultScheme     = "http"
 	DefaultProxyLabel = "terraster"
 )
 
 // ProxyError represents an error that occurs during proxy operations.
-// It includes the operation during which the error occurred and the underlying error.
 type ProxyError struct {
 	Op  string // Op describes the operation being performed when the error occurred.
 	Err error  // Err is the underlying error that was encountered.
 }
 
 // Error implements the error interface for ProxyError.
-// It returns a formatted error message including the operation and the underlying error.
 func (e *ProxyError) Error() string {
 	return fmt.Sprintf("proxy error during %s: %v", e.Op, e.Err)
 }
 
 // RouteConfig holds configuration settings for routing requests through the proxy.
-// It includes optional path prefixes, URL rewrites, redirection targets, and TLS verification settings.
 type RouteConfig struct {
 	Path          string // Path is the proxy path (upstream) used to match incoming requests (optional).
 	RewriteURL    string // RewriteURL is the URL to rewrite the incoming request to (downstream) (optional).
@@ -75,7 +63,6 @@ func NewTransport(transport http.RoundTripper, skipTLSVerify bool) *Transport {
 }
 
 // URLRewriteProxy is a custom reverse proxy that handles URL rewriting and redirection based on RouteConfig.
-// It extends the functionality of httputil.ReverseProxy to include custom director and response modification logic.
 type URLRewriteProxy struct {
 	proxy       *httputil.ReverseProxy // proxy is the underlying reverse proxy handling the HTTP requests.
 	target      *url.URL               // target is the destination URL to which the proxy forwards requests.
@@ -89,8 +76,7 @@ type URLRewriteProxy struct {
 // ProxyOption defines a function type for applying optional configurations to URLRewriteProxy instances.
 type ProxyOption func(*URLRewriteProxy)
 
-// NewReverseProxy initializes and returns a new URLRewriteProxy instance.
-// It sets up the reverse proxy with the specified target, route configurations, and applies any additional proxy options.
+// This sets up the reverse proxy with the specified target, route configurations, and applies any additional proxy options.
 // The function also configures the reverse proxy's Director, ModifyResponse, Transport, ErrorHandler, and BufferPool.
 func NewReverseProxy(
 	target *url.URL,
@@ -159,20 +145,18 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // director modifies the incoming HTTP request before it is sent to the backend server.
-// It updates request headers and rewrites the request URL based on the proxy's configuration.
 func (p *URLRewriteProxy) director(req *http.Request) {
 	p.updateRequestHeaders(req)
 	p.urlRewriter.rewriteRequestURL(req, p.target)
 }
 
 // RoundTrip implements the RoundTripper interface for the Transport type.
-// It delegates the RoundTrip call to the underlying RoundTripper.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.transport.RoundTrip(req)
 }
 
 // updateRequestHeaders modifies the HTTP request headers before forwarding the request to the backend.
-// It sets the X-Forwarded-Host and X-Forwarded-For headers to preserve the original host information.
+// Sets the X-Forwarded-Host and X-Forwarded-For headers to preserve the original host information.
 func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	originalHost := req.Host
 	req.Header.Set(HeaderXForwardedHost, originalHost)
@@ -180,7 +164,7 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 }
 
 // handleRedirect processes HTTP redirect responses from the backend server.
-// It rewrites the Location header if the redirect is to the same host, ensuring consistent proxy behavior.
+// Rewrites the Location header if the redirect is to the same host, ensuring consistent proxy behavior.
 func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 	location := resp.Header.Get(HeaderLocation)
 	locURL, err := url.Parse(location)
@@ -202,7 +186,7 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 }
 
 // modifyResponse is a callback function that modifies the HTTP response received from the backend server.
-// It handles redirects and updates response headers to remove or set specific headers for security and consistency.
+// Handle redirects and updates response headers to remove or set specific headers for security and consistency.
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 	if isRedirect(resp.StatusCode) {
 		p.handleRedirect(resp)
@@ -213,7 +197,7 @@ func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 }
 
 // updateResponseHeaders modifies the HTTP response headers before sending the response to the client.
-// It removes headers that might leak server information and sets custom proxy headers.
+// Removes headers that might leak server information and sets custom proxy headers.
 func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderServer)
 	resp.Header.Del(HeaderXPoweredBy)
@@ -232,8 +216,7 @@ func isRedirect(statusCode int) bool {
 	}
 }
 
-// errorHandler is a custom error handler for the reverse proxy.
-// It logs unexpected errors and sends a generic error response to the client.
+// Logs unexpected errors and sends a generic error response to the client.
 func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	p.logger.Error("Unexpected error in proxy", zap.Error(err))
 	http.Error(w, "Something went wrong", http.StatusInternalServerError)

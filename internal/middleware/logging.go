@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// LoggingMiddleware handles logging of HTTP requests.
 type LoggingMiddleware struct {
 	logger         *zap.Logger
 	logLevel       zapcore.Level

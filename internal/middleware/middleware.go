@@ -20,7 +20,7 @@ type Middleware interface {
 }
 
 // statusWriter is a custom ResponseWriter that captures the HTTP status code and the length of the response.
-// It embeds the standard http.ResponseWriter and adds fields to store status and length.
+// Embeds the standard http.ResponseWriter and adds fields to store status and length.
 type statusWriter struct {
 	http.ResponseWriter     // Embeds the standard ResponseWriter to delegate standard methods.
 	status              int // Stores the HTTP status code of the response.
@@ -28,7 +28,6 @@ type statusWriter struct {
 }
 
 // newStatusWriter initializes and returns a new instance of statusWriter.
-// It sets the default status to http.StatusOK (200).
 func newStatusWriter(w http.ResponseWriter) *statusWriter {
 	return &statusWriter{
 		ResponseWriter: w,
@@ -43,7 +42,7 @@ func (w *statusWriter) WriteHeader(status int) {
 }
 
 // Write captures the length of the response and delegates the write operation.
-// It ensures that the status is set to http.StatusOK if not already set.
+// Ensures that the status is set to http.StatusOK if not already set.
 func (w *statusWriter) Write(b []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
@@ -64,7 +63,7 @@ func (w *statusWriter) Length() int {
 }
 
 // Hijack allows the middleware to support connection hijacking.
-// It delegates the hijacking process to the embedded ResponseWriter if it implements the http.Hijacker interface.
+// Delegates the hijacking process to the embedded ResponseWriter if it implements the http.Hijacker interface.
 func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
 		return hijacker.Hijack()
@@ -73,7 +72,7 @@ func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // Flush allows the middleware to support flushing of the response.
-// It delegates the flush operation to the embedded ResponseWriter if it implements the http.Flusher interface.
+// Delegates the flush operation to the embedded ResponseWriter if it implements the http.Flusher interface.
 func (w *statusWriter) Flush() {
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
@@ -81,13 +80,12 @@ func (w *statusWriter) Flush() {
 }
 
 // MiddlewareChain manages a sequence of middleware.
-// It allows chaining multiple middleware together and applying them to a final HTTP handler.
+// Allows chaining multiple middleware together and applying them to a final HTTP handler.
 type MiddlewareChain struct {
 	middlewares []Middleware // A slice holding the middleware in the order they should be applied.
 }
 
 // NewMiddlewareChain initializes and returns a new MiddlewareChain with the provided middleware.
-// It accepts a variadic number of Middleware and stores them in the chain.
 func NewMiddlewareChain(middlewares ...Middleware) *MiddlewareChain {
 	return &MiddlewareChain{
 		middlewares: middlewares,
@@ -95,7 +93,6 @@ func NewMiddlewareChain(middlewares ...Middleware) *MiddlewareChain {
 }
 
 // Use adds a new Middleware to the MiddlewareChain.
-// It appends the middleware to the existing slice, maintaining the order of application.
 func (c *MiddlewareChain) Use(middleware Middleware) {
 	c.middlewares = append(c.middlewares, middleware)
 }

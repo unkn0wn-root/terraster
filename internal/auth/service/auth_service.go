@@ -18,7 +18,7 @@ import (
 )
 
 // AuthConfig holds the configuration settings for the authentication service.
-// It includes JWT settings, token expiration durations, password policies, and more.
+// JWT settings, token expiration durations, password policies, and more.
 type AuthConfig struct {
 	JWTSecret            []byte        // Secret key used for signing JWT tokens.
 	TokenExpiry          time.Duration // Duration after which access tokens expire.
@@ -36,7 +36,6 @@ type AuthConfig struct {
 }
 
 // AuthService manages user authentication, token generation, password policies, and related functionalities.
-// It interacts with the database to store and retrieve user and token information.
 type AuthService struct {
 	db              *database.SQLiteDB // Database interface for authentication-related operations.
 	config          AuthConfig         // Configuration settings for the authentication service.
@@ -46,7 +45,7 @@ type AuthService struct {
 }
 
 // NewAuthService initializes and returns a new instance of AuthService.
-// It sets up the authentication service with the provided database and configuration,
+// Sets up the authentication service with the provided database and configuration,
 // and starts a background routine for cleaning up expired tokens.
 func NewAuthService(db *database.SQLiteDB, config AuthConfig) *AuthService {
 	if config.PasswordExpiryDays == 0 {
@@ -71,19 +70,16 @@ func NewAuthService(db *database.SQLiteDB, config AuthConfig) *AuthService {
 	return s
 }
 
-// GetConfig returns the current AuthConfig of the AuthService.
-// This allows other components to access authentication configuration settings.
 func (s *AuthService) GetConfig() AuthConfig {
 	return s.config
 }
 
-// Close gracefully shuts down the AuthService by signaling all background routines to terminate.
 func (s *AuthService) Close() {
 	close(s.done)
 }
 
 // IsPasswordExpired checks whether a user's password has expired based on the PasswordChangedAt timestamp.
-// It returns true if the password is older than the configured passwordExpiry duration.
+// Returns true if the password is older than the configured passwordExpiry duration.
 func (s *AuthService) IsPasswordExpired(user *models.User) bool {
 	fmt.Println("Password Changed At: ", user.PasswordChangedAt)
 	fmt.Println("Password Expiry: ", s.passwordExpiry)
@@ -91,7 +87,7 @@ func (s *AuthService) IsPasswordExpired(user *models.User) bool {
 }
 
 // validator creates and returns a new PasswordValidator based on the current password policies.
-// It enforces rules such as minimum length, character requirements, and other password strength criteria.
+// Enforces rules such as minimum length, character requirements, and other password strength criteria.
 func (s *AuthService) validator() *validation.PasswordValidator {
 	return validation.NewPasswordValidator(validation.PasswordPolicy{
 		MinLength:           s.config.PasswordMinLength,  // Minimum length requirement for passwords.
@@ -107,7 +103,6 @@ func (s *AuthService) validator() *validation.PasswordValidator {
 }
 
 // tokenCleanupRoutine runs periodically to clean up expired tokens from the database.
-// It uses a ticker based on the TokenCleanupInterval configuration.
 func (s *AuthService) tokenCleanupRoutine() {
 	ticker := time.NewTicker(s.config.TokenCleanupInterval)
 	defer ticker.Stop()
@@ -116,19 +111,16 @@ func (s *AuthService) tokenCleanupRoutine() {
 		select {
 		case <-ticker.C:
 			if err := s.db.CleanupExpiredTokens(); err != nil {
-				// Log the error using a simple print statement.
-				// In a production environment, consider using a proper logging mechanism.
-				println("Error cleaning up tokens:", err.Error())
+				println("Error cleaning up tokens:", err.Error()) // @toDo - use proper logging here
 			}
 		case <-s.done:
-			// Exit the routine when the done channel is closed.
 			return
 		}
 	}
 }
 
 // ValidatePasswordHistory checks whether the new password has been used recently by the user.
-// It compares the new password against a list of previous password hashes to prevent reuse.
+// Compare the new password against a list of previous password hashes to prevent reuse.
 func (s *AuthService) ValidatePasswordHistory(newPassword string, previousPasswords []string) error {
 	// Iterate through each previous password hash.
 	for _, prevHash := range previousPasswords {
@@ -180,7 +172,6 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 		return err
 	}
 
-	// Update the user's password and related fields.
 	now := time.Now()
 	user.Password = string(hashedPassword)
 	user.PasswordChangedAt = now
@@ -196,7 +187,7 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 }
 
 // CreateUser registers a new user with the provided username, password, and role.
-// It checks for username uniqueness, validates the password, hashes it, and stores the user in the database.
+// Check for username uniqueness, validates the password, hashes it, and stores the user in the database.
 func (s *AuthService) CreateUser(username, password string, role models.Role) error {
 	existing, err := s.db.GetUserByUsername(username)
 	if err == nil && existing != nil {
@@ -230,7 +221,7 @@ func (s *AuthService) CreateUser(username, password string, role models.Role) er
 }
 
 // AuthenticateUser authenticates a user with the provided username and password.
-// It verifies credentials, checks account lock status and password expiry,
+// Verifies credentials, checks account lock status and password expiry,
 // generates a new token upon successful authentication, and logs the login event.
 func (s *AuthService) AuthenticateUser(username, password string, r *http.Request) (*models.Token, error) {
 	user, err := s.db.GetUserByUsername(username)
@@ -380,7 +371,6 @@ func (s *AuthService) RefreshToken(refreshToken string, r *http.Request) (*model
 // ValidateToken verifies the validity of a JWT token.
 // It checks the token's signature, expiration, and revocation status.
 func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) {
-	// Parse and validate the JWT token.
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
@@ -404,7 +394,6 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 		return nil, apierr.ErrInvalidToken
 	}
 
-	// Validate the token against the database to ensure it's not revoked.
 	dbToken, err := s.db.GetTokenByJTI(jti)
 	if err != nil {
 		return nil, apierr.ErrInvalidToken
@@ -414,7 +403,6 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 		return nil, apierr.ErrRevokedToken
 	}
 
-	// Update the last used timestamp of the token.
 	dbToken.LastUsedAt = time.Now()
 	s.db.UpdateToken(dbToken)
 
@@ -422,7 +410,7 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 }
 
 // validateRefreshToken parses and validates a refresh token.
-// It ensures the token is correctly signed and extracts the claims for further validation.
+// Ensures the token is correctly signed and extracts the claims for further validation.
 func (s *AuthService) validateRefreshToken(tokenString string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -435,7 +423,6 @@ func (s *AuthService) validateRefreshToken(tokenString string) (jwt.MapClaims, e
 		return nil, err
 	}
 
-	// Extract the claims from the token.
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		return claims, nil
 	}
@@ -444,7 +431,7 @@ func (s *AuthService) validateRefreshToken(tokenString string) (jwt.MapClaims, e
 }
 
 // RevokeToken revokes a specific JWT token by its token string.
-// It marks the token as revoked in the database to prevent further use.
+// Marks the token as revoked in the database to prevent further use.
 func (s *AuthService) RevokeToken(tokenString string) error {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return s.config.JWTSecret, nil
@@ -468,7 +455,6 @@ func (s *AuthService) RevokeToken(tokenString string) error {
 		return err
 	}
 
-	// Mark the token as revoked by setting the RevokedAt timestamp.
 	now := time.Now()
 	dbToken.RevokedAt = &now
 
@@ -476,7 +462,7 @@ func (s *AuthService) RevokeToken(tokenString string) error {
 }
 
 // GetActiveSessions retrieves all active sessions (tokens) for a given user.
-// It allows users or administrators to view currently active authentication sessions.
+// Allows users or administrators to view currently active authentication sessions.
 func (s *AuthService) GetActiveSessions(userID int64) ([]models.Session, error) {
 	return s.db.GetUserSessions(userID)
 }
@@ -506,13 +492,11 @@ func (s *AuthService) logAudit(userID int64, action, resource, status string, r 
 }
 
 // generateRandomString creates a secure random string of the specified length.
-// It uses cryptographic randomness to ensure the generated string is unpredictable.
 func generateRandomString(length int) (string, error) {
 	bytes := make([]byte, length)
-	// Read random bytes from the crypto/rand source.
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
-	// Encode the bytes using URL-safe base64 encoding and truncate to the desired length.
+
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
 }

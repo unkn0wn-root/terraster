@@ -19,21 +19,18 @@ const (
 	RetryKey contextKey = iota
 )
 
-// PoolConfig holds configuration settings for the ServerPool, including the load balancing algorithm and maximum connections.
 type PoolConfig struct {
 	Algorithm string `json:"algorithm"`       // The name of the load balancing algorithm to use (e.g., "round-robin").
 	MaxConns  int32  `json:"max_connections"` // The maximum number of concurrent connections allowed per backend.
 }
 
 // BackendSnapshot represents a snapshot of the current state of backends in the ServerPool.
-// It includes a slice of all backends and a map for quick backend lookup by URL.
 type BackendSnapshot struct {
 	Backends     []*Backend          // Slice of all backend servers in the pool.
 	BackendCache map[string]*Backend // Map for quick access to backends by their URL string.
 }
 
 // ServerPool manages a pool of backend servers, handling load balancing and connection management.
-// It supports dynamic addition and removal of backends and maintains thread-safe access to its state.
 type ServerPool struct {
 	backends       atomic.Value // Atomic value storing the current BackendSnapshot.
 	current        uint64       // Atomic counter used for round-robin load balancing.
@@ -42,8 +39,6 @@ type ServerPool struct {
 	log            *zap.Logger  // Logger instance for logging pool activities.
 }
 
-// NewServerPool initializes and returns a new ServerPool instance with default settings.
-// It sets up an initial empty BackendSnapshot and configures the default load balancing algorithm and connection limits.
 func NewServerPool(logger *zap.Logger) *ServerPool {
 	pool := &ServerPool{log: logger}
 	initialSnapshot := &BackendSnapshot{
@@ -56,9 +51,10 @@ func NewServerPool(logger *zap.Logger) *ServerPool {
 	return pool
 }
 
-// AddBackend adds a new backend to the ServerPool with the specified configuration, route settings, and health check configuration.
-// It parses the backend URL, creates a reverse proxy, initializes the backend, and updates the BackendSnapshot atomically.
-// Returns an error if the backend URL is invalid or if there is an issue creating the reverse proxy.
+// AddBackend adds a new backend to the ServerPool with the specified configuration,
+// route settings, and health check configuration.
+// Parses the backend URL, creates a reverse proxy,
+// initializes the backend, and updates the BackendSnapshot atomically.
 func (s *ServerPool) AddBackend(
 	cfg config.BackendConfig,
 	rc RouteConfig,
