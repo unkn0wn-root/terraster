@@ -196,7 +196,7 @@ services:
 ```yaml
 api:
   enabled: true
-  host: localhost
+  host: lb-api.domain.com # defaults to 'localhost' if not defined
   port: 8081
   # this is optional. You can also use services in main config to use load balancer to guard api
   tls:
