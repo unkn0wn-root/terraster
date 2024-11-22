@@ -2,10 +2,10 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
@@ -25,14 +25,18 @@ type Config struct {
 	HealthCheck *HealthCheckConfig `yaml:"health_check"`    // Global health check configuration.
 	Services    []Service          `yaml:"services"`        // A list of services with their specific configurations.
 	Middleware  []Middleware       `yaml:"middleware"`      // Global middleware configurations.
+	CertManager CertManagerConfig  `json:"cert_manager"`    // Configuration for the certificate manager.
 }
 
 // TLSConfig holds configuration settings related to TLS (HTTPS) for the server.
 // It includes flags and file paths necessary for setting up TLS.
 type TLSConfig struct {
-	Enabled  bool   `yaml:"enabled"`   // Indicates whether TLS is enabled.
-	CertFile string `yaml:"cert_file"` // Path to the TLS certificate file.
-	KeyFile  string `yaml:"key_file"`  // Path to the TLS private key file.
+	Enabled                bool     `yaml:"enabled"`                  // Indicates whether TLS is enabled.
+	CertFile               string   `yaml:"cert_file"`                // Path to the TLS certificate file.
+	KeyFile                string   `yaml:"key_file"`                 // Path to the TLS private key file.
+	CipherSuites           []uint16 `yaml:"cipher_suites"`            // List of supported cipher suites.
+	SessionTicketsDisabled bool     `yaml:"session_tickets_disabled"` // Disables session ticket support if true.
+	NextProtos             []string `yaml:"next_protos"`              // List of supported application protocols.
 }
 
 // BackendConfig defines the configuration for a single backend service.
@@ -143,6 +147,22 @@ type CORS struct {
 	MaxAge           int      `yaml:"max_age"`           // Duration (in seconds) for which the results of a preflight request can be cached.
 }
 
+// CertManagerConfig holds configuration settings for the certificate manager.
+type CertManagerConfig struct {
+	CertDir  string         `json:"cert_dir"`
+	Alerting AlertingConfig `json:"alerting"`
+}
+
+// AlertingConfig holds SMTP settings for alerting.
+type AlertingConfig struct {
+	Enabled   bool     `json:"enabled"`
+	SMTPHost  string   `json:"smtp_host"`
+	SMTPPort  int      `json:"smtp_port"`
+	FromEmail string   `json:"from_email"`
+	FromPass  string   `json:"from_password"`
+	ToEmails  []string `json:"to_emails"`
+}
+
 // DefaultHealthCheck provides a default configuration for health checks.
 // It is used when no global or backend-specific health check configuration is provided.
 var DefaultHealthCheck = HealthCheckConfig{
@@ -172,10 +192,10 @@ func Load(path string) (*Config, error) {
 
 // @TODO: Implement the Validate method for the Config struct
 // and add more validation
-func (cfg *Config) Validate() error {
+func (cfg *Config) Validate(logger *zap.Logger) error {
 	// Apply default global health check if not set
 	if cfg.HealthCheck == nil {
-		log.Printf("Global health_check not defined. Applying default health check configuration.")
+		logger.Warn("Global health_check not defined. Applying default health check configuration.")
 		cfg.HealthCheck = DefaultHealthCheck.Copy()
 	} else {
 		// Validate global health check

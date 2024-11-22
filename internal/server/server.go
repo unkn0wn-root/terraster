@@ -16,6 +16,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/admin"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
 	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/internal/crypto"
 	"github.com/unkn0wn-root/terraster/internal/health"
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
@@ -62,6 +63,7 @@ type Server struct {
 	serviceManager *service.Manager            // Manages the lifecycle and configuration of services
 	tlsConfigCache *tlsCache                   // Cache for TLS configurations
 	tlsConfigs     map[string]*tls.Certificate // Loaded TLS certificates
+	certManager    *crypto.CertManager         // Manages TLS certificates
 	serverPool     *pool.ServerPool            // Pool of server instances
 	servers        []*http.Server              // Slice of all HTTP/HTTPS servers
 	serviceCache   *sync.Map                   // Concurrent map for caching service lookups
@@ -95,6 +97,28 @@ func NewServer(
 		adminAPI = admin.NewAdminAPI(serviceManager, apiCfg, authSrvc, zLog)
 	}
 
+	// Initialize CertManager with alerting configurations
+	// This could be done in loop for health checker
+	// but for better readablity and since it's done only on startup - we do this here
+	domains := []string{}
+	for _, svc := range serviceManager.GetServices() {
+		if svc.ServiceType() == service.HTTPS {
+			domains = append(domains, svc.Host)
+		}
+	}
+
+	// get and put all certificates in memory
+	certCache := crypto.NewInMemoryCertCache()
+	alertingConfig := crypto.NewAlertingConfig(cfg)
+
+	certManager := crypto.NewCertManager(
+		domains,
+		cfg.CertManager.CertDir,
+		certCache,
+		alertingConfig,
+		cfg,
+		zLog)
+
 	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
@@ -102,6 +126,7 @@ func NewServer(
 		apiConfig:      apiCfg,
 		healthCheckers: make(map[string]*health.Checker),
 		serviceManager: serviceManager,
+		certManager:    certManager,
 		adminAPI:       adminAPI,
 		ctx:            ctx,
 		cancel:         cancel,
@@ -150,23 +175,7 @@ func (s *Server) Start() error {
 		}(svcName, hc)
 	}
 
-	s.tlsConfigCache = newTLSCache()
-
-	services := s.serviceManager.GetServices()
-	// Preload all TLS certificates to prevent delays during request processing.
-	for _, svc := range services {
-		if svc.ServiceType() == service.HTTPS {
-			cert, err := tls.LoadX509KeyPair(svc.TLS.CertFile, svc.TLS.KeyFile)
-			if err != nil {
-				return fmt.Errorf("failed to load certificate for %s: %w", svc.Host, err)
-			}
-
-			s.tlsConfigCache.certs[svc.Host] = &cert
-			s.logger.Info("Certificate loaded into cache", zap.String("host", svc.Host))
-		}
-	}
-
-	for _, svc := range services {
+	for _, svc := range s.serviceManager.GetServices() {
 		if err := s.startServiceServer(svc); err != nil {
 			s.cancel()
 			return err
@@ -233,6 +242,8 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 // startAdminServer sets up and starts the administrative HTTP server.
 // The admin server provides endpoints for managing and monitoring the server's operations.
 // Supports both HTTP and HTTPS based on the server's TLS configuration.
+// We could use cert manager to get certificates for admin server as well
+// but it's better to guard api via load balancer so use LB if you want more advanced config
 func (s *Server) startAdminServer() error {
 	adminApiHost := s.apiConfig.AdminAPI.Host
 	if adminApiHost == "" {
@@ -300,13 +311,27 @@ func (s *Server) createServer(
 	server.Handler = handler
 
 	server.TLSConfig = &tls.Config{
-		MinVersion: TLSMinVersion,
-		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			if cert := s.tlsConfigCache.certs[hello.ServerName]; cert != nil {
-				return cert, nil
-			}
-			return nil, fmt.Errorf("no certificate for host: %s", hello.ServerName)
-		},
+		MinVersion:     TLSMinVersion,
+		GetCertificate: s.certManager.GetCertificate,
+	}
+
+	// set cipher suites, session tickets and next protos if provided
+	if svc.TLS.CipherSuites != nil {
+		server.TLSConfig.CipherSuites = svc.TLS.CipherSuites
+		s.logger.Info("Setting custom cipher suites", zap.Uint16s("cipher_suites", svc.TLS.CipherSuites))
+	} else {
+		// default cipher suites
+		server.TLSConfig.CipherSuites = crypto.TerrasterCiphers
+	}
+
+	if !svc.TLS.SessionTicketsDisabled {
+		server.TLSConfig.SessionTicketsDisabled = false
+		s.logger.Info("Session tickets disabled")
+	}
+
+	if svc.TLS.NextProtos != nil {
+		server.TLSConfig.NextProtos = svc.TLS.NextProtos
+		s.logger.Info("Setting custom next protocols", zap.Strings("next_protos", svc.TLS.NextProtos))
 	}
 
 	return server, nil
