@@ -16,20 +16,18 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/config"
 )
 
-// CertCache defines an interface for certificate caching.
 type CertCache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Put(ctx context.Context, key string, data []byte) error
 	Delete(ctx context.Context, key string) error
 }
 
-// InMemoryCertCache is an in-memory implementation of CertCache.
+// cache certs in memory here
 type InMemoryCertCache struct {
 	mu    sync.RWMutex
 	cache map[string][]byte
 }
 
-// NewInMemoryCertCache creates a new instance of InMemoryCertCache.
 func NewInMemoryCertCache() *InMemoryCertCache {
 	return &InMemoryCertCache{
 		cache: make(map[string][]byte),
@@ -73,6 +71,7 @@ type CertManager struct {
 	alerting   AlertingConfig
 	alertMutex sync.RWMutex
 	logger     *zap.Logger
+	config     *config.Config
 }
 
 // AlertingConfig holds SMTP settings for alerting.
@@ -102,6 +101,7 @@ func NewCertManager(
 	certDir string,
 	cache CertCache,
 	alerting AlertingConfig,
+	cfg *config.Config,
 	logger *zap.Logger,
 ) *CertManager {
 	cm := &CertManager{
@@ -110,6 +110,7 @@ func NewCertManager(
 		cache:    cache,
 		alerting: alerting,
 		logger:   logger,
+		config:   cfg,
 	}
 
 	cm.manager = &autocert.Manager{
@@ -118,7 +119,11 @@ func NewCertManager(
 		HostPolicy: cm.hostPolicy,
 	}
 
+	// Load local certificates during initialization
+	cm.loadLocalCertificates()
+	// Start periodic certificate check
 	go cm.periodicCertCheck()
+
 	return cm
 }
 
@@ -129,17 +134,35 @@ func (cm *CertManager) hostPolicy(ctx context.Context, host string) error {
 			return nil
 		}
 	}
+
 	return fmt.Errorf("host %q not configured", host)
+}
+
+func (cm *CertManager) loadLocalCertificates() {
+	for _, svc := range cm.config.Services {
+		if svc.TLS != nil && svc.TLS.Enabled {
+			cert, err := tls.LoadX509KeyPair(svc.TLS.CertFile, svc.TLS.KeyFile)
+			if err != nil {
+				cm.logger.Warn("Failed to load local certificate, will use autocert",
+					zap.String("host", svc.Host),
+					zap.Error(err))
+				continue
+			}
+			cm.certs.Store(svc.Host, &cert)
+			cm.logger.Info("Loaded local certificate", zap.String("host", svc.Host))
+		}
+	}
 }
 
 // GetCertificate retrieves the TLS certificate for the given client hello.
 func (cm *CertManager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	// Attempt to load from sync.Map
+	// Try local certificate first (if any)
 	if cert, ok := cm.certs.Load(hello.ServerName); ok {
 		return cert.(*tls.Certificate), nil
 	}
 
 	// If not found, fetch using autocert - slow path
+	// You should own domain and configure let's encrypt to accept fetching certs
 	cert, err := cm.manager.GetCertificate(hello)
 	if err != nil {
 		return nil, err

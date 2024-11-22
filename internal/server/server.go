@@ -98,7 +98,8 @@ func NewServer(
 	}
 
 	// Initialize CertManager with alerting configurations
-	// This could be done in loop for health checker but for better readablity - we do this here
+	// This could be done in loop for health checker
+	// but for better readablity and since it's done only on startup - we do this here
 	domains := []string{}
 	for _, svc := range serviceManager.GetServices() {
 		if svc.ServiceType() == service.HTTPS {
@@ -106,6 +107,7 @@ func NewServer(
 		}
 	}
 
+	// get and put all certificates in memory
 	certCache := crypto.NewInMemoryCertCache()
 	alertingConfig := crypto.NewAlertingConfig(cfg)
 
@@ -114,6 +116,7 @@ func NewServer(
 		cfg.CertManager.CertDir,
 		certCache,
 		alertingConfig,
+		cfg,
 		zLog)
 
 	ctx, cancel := context.WithCancel(srvCtx)
@@ -239,6 +242,8 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 // startAdminServer sets up and starts the administrative HTTP server.
 // The admin server provides endpoints for managing and monitoring the server's operations.
 // Supports both HTTP and HTTPS based on the server's TLS configuration.
+// We could use cert manager to get certificates for admin server as well
+// but it's better to guard api via load balancer so use LB if you want more advanced config
 func (s *Server) startAdminServer() error {
 	adminApiHost := s.apiConfig.AdminAPI.Host
 	if adminApiHost == "" {
