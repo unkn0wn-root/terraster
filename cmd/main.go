@@ -155,7 +155,7 @@ func main() {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	if err := cfg.Validate(); err != nil {
+	if err := cfg.Validate(logger); err != nil {
 		logger.Fatal("Invalid config", zap.Error(err))
 	}
 
