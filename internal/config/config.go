@@ -2,10 +2,10 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
@@ -192,10 +192,10 @@ func Load(path string) (*Config, error) {
 
 // @TODO: Implement the Validate method for the Config struct
 // and add more validation
-func (cfg *Config) Validate() error {
+func (cfg *Config) Validate(logger *zap.Logger) error {
 	// Apply default global health check if not set
 	if cfg.HealthCheck == nil {
-		log.Printf("Global health_check not defined. Applying default health check configuration.")
+		logger.Warn("Global health_check not defined. Applying default health check configuration.")
 		cfg.HealthCheck = DefaultHealthCheck.Copy()
 	} else {
 		// Validate global health check

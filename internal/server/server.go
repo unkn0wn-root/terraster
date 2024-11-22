@@ -316,16 +316,22 @@ func (s *Server) createServer(
 	}
 
 	// set cipher suites, session tickets and next protos if provided
-	if s.config.TLS.CipherSuites != nil {
+	if svc.TLS.CipherSuites != nil {
 		server.TLSConfig.CipherSuites = s.config.TLS.CipherSuites
+		s.logger.Info("Setting custom cipher suites", zap.Uint16s("cipher_suites", svc.TLS.CipherSuites))
+	} else {
+		// default cipher suites
+		server.TLSConfig.CipherSuites = crypto.TerrasterCiphers
 	}
 
-	if s.config.TLS.SessionTicketsDisabled {
-		server.TLSConfig.SessionTicketsDisabled = true
+	if !svc.TLS.SessionTicketsDisabled {
+		server.TLSConfig.SessionTicketsDisabled = false
+		s.logger.Info("Session tickets disabled")
 	}
 
-	if s.config.TLS.NextProtos != nil {
+	if svc.TLS.NextProtos != nil {
 		server.TLSConfig.NextProtos = s.config.TLS.NextProtos
+		s.logger.Info("Setting custom next protocols", zap.Strings("next_protos", svc.TLS.NextProtos))
 	}
 
 	return server, nil
