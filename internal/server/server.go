@@ -265,15 +265,18 @@ func (s *Server) startAdminServer() error {
 		IdleTimeout:  IdleTimeout,
 	}
 
+	svcType := service.HTTP
 	if cert != nil {
 		s.adminServer.TLSConfig = &tls.Config{
 			MinVersion:   TLSMinVersion,
 			Certificates: []tls.Certificate{*cert},
 		}
+		// set type to https if tls is enabled
+		svcType = service.HTTPS
 	}
 
 	s.wg.Add(1)
-	go s.runServer(s.adminServer, s.errorChan, "admin", service.HTTP) // if you need TLS - use LB
+	go s.runServer(s.adminServer, s.errorChan, "admin", svcType)
 
 	return nil
 }
