@@ -244,6 +244,18 @@ func (s *Server) startAdminServer() error {
 		s.apiConfig.AdminAPI.Host = "localhost"
 	}
 
+	// try to load api certificate
+	var cert *tls.Certificate
+	if s.apiConfig.AdminAPI.TLS != nil {
+		c, err := tls.LoadX509KeyPair(s.apiConfig.AdminAPI.TLS.CertFile, s.apiConfig.AdminAPI.TLS.KeyFile)
+		if err != nil {
+			s.logger.Error("Failed to load certificate for admin server", zap.Error(err))
+		} else {
+			cert = &c
+		}
+
+	}
+
 	adminAddr := net.JoinHostPort(adminApiHost, strconv.Itoa(s.servicePort(s.apiConfig.AdminAPI.Port)))
 	s.adminServer = &http.Server{
 		Addr:         adminAddr,
@@ -251,6 +263,13 @@ func (s *Server) startAdminServer() error {
 		ReadTimeout:  ReadTimeout,
 		WriteTimeout: WriteTimeout,
 		IdleTimeout:  IdleTimeout,
+	}
+
+	if cert != nil {
+		s.adminServer.TLSConfig = &tls.Config{
+			MinVersion:   TLSMinVersion,
+			Certificates: []tls.Certificate{*cert},
+		}
 	}
 
 	s.wg.Add(1)
