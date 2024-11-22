@@ -7,8 +7,6 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/config"
 )
 
-// Backend represents a single backend server within a ServerPool.
-// It encapsulates all necessary information and state required to manage and interact with the backend.
 type Backend struct {
 	URL             *url.URL                  // The URL of the backend server, including scheme, host, and port.
 	Host            string                    // The hostname extracted from the URL, used for logging and identification.
@@ -24,7 +22,6 @@ type Backend struct {
 }
 
 // GetURL returns the string representation of the backend's URL.
-// This is useful for logging, monitoring, and constructing request targets.
 func (b *Backend) GetURL() string {
 	return b.URL.String()
 }
@@ -36,19 +33,16 @@ func (b *Backend) GetWeight() int {
 }
 
 // GetCurrentWeight fetches the current weight of the backend.
-// This value may be dynamically adjusted based on load balancing algorithms that consider real-time performance metrics.
 func (b *Backend) GetCurrentWeight() int {
 	return int(b.CurrentWeight.Load())
 }
 
 // SetCurrentWeight sets the current weight of the backend to the specified value.
-// Adjusting the current weight can influence the load balancing strategy, allowing for dynamic traffic distribution.
 func (b *Backend) SetCurrentWeight(weight int) {
 	b.CurrentWeight.Store(int32(weight))
 }
 
 // GetConnectionCount returns the current number of active connections to the backend.
-// Monitoring connection counts helps in managing backend load and preventing overloading.
 func (b *Backend) GetConnectionCount() int {
 	return int(atomic.LoadInt32(&b.ConnectionCount))
 }
@@ -60,7 +54,6 @@ func (b *Backend) IsAlive() bool {
 }
 
 // SetAlive updates the alive status of the backend.
-// This method is typically called by health check mechanisms to mark the backend as healthy or unhealthy.
 func (b *Backend) SetAlive(alive bool) {
 	b.Alive.Store(alive)
 }

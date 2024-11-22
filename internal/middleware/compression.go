@@ -11,29 +11,20 @@ import (
 )
 
 // CompressionMiddleware provides response compression functionality to HTTP handlers.
-// It compresses HTTP responses using gzip when the client supports it, reducing bandwidth usage
-// and improving load times for clients that can handle compressed content.
 type CompressionMiddleware struct{}
 
-// Returns:
-// - Middleware: An instance of CompressionMiddleware ready to be applied to HTTP handlers.
-//
-// Usage Example:
-// compressor := NewCompressionMiddleware()
-// http.Handle("/", compressor.Middleware(myHandler))
 func NewCompressionMiddleware() Middleware {
 	return &CompressionMiddleware{}
 }
 
 // Middleware is the core function that applies response compression to HTTP responses.
 // It wraps the next handler in the chain, enabling gzip compression for eligible responses.
-// Behavior:
-//   - For each incoming request, the middleware checks if the client accepts gzip encoding by inspecting
-//     the "Accept-Encoding" header.
-//   - If gzip is supported, it wraps the ResponseWriter with a gzip.Writer to compress the response.
-//   - It sets the "Content-Encoding" header to "gzip" and removes the "Content-Length" header since
-//     the length of the compressed response is not known in advance.
-//   - If gzip is not supported, it forwards the request to the next handler without modifying the response.
+// For each incoming request, the middleware checks if the client accepts gzip encoding by inspecting
+// the "Accept-Encoding" header.
+// If gzip is supported, it wraps the ResponseWriter with a gzip.Writer to compress the response.
+// It sets the "Content-Encoding" header to "gzip" and removes the "Content-Length" header since
+// the length of the compressed response is not known in advance.
+// If gzip is not supported, it forwards the request to the next handler without modifying the response.
 func (c *CompressionMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if the client accepts gzip encoding by inspecting the "Accept-Encoding" header.
@@ -75,8 +66,6 @@ func (c compressionWriter) Write(b []byte) (int, error) {
 
 // Flush allows the compressionWriter to support flushing of the response.
 // It delegates the flush operation to the embedded ResponseWriter if it implements the http.Flusher interface.
-// This method is necessary to ensure that buffered data is sent to the client promptly,
-// especially when streaming responses.
 func (c compressionWriter) Flush() {
 	if flusher, ok := c.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
@@ -85,8 +74,6 @@ func (c compressionWriter) Flush() {
 
 // Hijack allows the compressionWriter to support connection hijacking.
 // It delegates the hijacking process to the embedded ResponseWriter if it implements the http.Hijacker interface.
-// This method is essential for scenarios where the connection needs to be taken over
-// from the HTTP server, such as upgrading to a WebSocket connection.
 func (c compressionWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := c.ResponseWriter.(http.Hijacker); ok {
 		return hijacker.Hijack()

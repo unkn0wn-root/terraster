@@ -18,7 +18,6 @@ type CORS struct {
 }
 
 // Initializes and returns a new CORS instance based on the provided configuration.
-// It reads CORS-related settings from the configuration and sets up the corresponding fields.
 func NewCORSMiddleware(cfg *config.Config) *CORS {
 	var config *config.CORS
 	for _, mw := range cfg.Middleware {
@@ -43,7 +42,7 @@ func NewCORSMiddleware(cfg *config.Config) *CORS {
 }
 
 // Middleware is an HTTP middleware that sets CORS headers on incoming HTTP responses.
-// It manages Cross-Origin Resource Sharing settings based on the CORS configuration.
+// Manages Cross-Origin Resource Sharing settings based on the CORS configuration.
 func (c *CORS) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(c.AllowedOrigins) > 0 {

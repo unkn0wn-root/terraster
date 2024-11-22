@@ -7,8 +7,7 @@ import (
 )
 
 // ConnectionPool manages a pool of HTTP clients to efficiently handle multiple HTTP requests.
-// It controls the number of idle and open connections, ensuring optimal resource usage and performance.
-// The pool allows reuse of HTTP clients, reducing the overhead of creating new clients for each request.
+// Controls the number of idle and open connections, ensuring optimal resource usage and performance.
 type ConnectionPool struct {
 	maxIdle     int               // maxIdle defines the maximum number of idle HTTP clients that can be held in the pool.
 	maxOpen     int               // maxOpen specifies the maximum number of HTTP clients that can be open at any given time.
@@ -19,8 +18,7 @@ type ConnectionPool struct {
 }
 
 // NewConnectionPool initializes and returns a new instance of ConnectionPool.
-// It sets up the pool with specified maximum idle and open connections, and an idle timeout duration.
-// The pool uses a buffered channel to manage idle HTTP clients, facilitating efficient retrieval and return of clients.
+// Sets up the pool with specified maximum idle and open connections, and an idle timeout duration.
 func NewConnectionPool(maxIdle, maxOpen int, idleTimeout time.Duration) *ConnectionPool {
 	return &ConnectionPool{
 		maxIdle:     maxIdle,

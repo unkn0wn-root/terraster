@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Constants for default configurations
+// default configurations
 const (
 	DefaultHTTPPort     = 80
 	DefaultHTTPSPort    = 443
@@ -38,13 +38,12 @@ const (
 )
 
 // tlsCache holds a map of TLS certificates keyed by hostname.
-// It is used to efficiently retrieve certificates for incoming TLS connections.
+// Is used to efficiently retrieve certificates for incoming TLS connections.
 type tlsCache struct {
 	certs map[string]*tls.Certificate
 }
 
 // newTLSCache creates and returns a new instance of tlsCache with an initialized certificate map.
-// This cache is immutable and intended for concurrent read access.
 func newTLSCache() *tlsCache {
 	return &tlsCache{
 		certs: make(map[string]*tls.Certificate),
@@ -52,7 +51,7 @@ func newTLSCache() *tlsCache {
 }
 
 // Server encapsulates all the components and configurations required to run the Terraster server.
-// It manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
+// Manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
 type Server struct {
 	config         *config.Config              // Configuration settings for the server
 	apiConfig      *config.APIConfig           // API configuration settings
@@ -76,9 +75,7 @@ type Server struct {
 	errorChan      chan<- error                // Channel to report server errors
 }
 
-// NewServer initializes a new Server instance with the provided configurations and dependencies.
-// It sets up health checkers for each service, initializes the admin API, and prepares the server for startup.
-// Returns an error if any component fails to initialize.
+// Sets up health checkers for each service, initializes the admin API, and prepares the server for startup.
 func NewServer(
 	srvCtx context.Context,
 	errChan chan<- error,
@@ -190,9 +187,8 @@ func (s *Server) Start() error {
 }
 
 // startServiceServer sets up and starts HTTP and HTTPS servers for a given service.
-// It ensures that services sharing the same port use the same underlying server instance to optimize resource usage.
+// Ensures that services sharing the same port use the same underlying server instance to optimize resource usage.
 // It also handles protocol mismatches and logs appropriate information.
-// Returns an error if the server fails to start or if there is a protocol mismatch.
 func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	port := s.servicePort(svc.Port)
 	protocol := svc.ServiceType()
@@ -236,8 +232,7 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 
 // startAdminServer sets up and starts the administrative HTTP server.
 // The admin server provides endpoints for managing and monitoring the server's operations.
-// It supports both HTTP and HTTPS based on the server's TLS configuration.
-// Returns an error if the admin server fails to start.
+// Supports both HTTP and HTTPS based on the server's TLS configuration.
 func (s *Server) startAdminServer() error {
 	adminApiHost := s.apiConfig.AdminAPI.Host
 	if adminApiHost == "" {
@@ -284,7 +279,6 @@ func (s *Server) startAdminServer() error {
 // createServer constructs and configures an HTTP or HTTPS server based on the provided service information.
 // It sets up TLS configurations, including certificate retrieval from the cache for HTTPS servers.
 // If the service requires HTTP to HTTPS redirection, it configures the appropriate handler.
-// Returns the configured http.Server instance or an error if configuration fails.
 func (s *Server) createServer(
 	svc *service.ServiceInfo,
 	protocol service.ServiceType,
@@ -321,7 +315,7 @@ func (s *Server) createServer(
 // runServer starts the provided HTTP or HTTPS server and listens for incoming connections.
 // It handles server errors by logging them and sending them to the error channel.
 // Ensures graceful shutdown by monitoring the server's lifecycle.
-// Runs in a separate goroutine and decrements the WaitGroup upon completion.
+// Runs in a separate goroutine
 func (s *Server) runServer(
 	server *http.Server,
 	errorChan chan<- error,
@@ -351,7 +345,6 @@ func (s *Server) runServer(
 // createRedirectHandler creates an HTTP handler that redirects all incoming HTTP requests to HTTPS.
 // The redirection preserves the original request URI and uses the specified redirect port.
 // If no redirect port is specified, it defaults to the standard HTTPS port (443).
-// This ensures that all traffic is secured over HTTPS.
 func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		redirectPort := svc.RedirectPort
@@ -372,15 +365,13 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 }
 
 // defaultHandler is a placeholder HTTP handler that responds with a simple "Hello, World!" message.
-// It can be replaced or extended with more complex logic as needed.
 func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("Hello, World!"))
 }
 
 // handleRequest processes incoming HTTP requests by determining the appropriate backend service.
-// It handles service discovery, load balancing, and proxying requests to backend servers.
-// Additionally, it manages connection counts and records response times for performance monitoring.
+// Handles service discovery, load balancing, and proxying requests to backend servers.
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	host, port, err := parseHostPort(r.Host, r.TLS)
 	if err != nil {
@@ -439,7 +430,6 @@ func getProtocol(r *http.Request) service.ServiceType {
 }
 
 // getServiceKey constructs a unique key for a service based on its host, port, and protocol.
-// This key is used for caching and retrieving service information efficiently.
 func getServiceKey(host string, port int, protocol service.ServiceType) string {
 	return service.ServiceKey{
 		Host:     host,
@@ -449,7 +439,6 @@ func getServiceKey(host string, port int, protocol service.ServiceType) string {
 }
 
 // getServiceFromCache retrieves the service information from the cache using the provided key.
-// Returns the service's location information if found, otherwise returns an error.
 func (s *Server) getServiceFromCache(key string) (*service.LocationInfo, error) {
 	cachedService, found := s.serviceCache.Load(key)
 	if found {
@@ -459,13 +448,11 @@ func (s *Server) getServiceFromCache(key string) (*service.LocationInfo, error) 
 }
 
 // cacheService stores the provided service information in the cache using the specified key.
-// This allows for faster retrieval of service details in subsequent requests.
 func (s *Server) cacheService(key string, srvc *service.LocationInfo) {
 	s.serviceCache.Store(key, srvc)
 }
 
 // getServiceFromManager retrieves the service information from the service manager based on host, path, and port.
-// Returns the service's location information or an error if the service is not found.
 func (s *Server) getServiceFromManager(host, path string, port int) (*service.LocationInfo, error) {
 	_, srvc, err := s.serviceManager.GetService(host, path, port, false)
 	if err != nil {
@@ -491,7 +478,6 @@ func (s *Server) getBackend(srvc *service.LocationInfo, r *http.Request) (*pool.
 }
 
 // recordResponseTime logs the response time for a given backend service.
-// This information can be used by load balancing algorithms that factor in response times for decision making.
 func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, duration time.Duration) {
 	if lrt, ok := srvc.Algorithm.(*algorithm.LeastResponseTime); ok {
 		lrt.UpdateResponseTime(url, duration)
@@ -499,8 +485,7 @@ func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, dura
 }
 
 // Shutdown gracefully shuts down all running servers, including the admin server and all service servers.
-// It also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
-// Returns an error if the shutdown process is interrupted or fails.
+// Also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.cancel()
 	var wg sync.WaitGroup
