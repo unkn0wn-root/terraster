@@ -298,10 +298,11 @@ func (cm *CertManager) checkCerts() {
 
 		timeLeft := status.expiresAt.Sub(now)
 		if timeLeft < cm.expirationThresh {
+			daysLeft := int(timeLeft.Hours() / 24)
 			cm.logger.Warn("Certificate approaching expiration",
 				zap.String("domain", domain),
 				zap.Time("expires_at", status.expiresAt),
-				zap.Duration("time_left", timeLeft))
+				zap.Int("time_left", daysLeft))
 
 			// only send alert if alerting is enabled
 			if cm.alerting.Enabled {
