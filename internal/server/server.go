@@ -299,19 +299,16 @@ func (s *Server) createServer(
 		ReadTimeout:  ReadTimeout,
 		WriteTimeout: WriteTimeout,
 		IdleTimeout:  IdleTimeout,
+		Handler:      s.createServiceMiddleware(svc),
 	}
 
-	if svc.HTTPRedirect && protocol == service.HTTP {
-		server.Handler = s.createRedirectHandler(svc)
-		return server, nil
-	}
-
-	// Create the middleware chain for the service
-	handler := s.createServiceMiddleware(svc)
-	server.Handler = handler
-
-	// If the service is HTTP, return the server. No need to configure TLS.
 	if protocol == service.HTTP {
+		if svc.HTTPRedirect {
+			server.Handler = s.createRedirectHandler(svc)
+			return server, nil
+		}
+
+		// If the service is HTTP, return the server. No need to configure TLS.
 		return server, nil
 	}
 
