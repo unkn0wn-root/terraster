@@ -15,6 +15,45 @@ import (
 	"github.com/wneessen/go-mail"
 )
 
+// Alerter defines the interface for certificate expiration alerting
+type Alerter interface {
+	Alert(domain string, expiry time.Time) error
+}
+
+type EmailAlerter struct {
+	client    *mail.Client
+	fromEmail string
+	toEmails  []string
+	logger    *zap.Logger
+}
+
+func NewEmailAlerter(cfg AlertingConfig, logger *zap.Logger) (*EmailAlerter, error) {
+	client, err := mail.NewClient(cfg.SMTPHost,
+		mail.WithPort(cfg.SMTPPort),
+		mail.WithSMTPAuth(mail.SMTPAuthPlain),
+		mail.WithUsername(cfg.FromEmail),
+		mail.WithPassword(cfg.FromPass),
+		mail.WithTLSPolicy(mail.TLSMandatory),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create mail client: %w", err)
+	}
+
+	return &EmailAlerter{
+		client:    client,
+		fromEmail: cfg.FromEmail,
+		toEmails:  cfg.ToEmails,
+		logger:    logger,
+	}, nil
+}
+
+// NoopAlerter implements Alerter but does nothing
+type NoopAlerter struct{}
+
+func (n *NoopAlerter) Alert(domain string, expiry time.Time) error {
+	return nil
+}
+
 type CertCache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Put(ctx context.Context, key string, data []byte) error
@@ -71,7 +110,7 @@ type CertManager struct {
 	certs            sync.Map // map[string]*tls.Certificate
 	logger           *zap.Logger
 	config           *config.Config
-	alerting         AlertingConfig
+	alerter          Alerter
 	checkInterval    time.Duration
 	expirationThresh time.Duration
 	stopChan         chan struct{}
@@ -95,11 +134,21 @@ func NewCertManager(
 	cfg *config.Config,
 	alerting AlertingConfig,
 	logger *zap.Logger,
-) *CertManager {
+) (*CertManager, error) {
+	var alerter Alerter = &NoopAlerter{}
+	if alerting.Enabled {
+		emailAlerter, err := NewEmailAlerter(alerting, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create email alerter: %w", err)
+		}
+		alerter = emailAlerter
+	}
+
 	cm := &CertManager{
 		domains:  domains,
 		certDir:  certDir,
 		cache:    cache,
+		alerter:  alerter,
 		logger:   logger,
 		config:   cfg,
 		stopChan: make(chan struct{}),
@@ -124,28 +173,13 @@ func NewCertManager(
 		HostPolicy: cm.hostPolicy,
 	}
 
-	if alerting.Enabled {
-		client, err := mail.NewClient(alerting.SMTPHost,
-			mail.WithPort(alerting.SMTPPort),
-			mail.WithSMTPAuth(mail.SMTPAuthPlain),
-			mail.WithUsername(alerting.FromEmail),
-			mail.WithPassword(alerting.FromPass),
-			mail.WithTLSPolicy(mail.TLSMandatory),
-		)
-		if err != nil {
-			logger.Fatal("Failed to initialize mail client", zap.Error(err))
-		} else {
-			cm.mailClient = client
-		}
-	}
-
 	// Load local certificates during initialization
 	cm.loadLocalCertificates()
 
 	// Start periodic certificate check
 	go cm.periodicCertCheck(ctx)
 
-	return cm
+	return cm, nil
 }
 
 func NewAlertingConfig(cfg *config.Config) AlertingConfig {
@@ -304,9 +338,10 @@ func (cm *CertManager) checkCerts() {
 				zap.Time("expires_at", status.expiresAt),
 				zap.Int("time_left", daysLeft))
 
-			// only send alert if alerting is enabled
-			if cm.alerting.Enabled {
-				cm.sendAlert(domain, status.expiresAt)
+			if err := cm.alerter.Alert(domain, status.expiresAt); err != nil {
+				cm.logger.Error("Failed to send alert",
+					zap.String("domain", domain),
+					zap.Error(err))
 			}
 
 			return true
@@ -327,17 +362,14 @@ func (cm *CertManager) checkCerts() {
 	}
 }
 
-// sendAlert sends an email alert about the certificate expiration.
-func (cm *CertManager) sendAlert(domain string, expiry time.Time) {
+func (e *EmailAlerter) Alert(domain string, expiry time.Time) error {
 	msg := mail.NewMsg()
-	if err := msg.From(cm.alerting.FromEmail); err != nil {
-		cm.logger.Error("Failed to set From address", zap.Error(err))
-		return
+	if err := msg.From(e.fromEmail); err != nil {
+		return fmt.Errorf("failed to set From address: %w", err)
 	}
 
-	if err := msg.To(cm.alerting.ToEmails...); err != nil {
-		cm.logger.Error("Failed to set To address", zap.Error(err))
-		return
+	if err := msg.To(e.toEmails...); err != nil {
+		return fmt.Errorf("failed to set To address: %w", err)
 	}
 
 	msg.Subject(fmt.Sprintf("Certificate Expiration Warning - %s", domain))
@@ -347,11 +379,11 @@ func (cm *CertManager) sendAlert(domain string, expiry time.Time) {
 		expiry.Format(time.RFC3339),
 	))
 
-	if err := cm.mailClient.DialAndSend(msg); err != nil {
-		cm.logger.Error("Failed to send alert email",
-			zap.String("domain", domain),
-			zap.Error(err))
+	if err := e.client.DialAndSend(msg); err != nil {
+		return fmt.Errorf("failed to send alert email: %w", err)
 	}
+
+	return nil
 }
 
 func (cm *CertManager) Stop() {

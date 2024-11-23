@@ -111,7 +111,7 @@ func NewServer(
 	certCache := certmanager.NewInMemoryCertCache()
 	alerting := certmanager.NewAlertingConfig(cfg)
 
-	certManager := certmanager.NewCertManager(
+	certManager, err := certmanager.NewCertManager(
 		domains,
 		cfg.CertManager.CertDir,
 		certCache,
@@ -119,6 +119,9 @@ func NewServer(
 		cfg,
 		alerting,
 		zLog)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx, cancel := context.WithCancel(srvCtx)
 
