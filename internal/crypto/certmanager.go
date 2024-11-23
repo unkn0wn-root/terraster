@@ -114,7 +114,6 @@ type CertManager struct {
 	checkInterval    time.Duration
 	expirationThresh time.Duration
 	stopChan         chan struct{}
-	mailClient       *mail.Client
 }
 
 type AlertingConfig struct {
@@ -144,16 +143,6 @@ func NewCertManager(
 		alerter = emailAlerter
 	}
 
-	cm := &CertManager{
-		domains:  domains,
-		certDir:  certDir,
-		cache:    cache,
-		alerter:  alerter,
-		logger:   logger,
-		config:   cfg,
-		stopChan: make(chan struct{}),
-	}
-
 	checkInterval := cfg.CertManager.CheckInterval
 	if checkInterval == 0 {
 		checkInterval = 24 * time.Hour // 24 hours
@@ -162,6 +151,16 @@ func NewCertManager(
 	expirationThresh := cfg.CertManager.ExpirationThresh
 	if expirationThresh == 0 {
 		expirationThresh = 30 * 24 * time.Hour // 30 days
+	}
+
+	cm := &CertManager{
+		domains:  domains,
+		certDir:  certDir,
+		cache:    cache,
+		alerter:  alerter,
+		logger:   logger,
+		config:   cfg,
+		stopChan: make(chan struct{}),
 	}
 
 	cm.checkInterval = checkInterval
