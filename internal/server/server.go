@@ -310,6 +310,11 @@ func (s *Server) createServer(
 	handler := s.createServiceMiddleware(svc)
 	server.Handler = handler
 
+	// If the service is HTTP, return the server. No need to configure TLS.
+	if protocol == service.HTTP {
+		return server, nil
+	}
+
 	server.TLSConfig = &tls.Config{
 		MinVersion:     TLSMinVersion,
 		GetCertificate: s.certManager.GetCertificate,
