@@ -16,7 +16,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/admin"
 	auth_service "github.com/unkn0wn-root/terraster/internal/auth/service"
 	"github.com/unkn0wn-root/terraster/internal/config"
-	"github.com/unkn0wn-root/terraster/internal/crypto"
+	certmanager "github.com/unkn0wn-root/terraster/internal/crypto"
 	"github.com/unkn0wn-root/terraster/internal/health"
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
@@ -63,7 +63,7 @@ type Server struct {
 	serviceManager *service.Manager            // Manages the lifecycle and configuration of services
 	tlsConfigCache *tlsCache                   // Cache for TLS configurations
 	tlsConfigs     map[string]*tls.Certificate // Loaded TLS certificates
-	certManager    *crypto.CertManager         // Manages TLS certificates
+	certManager    *certmanager.CertManager    // Manages TLS certificates
 	serverPool     *pool.ServerPool            // Pool of server instances
 	servers        []*http.Server              // Slice of all HTTP/HTTPS servers
 	serviceCache   *sync.Map                   // Concurrent map for caching service lookups
@@ -108,13 +108,16 @@ func NewServer(
 	}
 
 	// get and put all certificates in memory
-	certCache := crypto.NewInMemoryCertCache()
+	certCache := certmanager.NewInMemoryCertCache()
+	alerting := certmanager.NewAlertingConfig(cfg)
 
-	certManager := crypto.NewCertManager(
+	certManager := certmanager.NewCertManager(
 		domains,
 		cfg.CertManager.CertDir,
 		certCache,
+		srvCtx,
 		cfg,
+		alerting,
 		zLog)
 
 	ctx, cancel := context.WithCancel(srvCtx)
@@ -321,7 +324,7 @@ func (s *Server) createServer(
 		s.logger.Info("Setting custom cipher suites", zap.Uint16s("cipher_suites", svc.TLS.CipherSuites))
 	} else {
 		// default cipher suites
-		server.TLSConfig.CipherSuites = crypto.TerrasterCiphers
+		server.TLSConfig.CipherSuites = certmanager.TerrasterCiphers
 	}
 
 	if !svc.TLS.SessionTicketsDisabled {

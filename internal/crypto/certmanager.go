@@ -1,4 +1,4 @@
-package crypto
+package certmanager
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/wneessen/go-mail"
 )
 
 type CertCache interface {
@@ -70,16 +71,29 @@ type CertManager struct {
 	certs            sync.Map // map[string]*tls.Certificate
 	logger           *zap.Logger
 	config           *config.Config
+	alerting         AlertingConfig
 	checkInterval    time.Duration
 	expirationThresh time.Duration
 	stopChan         chan struct{}
+	mailClient       *mail.Client
+}
+
+type AlertingConfig struct {
+	Enabled   bool
+	SMTPHost  string
+	SMTPPort  int
+	FromEmail string
+	FromPass  string
+	ToEmails  []string
 }
 
 func NewCertManager(
 	domains []string,
 	certDir string,
 	cache CertCache,
+	ctx context.Context,
 	cfg *config.Config,
+	alerting AlertingConfig,
 	logger *zap.Logger,
 ) *CertManager {
 	cm := &CertManager{
@@ -93,7 +107,7 @@ func NewCertManager(
 
 	checkInterval := cfg.CertManager.CheckInterval
 	if checkInterval == 0 {
-		checkInterval = 24 * time.Hour
+		checkInterval = 24 * time.Hour // 24 hours
 	}
 
 	expirationThresh := cfg.CertManager.ExpirationThresh
@@ -110,13 +124,39 @@ func NewCertManager(
 		HostPolicy: cm.hostPolicy,
 	}
 
+	if alerting.Enabled {
+		client, err := mail.NewClient(alerting.SMTPHost,
+			mail.WithPort(alerting.SMTPPort),
+			mail.WithSMTPAuth(mail.SMTPAuthPlain),
+			mail.WithUsername(alerting.FromEmail),
+			mail.WithPassword(alerting.FromPass),
+			mail.WithTLSPolicy(mail.TLSMandatory),
+		)
+		if err != nil {
+			logger.Fatal("Failed to initialize mail client", zap.Error(err))
+		} else {
+			cm.mailClient = client
+		}
+	}
+
 	// Load local certificates during initialization
 	cm.loadLocalCertificates()
 
 	// Start periodic certificate check
-	go cm.periodicCertCheck()
+	go cm.periodicCertCheck(ctx)
 
 	return cm
+}
+
+func NewAlertingConfig(cfg *config.Config) AlertingConfig {
+	return AlertingConfig{
+		Enabled:   cfg.CertManager.Alerting.Enabled,
+		SMTPHost:  cfg.CertManager.Alerting.SMTPHost,
+		SMTPPort:  cfg.CertManager.Alerting.SMTPPort,
+		FromEmail: cfg.CertManager.Alerting.FromEmail,
+		FromPass:  cfg.CertManager.Alerting.FromPass,
+		ToEmails:  cfg.CertManager.Alerting.ToEmails,
+	}
 }
 
 // hostPolicy ensures that only configured domains are allowed.
@@ -167,9 +207,9 @@ func (cm *CertManager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certific
 }
 
 // periodicCertCheck periodically checks for certificate expirations.
-func (cm *CertManager) periodicCertCheck() {
+func (cm *CertManager) periodicCertCheck(ctx context.Context) {
 	if cm.domains == nil || len(cm.domains) == 0 {
-		cm.logger.Warn("No domains configured for certificate check. Stopping periodic check.")
+		cm.logger.Warn("No domains configured for certificate check. Periodic check will not run.")
 		return
 	}
 
@@ -183,10 +223,14 @@ func (cm *CertManager) periodicCertCheck() {
 		case <-cm.stopChan:
 			cm.logger.Info("Stopping periodic certificate check")
 			return
+		case <-ctx.Done():
+			cm.logger.Info("Context cancelled. Stopping periodic certificate check")
+			return
 		}
 	}
 }
 
+// validateCertificate validates the given certificate.
 func (cm *CertManager) validateCertificate(cert *tls.Certificate) certStatus {
 	if cert == nil {
 		return certStatus{
@@ -219,6 +263,7 @@ func (cm *CertManager) validateCertificate(cert *tls.Certificate) certStatus {
 	return status
 }
 
+// checkCerts checks the certificates for expiration and sends alerts if necessary.
 func (cm *CertManager) checkCerts() {
 	now := time.Now()
 	var checkErrors []error
@@ -257,12 +302,19 @@ func (cm *CertManager) checkCerts() {
 				zap.String("domain", domain),
 				zap.Time("expires_at", status.expiresAt),
 				zap.Duration("time_left", timeLeft))
-		} else {
-			cm.logger.Debug("Certificate valid",
-				zap.String("domain", domain),
-				zap.Time("expires_at", status.expiresAt),
-				zap.Duration("time_left", timeLeft))
+
+			// only send alert if alerting is enabled
+			if cm.alerting.Enabled {
+				cm.sendAlert(domain, status.expiresAt)
+			}
+
+			return true
 		}
+
+		cm.logger.Debug("Certificate valid",
+			zap.String("domain", domain),
+			zap.Time("expires_at", status.expiresAt),
+			zap.Duration("time_left", timeLeft))
 
 		return true
 	})
@@ -271,6 +323,33 @@ func (cm *CertManager) checkCerts() {
 		cm.logger.Error("Certificate check completed with errors",
 			zap.Int("error_count", len(checkErrors)),
 			zap.Errors("errors", checkErrors))
+	}
+}
+
+// sendAlert sends an email alert about the certificate expiration.
+func (cm *CertManager) sendAlert(domain string, expiry time.Time) {
+	msg := mail.NewMsg()
+	if err := msg.From(cm.alerting.FromEmail); err != nil {
+		cm.logger.Error("Failed to set From address", zap.Error(err))
+		return
+	}
+
+	if err := msg.To(cm.alerting.ToEmails...); err != nil {
+		cm.logger.Error("Failed to set To address", zap.Error(err))
+		return
+	}
+
+	msg.Subject(fmt.Sprintf("Certificate Expiration Warning - %s", domain))
+	msg.SetBodyString(mail.TypeTextPlain, fmt.Sprintf(
+		"The TLS certificate for %s will expire on %s.\n\nPlease renew the certificate before expiration to prevent service interruption.",
+		domain,
+		expiry.Format(time.RFC3339),
+	))
+
+	if err := cm.mailClient.DialAndSend(msg); err != nil {
+		cm.logger.Error("Failed to send alert email",
+			zap.String("domain", domain),
+			zap.Error(err))
 	}
 }
 
