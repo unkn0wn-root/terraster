@@ -149,8 +149,10 @@ type CORS struct {
 
 // CertManagerConfig holds configuration settings for the certificate manager.
 type CertManagerConfig struct {
-	CertDir  string         `json:"cert_dir"`
-	Alerting AlertingConfig `json:"alerting"`
+	CertDir          string         `json:"cert_dir"`
+	Alerting         AlertingConfig `json:"alerting"`
+	CheckInterval    time.Duration  `yaml:"check_interval"`
+	ExpirationThresh time.Duration  `yaml:"expiration_threshold"`
 }
 
 // AlertingConfig holds SMTP settings for alerting.

@@ -109,13 +109,11 @@ func NewServer(
 
 	// get and put all certificates in memory
 	certCache := crypto.NewInMemoryCertCache()
-	alertingConfig := crypto.NewAlertingConfig(cfg)
 
 	certManager := crypto.NewCertManager(
 		domains,
 		cfg.CertManager.CertDir,
 		certCache,
-		alertingConfig,
 		cfg,
 		zLog)
 
