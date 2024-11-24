@@ -7,6 +7,8 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 
 - Support for multiple load balancing methods
 - TLS termination on Load Balancer
+- Path rewrite
+- Redirect (e.g. HTTP to HTTPS) but also service to service redirect
 - API for monitoring and administration
 - Dynamic configuration via API
 - Multiple hosts on the same port
