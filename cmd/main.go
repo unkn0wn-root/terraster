@@ -123,11 +123,9 @@ func (sb *ServerBuilder) buildAuthConfig() service.AuthConfig {
 }
 
 func main() {
-	var configPath *string
-	configPath = flag.String("config", "config.yaml", "path to config file")
-	configPath = flag.String("c", "config.yaml", "path to config file")
+	configPath := flag.String("config", "config.yaml", "path to main config file")
+	servicesDir := flag.String("services", "", "optional directory containing services configurations")
 	apiConfigPath := flag.String("api_config", "api.config.yaml", "path to API config file")
-	apiConfigPath = flag.String("ac", "api.config.yaml", "path to API config file")
 
 	flag.Parse()
 
@@ -150,13 +148,10 @@ func main() {
 		log.Fatalf("Failed to get logger: %v", err)
 	}
 
-	cfg, err := config.Load(*configPath)
+	// load ane merge all configs (if provided), else use default
+	cfg, err := config.MergeConfigs(*configPath, *servicesDir, logger)
 	if err != nil {
-		logger.Fatal("Failed to load config", zap.Error(err))
-	}
-
-	if err := cfg.Validate(logger); err != nil {
-		logger.Fatal("Invalid config", zap.Error(err))
+		logger.Fatal("Failed to load and merge configs", zap.Error(err))
 	}
 
 	errChan := make(chan error, 1)

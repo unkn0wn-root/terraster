@@ -3,7 +3,7 @@
 > [!WARNING]
 This project is currently in its early development stages. While the core functionality is in place and working as intended, further improvements and features are actively being developed. Expect updates as the project evolves.
 
-A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API. 
+A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API.
 
 - Support for multiple load balancing methods
 - TLS termination on Load Balancer
@@ -55,6 +55,30 @@ go build -o terraster cmd/main.go
 
 ### Create a configuration file (or use provided in repo):
 
+##### Options
+You have 3 choices:
+- You can either create config file somewhere in your file system and point to that config wit <b>'-config'</b> flag
+- Use config.yaml which will automatically be load at startup
+- Create directory with multiple services (sites) and use <b>'-services'</b> flag to point to that directory containing all of your configuration files.
+
+If you want to split your configuration into multiple services. They all <b>have to</b> start with prefix "services:"
+
+```yaml
+# ./sites/my_first_site.yaml
+services:
+   - name: MyFirstSite
+     ...
+```
+
+```yaml
+# ./sites/my_second_site.yaml
+services:
+   - name: MySecondSite
+     ...
+```
+
+
+##### More on configuration:
 There are only 3 fields that are required - <b>port, host and backends</b>. Everything else is optional:
 
 ```yaml
