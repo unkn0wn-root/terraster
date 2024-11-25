@@ -330,8 +330,8 @@ func (s *Server) createServer(
 		server.TLSConfig.CipherSuites = certmanager.TerrasterCiphers
 	}
 
-	if !svc.TLS.SessionTicketsDisabled {
-		server.TLSConfig.SessionTicketsDisabled = false
+	if svc.TLS.SessionTicketsDisabled {
+		server.TLSConfig.SessionTicketsDisabled = true // disable session tickets - false by default
 		s.logger.Info("Session tickets disabled")
 	}
 
