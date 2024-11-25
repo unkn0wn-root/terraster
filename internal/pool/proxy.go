@@ -1,7 +1,9 @@
 package pool
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -218,6 +220,15 @@ func isRedirect(statusCode int) bool {
 
 // Logs unexpected errors and sends a generic error response to the client.
 func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	// this is a Go reverseproxy problem since Go doesn't return any meaningful cause
+	// and Go maintainers says that it is expected since client has disconnected the session
+	// so as for Go 1.23 this is still an issue and we have to live with it
+	// We don't want to overflow logs with this error as this can happen quite often
+	// so we just ignore it for now until Go team provide a better solution
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+
 	p.logger.Error("Unexpected error in proxy", zap.Error(err))
 	http.Error(w, "Something went wrong", http.StatusInternalServerError)
 }
