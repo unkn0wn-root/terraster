@@ -254,10 +254,10 @@ func (cm *CertManager) periodicCertCheck(ctx context.Context) {
 		case <-ticker.C:
 			cm.checkCerts()
 		case <-cm.stopChan:
-			cm.logger.Info("Stopping periodic certificate check")
+			cm.logger.Info("Periodic certificate check stopped")
 			return
 		case <-ctx.Done():
-			cm.logger.Info("Context cancelled. Stopping periodic certificate check")
+			cm.logger.Info("Context cancelled. Periodic certificate check stopped")
 			return
 		}
 	}
