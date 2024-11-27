@@ -181,7 +181,7 @@ func main() {
 
 	select {
 	case <-sigChan:
-		logger.Info("Shutdown signal received, starting graceful shutdown")
+		logger.Warn("Shutdown signal received. Initializing graceful shutdown")
 	case err := <-errChan:
 		logger.Fatal("Server error triggered shutdown", zap.Error(err))
 	case <-ctx.Done():
@@ -196,5 +196,5 @@ func main() {
 		logger.Fatal("Error during shutdown", zap.Error(err))
 	}
 
-	logger.Info("Shutdown completed")
+	logger.Info("All servers and health checkers shutdown successfully")
 }
