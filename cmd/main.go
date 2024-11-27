@@ -154,46 +154,47 @@ func main() {
 		logger.Fatal("Failed to load and merge configs", zap.Error(err))
 	}
 
+	configManager := NewConfigManager(logger)
+	apiConfig := configManager.LoadAPIConfig(*apiConfigPath)
+
 	errChan := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	configManager := NewConfigManager(logger)
-	apiConfig := configManager.LoadAPIConfig(*apiConfigPath)
-
+	// build server
 	builder := NewServerBuilder(cfg, apiConfig, logger, logManager)
 	srv, err := builder.BuildServer(ctx, errChan)
 	if err != nil {
 		logger.Fatal("Failed to initialize server", zap.Error(err))
 	}
 
-	// Set up a channel to listen for OS signals for graceful shutdown (e.g., SIGINT, SIGTERM).
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
+	// start server
 	go func() {
 		if err := srv.Start(); err != nil {
 			errChan <- err // Send any server start errors to the error channel.
 		}
 	}()
 
-	// Listen for shutdown signals, server errors, or context cancellations.
+	// Set up a channel to listen for OS signals for graceful shutdown (e.g., SIGINT, SIGTERM).
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
 	select {
 	case <-sigChan:
 		logger.Info("Shutdown signal received, starting graceful shutdown")
-		cancel()
 	case err := <-errChan:
 		logger.Fatal("Server error triggered shutdown", zap.Error(err))
 	case <-ctx.Done():
-		logger.Info("Context cancelled")
+		return
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
+	// attempt to gracefully shutdown the server and all components
 	if err := srv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
 		logger.Fatal("Error during shutdown", zap.Error(err))
-	} else {
-		logger.Info("Shutdown completed")
 	}
+
+	logger.Info("Shutdown completed")
 }

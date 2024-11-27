@@ -23,6 +23,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/service"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
 	"github.com/unkn0wn-root/terraster/pkg/logger"
+	"github.com/unkn0wn-root/terraster/pkg/shutdown"
 	"go.uber.org/zap"
 )
 
@@ -38,19 +39,6 @@ const (
 	ShutdownGracePeriod = 30 * time.Second
 )
 
-// tlsCache holds a map of TLS certificates keyed by hostname.
-// Is used to efficiently retrieve certificates for incoming TLS connections.
-type tlsCache struct {
-	certs map[string]*tls.Certificate
-}
-
-// newTLSCache creates and returns a new instance of tlsCache with an initialized certificate map.
-func newTLSCache() *tlsCache {
-	return &tlsCache{
-		certs: make(map[string]*tls.Certificate),
-	}
-}
-
 // Server encapsulates all the components and configurations required to run the Terraster server.
 // Manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
 type Server struct {
@@ -61,7 +49,6 @@ type Server struct {
 	adminServer    *http.Server                // HTTP server for admin API
 	healthCheckers map[string]*health.Checker  // Individual health checkers per service
 	serviceManager *service.Manager            // Manages the lifecycle and configuration of services
-	tlsConfigCache *tlsCache                   // Cache for TLS configurations
 	tlsConfigs     map[string]*tls.Certificate // Loaded TLS certificates
 	certManager    *certmanager.CertManager    // Manages TLS certificates
 	serverPool     *pool.ServerPool            // Pool of server instances
@@ -75,6 +62,7 @@ type Server struct {
 	cancel         context.CancelFunc          // Function to cancel the server context
 	wg             sync.WaitGroup              // WaitGroup to wait for goroutines to finish
 	errorChan      chan<- error                // Channel to report server errors
+	shutdown       *shutdown.GracefulShutdown  // Graceful shutdown manager
 }
 
 // Sets up health checkers for each service, initializes the admin API, and prepares the server for startup.
@@ -140,6 +128,7 @@ func NewServer(
 		errorChan:      make(chan error),
 		logger:         zLog,
 		logManager:     logManager,
+		shutdown:       shutdown.NewGracefulShutdown(),
 	}
 
 	for _, svc := range serviceManager.GetServices() {
@@ -195,6 +184,9 @@ func (s *Server) Start() error {
 		s.cancel()
 		return err
 	}
+
+	// Register shutdown handlers
+	s.registerShutdownHandlers()
 
 	return nil
 }
@@ -515,60 +507,44 @@ func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, dura
 	}
 }
 
+func (s *Server) registerShutdownHandlers() {
+	// Admin server shutdown handler
+	if s.adminServer != nil {
+		s.shutdown.AddHandler(func(ctx context.Context) error {
+			if err := s.adminServer.Shutdown(ctx); err != nil {
+				s.logger.Error("Admin server shutdown error", zap.Error(err))
+				return err
+			}
+			s.logger.Info("Admin server shutdown successfully")
+			return nil
+		})
+	}
+
+	// Service servers shutdown handlers
+	for _, srv := range s.servers {
+		s.shutdown.AddHandler(func(ctx context.Context) error {
+			if err := srv.Shutdown(ctx); err != nil {
+				s.logger.Error("Server shutdown error", zap.Error(err))
+				return err
+			}
+
+			return nil
+		})
+	}
+
+	// Health checkers shutdown handlers
+	for svcName, hc := range s.healthCheckers {
+		s.shutdown.AddHandler(func(ctx context.Context) error {
+			hc.Stop()
+			s.logger.Info("Health checker stopped", zap.String("name", svcName))
+			return nil
+		})
+	}
+}
+
 // Shutdown gracefully shuts down all running servers, including the admin server and all service servers.
 // Also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.cancel()
-	var wg sync.WaitGroup
-
-	// admin server is optional so checking if enabled first
-	if s.adminServer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := s.adminServer.Shutdown(ctx); err != nil {
-				s.logger.Error("Admin server shutdown error", zap.Error(err))
-			} else {
-				s.logger.Info("Admin server shutdown successfully")
-			}
-		}()
-	}
-
-	// Initiate shutdown of all service servers.
-	for _, srv := range s.servers {
-		wg.Add(1)
-		go func(server *http.Server) {
-			defer wg.Done()
-			if err := server.Shutdown(ctx); err != nil {
-				s.logger.Error("Server shutdown error", zap.String("server_addr", server.Addr), zap.Error(err))
-			} else {
-				s.logger.Info("Server shutdown successfully", zap.String("server_addr", server.Addr))
-			}
-		}(srv)
-	}
-
-	// Stop all health checkers.
-	for svcName, hc := range s.healthCheckers {
-		wg.Add(1)
-		go func(name string, checker *health.Checker) {
-			defer wg.Done()
-			checker.Stop()
-			s.logger.Info("Health checker stopped", zap.String("name", name))
-		}(svcName, hc)
-	}
-
-	// Wait for all shutdown operations to complete.
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-done:
-		s.logger.Info("All servers and health checkers shutdown successfully")
-		return nil
-	}
+	return s.shutdown.Shutdown(ctx)
 }
