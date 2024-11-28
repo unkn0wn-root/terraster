@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -126,14 +127,20 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to main config file")
 	servicesDir := flag.String("services", "", "optional directory containing services configurations")
 	apiConfigPath := flag.String("api_config", "api.config.yaml", "path to API config file")
-	customLogConfig := flag.String("log_config", "", "path to custom provided log config file")
+	customLogConfigs := flag.String("log_configs", "", "comma-separated paths to custom provided log config files")
 
 	flag.Parse()
 
 	// Collect log configuration paths: default and user-provided
 	logConfigPaths := []string{"log.config.json"} // Default config
-	if *customLogConfig != "" {
-		logConfigPaths = append(logConfigPaths, *customLogConfig)
+	if *customLogConfigs != "" {
+		customConfigs := strings.Split(*customLogConfigs, ",")
+		for _, customConfig := range customConfigs {
+			tp := strings.TrimSpace(customConfig)
+			if tp != "" {
+				logConfigPaths = append(logConfigPaths, tp)
+			}
+		}
 	}
 
 	logManager, err := logger.NewLoggerManager(logConfigPaths)
