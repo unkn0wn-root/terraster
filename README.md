@@ -37,7 +37,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
   - [x] Compression
   - [ ] Custom Request Headers
   - [x] Dynamic middleware plug-in
-  - [ ] Requests logger file path from config - WIP
+  - [x] Requests logger file path from config
 
 - Monitoring
   - [x] Health checking
@@ -147,6 +147,7 @@ services:
   - name: backend-api # service name
     host: internal-api1.local.com # service listener hostname
     port: 8455 # service listener port
+    log_name: backend-api # Remember to create new logger in log.config.json else it will default to default logger
     tls: # service tls configuration
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
@@ -216,9 +217,98 @@ services:
     redirect_port: 8455 # this will redirect to 8455 - mark host field
 ```
 
-3. Run the load balancer:
+#### Logging
+You are free to change any default value inside log.config.json, but you should keep default loggers (terraster and service_default)
+If you want to log your service into diffrent file (requests, errors, service health) - create (append) in log.config.json (see backend-api section example):
+
+```json
+{
+  "loggers": {
+    "terraster": {
+      "level": "debug",
+      "outputPaths": ["terraster.log"],
+      "errorOutputPaths": ["stderr"],
+      "development": false,
+      "logToConsole": true,
+      "sampling": {
+        "initial": 100,
+        "thereafter": 100
+      },
+      "encodingConfig": {
+        "timeKey": "time",
+        "levelKey": "level",
+        "nameKey": "logger",
+        "callerKey": "caller",
+        "messageKey": "msg",
+        "stacktraceKey": "stacktrace",
+        "lineEnding": "\n",
+        "levelEncoder": "lowercase",
+        "timeEncoder": "iso8601",
+        "durationEncoder": "string",
+        "callerEncoder": "short"
+      }
+    },
+    "service_default": {
+      "level": "info",
+      "outputPaths": ["service_default.log"],
+      "errorOutputPaths": ["service_default_error.log"],
+      "development": false,
+      "logToConsole": false,
+      "encodingConfig": {
+        "timeKey": "time",
+        "levelKey": "level",
+        "nameKey": "backend-api",
+        "callerKey": "caller",
+        "messageKey": "msg",
+        "stacktraceKey": "stacktrace",
+        "lineEnding": "\n",
+        "levelEncoder": "lowercase",
+        "timeEncoder": "iso8601",
+        "durationEncoder": "string",
+        "callerEncoder": "short"
+      },
+      "logRotation": {
+        "enabled": true,
+        "maxSizeMB": 200,
+        "maxBackups": 5,
+        "maxAgeDays": 15,
+        "compress": true
+      },
+      "sanitization": {
+        "sensitiveFields": ["password", "token", "access_token", "refresh_token"],
+        "mask": "****"
+      }
+    },
+    "backend-api": {
+      "level": "info",
+      "outputPaths": ["backend-api.log"],
+      "errorOutputPaths": ["backend-api-error.log"],
+      "development": false,
+      "logToConsole": false,
+      "sampling": {
+        "initial": 100,
+        "thereafter": 100
+      },
+      "logRotation": {
+        "enabled": true,
+        "maxSizeMB": 50,
+        "maxBackups": 10,
+        "maxAgeDays": 30,
+        "compress": true
+      }
+    }
+  }
+}
+```
+
+#### Running terraster
+Run the load balancer:
 ```bash
-./terraster --config config.yaml
+./terraster --config config.yaml 
+```
+or (with api configuration):
+```bash
+./terraster --config config.yaml --api_config api.config.yaml
 ```
 
 ## API Examples
