@@ -1,85 +1,80 @@
-# Terraster - Uncomplicated Load Balancer/Reverse Proxy
-
-> [!WARNING]
-This project is currently in its early development stages. While the core functionality is in place and working as intended, further improvements and features are actively being developed. Expect updates as the project evolves.
+# Terraster
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API.
 
-- Support for multiple load balancing methods
-- TLS termination on Load Balancer
-- Path rewrite
-- Redirect (e.g. HTTP to HTTPS) but also service to service redirect
-- API for monitoring and administration
-- Dynamic configuration via API
-- Multiple hosts on the same port
-- HTTP compression
-- About to expire certificates notification (email)
+> [!WARNING]  
+> This project is currently in its early development stages. While the core functionality is in place and working as intended, further improvements and features are actively being developed. Expect updates as the project evolves.
 
-## Features
+## 🚀 Key Features
 
-- Multiple load balancing algorithms
-  - [x] Round Robin
-  - [x] Weighted Round Robin
-  - [x] Least Connections
-  - [x] Weighted Least Connections
-  - [x] Response Time Based
-  - [x] IP Hash
-  - [x] Consistent Hashing
-  - [x] Adaptive Load Balancing
+* Multiple load balancing methods including Round Robin, Weighted Round Robin, and IP Hash
+* TLS termination with certificate management
+* Path rewriting and service-to-service redirection
+* Dynamic configuration via comprehensive Admin API
+* Multiple host support on the same port
+* HTTP compression
+* Certificate expiration notifications via email
 
-- Advanced Features
-  - [ ] WebSocket Support - WIP
-  - [x] SSL/TLS
-  - [ ] Automatic certificate management - WIP
-  - [x] Connection pooling
-  - [x] Circuit breaker
-  - [x] Rate limiting
-  - [x] Compression
-  - [ ] Custom Request Headers
-  - [x] Dynamic middleware plug-in
-  - [x] Requests logger file path from config
+## 🎯 Feature Status
 
-- Monitoring
-  - [x] Health checking
+### Load Balancing Algorithms
+- ✅ Round Robin
+- ✅ Weighted Round Robin
+- ✅ Least Connections
+- ✅ Weighted Least Connections
+- ✅ Response Time Based
+- ✅ IP Hash
+- ✅ Consistent Hashing
+- ✅ Adaptive Load Balancing
 
-- Administration
-  - [x] Dynamic configuration via Admin API
-  - [x] Graceful shutdown
+### Advanced Features
+- ⏳ WebSocket Support (WIP)
+- ✅ SSL/TLS Support
+- ⏳ Automatic Certificate Management (WIP)
+- ✅ Connection Pooling
+- ✅ Circuit Breaker
+- ✅ Rate Limiting
+- ✅ Compression
+- ❌ Custom Request Headers
+- ✅ Dynamic Middleware Plug-in
+- ✅ Configurable Request Logging
 
-## Quick Start
+### Core Features
+- ✅ Health Checking
+- ✅ Dynamic Configuration via Admin API
+- ✅ Graceful Shutdown
 
-### Build Terraster:
+## 🚦 Quick Start
+
+### Building from Source
+
 ```bash
 go build -o terraster cmd/main.go
 ```
 
-### Create a configuration file (or use provided in repo):
+## ⚙️ Configuration Guide
 
-##### Options
-You have 3 choices:
-- You can either create config file somewhere in your file system and point to that config wit <b>'-config'</b> flag
-- Use config.yaml which will automatically be load at startup
-- Create directory with multiple services (sites) and use <b>'-services'</b> flag to point to that directory containing all of your configuration files.
+### Configuration Methods
 
-If you want to split your configuration into multiple services. They all <b>have to</b> start with prefix "services:"
+Terraster offers three ways to manage your configuration:
 
-```yaml
-# ./sites/my_first_site.yaml
-services:
-   - name: MyFirstSite
-     ...
-```
+1. **Single Config File**
+   - Create a config file anywhere and use the `-config` flag
+   - Example: `./terraster -config /path/to/config.yaml`
 
-```yaml
-# ./sites/my_second_site.yaml
-services:
-   - name: MySecondSite
-     ...
-```
+2. **Default Config**
+   - Place `config.yaml` in the root directory
+   - Terraster will load it automatically at startup
 
+3. **Multiple Services**
+   - Create a directory containing multiple service configs
+   - Use the `-services` flag to point to the directory
+   - Example: `./terraster -services /path/to/services/`
 
-##### More on configuration:
-There are only 3 fields that are required - <b>port, host and backends</b>. Everything else is optional:
+### Basic Configuration
+
+The minimal configuration requires only three fields:
 
 ```yaml
 port: 8080
@@ -89,7 +84,10 @@ backends:
   - url: http://localhost:8082
 ```
 
-#### Basic Configuration with TLS offloading (load balancer in SSL and backend in HTTP)
+### Basic Configuration with Middleware and TLS
+
+This configuration demonstrates TLS termination and basic middleware setup:
+
 ```yaml
 port: 8080
 algorithm: round-robin
@@ -98,32 +96,40 @@ backends:
   - url: http://localhost:8081
   - url: http://localhost:8082
 
+# Middleware Configuration
 middleware:
   - rate_limit:
       requests_per_second: 100
       burst: 30
+  - security:
+      hsts: true
+      frame_options: DENY
+      xss_protection: true
 
-# this can be omitted/removed or changed to 'false' if you only want your load balancer on http (for any reason)
+# TLS Configuration (optional)
 tls:
   enabled: true
   cert_file: "./certificates/my_cert.pem"
   key_file: "./certificates/my_cert_privatekey.key"
 ```
 
-#### Advanced Configuration
+### Advanced Configuration
+
+This example demonstrates a comprehensive setup with multiple services, health checks, and advanced features:
+
 ```yaml
 ### GLOBAL CONFIG ###
 port: 443
 
-# global health check will be used by every service that don't have health_check specified
+# Global Health Check Configuration
 health_check:
   interval: 10s
   timeout: 2s
   path: /health
 
-# global middlewares enabled for all services
+# Global Middleware Configuration
 middleware:
-  - rate_limit: # global rate limit for each service if not defined in the service
+  - rate_limit:
       requests_per_second: 100
       burst: 150
   - security:
@@ -136,28 +142,32 @@ middleware:
       threshold: 5
       timeout: 60s
 
+# Global Connection Pool Settings
 connection_pool:
   max_idle: 100
   max_open: 1000
   idle_timeout: 90s
 
-
-### ADVANCED LOAD BALANCER CONFIG ###
+### SERVICES CONFIGURATION ###
 services:
-  - name: backend-api # service name
-    host: internal-api1.local.com # service listener hostname
-    port: 8455 # service listener port
-    log_name: backend-api # Remember to create new logger in log.config.json else it will default to default logger
-    tls: # service tls configuration
+  # Backend API Service
+  - name: backend-api
+    host: internal-api1.local.com
+    port: 8455
+    log_name: backend-api  # Maps to logger configuration
+    
+    # Service-specific TLS
+    tls:
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
-    # service specific middlewares - will override global
+    
+    # Service-specific middleware (overrides global)
     middleware:
       - rate_limit:
           requests_per_second: 2500
           burst: 500
-    # service health check configuration - will be used by each location
-    # can be overwrite by location config
+    
+    # Service-specific health check
     health_check:
       type: "http"
       path: "/"
@@ -166,15 +176,18 @@ services:
       thresholds:
         healthy: 2
         unhealthy: 3
+    
+    # Path-based routing
     locations:
-      - path: "/api/" # served path suffix so "https://internal-api1.local.com/api/"
-        lb_policy: round-robin # load balancing policy
-        redirect: "/" # redirect e.q. from "/" to "/api/"
+      - path: "/api/"
+        lb_policy: round-robin
+        redirect: "/"
         backends:
           - url: http://internal-api1.local.com:8455
             weight: 5
             max_connections: 1000
-            health_check: # or have separate health check for each backend and override service health check
+            # Backend-specific health check
+            health_check:
               type: "http"
               path: "/api_health"
               interval: "4s"
@@ -182,74 +195,48 @@ services:
               thresholds:
                 healthy: 1
                 unhealthy: 2
-          - url: http://internal-api2.local.com:8455 # this is missing health check so it will inherit from service
+          - url: http://internal-api2.local.com:8455
             weight: 3
             max_connections: 800
 
+  # Frontend Service
   - name: frontend
     host: frontend.local.com
     port: 443
     locations:
       - path: "/"
         lb_policy: least_connections
-        rewrite: "/frontend/" # rewrite e.q. from "/" to "/frontend/" in the backend service
+        rewrite: "/frontend/"
         backends:
           - url: http://frontend-1.local.com:3000
             weight: 5
             max_connections: 1000
-
           - url: http://frontend-2.local.com:3000
             weight: 3
             max_connections: 800
 
+  # HTTP to HTTPS Redirect Service
   - name: frontend_redirect
     host: frontend.local.com
     port: 80
-    # this will redirect to 443 based on host so you can have multiple hosts on the same port
-    # but keep in mind that you have to have correct host redirect so this :80 -> frontend.local.com:443
     http_redirect: true
     redirect_port: 443
 
+  # Custom Port Redirect Service
   - name: backend_api_redirect
     host: internal-api1.local.com
     port: 80
     http_redirect: true
-    redirect_port: 8455 # this will redirect to 8455 - mark host field
+    redirect_port: 8455
 ```
 
-#### Logging
-You are free to change any default value inside log.config.json, but you should keep default loggers (terraster and service_default).
-If you want to log your service into diffrent file (requests, errors, service health) - create a new file and use <b>-log_file</b> flag and provide your custom log config
-or append in log.config.json with your custom logger.
-If not - default logger for your services will be used and logged into service_default.log (stdin) and service_default_error.log (stderr).
+## 📝 Logging Configuration
 
-1. Your custom log config file (e.g. services_log_config.json) - it have to start with "loggers":
-```json
-{
-  "loggers": {
-    "backend-api": {
-      "level": "info",
-      "outputPaths": ["backend-api.log"],
-      "errorOutputPaths": ["backend-api-error.log"],
-      "development": false,
-      "logToConsole": false,
-      "sampling": {
-        "initial": 100,
-        "thereafter": 100
-      },
-      "logRotation": {
-        "enabled": true,
-        "maxSizeMB": 50,
-        "maxBackups": 10,
-        "maxAgeDays": 30,
-        "compress": true
-      }
-    }
-  }
-}
-```
+Terraster provides a flexible logging system with three main approaches:
 
-2. ... or use already defined log.config.json to APPEND your custom services log configuration
+### 1. Default Logger
+If no custom logging configuration is provided, Terraster will use the default logger configuration from `log.config.json`. Your services will use the `service_default` logger automatically.
+
 ```json
 {
   "loggers": {
@@ -258,66 +245,31 @@ If not - default logger for your services will be used and logged into service_d
       "outputPaths": ["terraster.log"],
       "errorOutputPaths": ["stderr"],
       "development": false,
-      "logToConsole": true,
-      "sampling": {
-        "initial": 100,
-        "thereafter": 100
-      },
-      "encodingConfig": {
-        "timeKey": "time",
-        "levelKey": "level",
-        "nameKey": "logger",
-        "callerKey": "caller",
-        "messageKey": "msg",
-        "stacktraceKey": "stacktrace",
-        "lineEnding": "\n",
-        "levelEncoder": "lowercase",
-        "timeEncoder": "iso8601",
-        "durationEncoder": "string",
-        "callerEncoder": "short"
-      }
+      "logToConsole": true
     },
     "service_default": {
       "level": "info",
       "outputPaths": ["service_default.log"],
       "errorOutputPaths": ["service_default_error.log"],
       "development": false,
-      "logToConsole": false,
-      "encodingConfig": {
-        "timeKey": "time",
-        "levelKey": "level",
-        "nameKey": "backend-api",
-        "callerKey": "caller",
-        "messageKey": "msg",
-        "stacktraceKey": "stacktrace",
-        "lineEnding": "\n",
-        "levelEncoder": "lowercase",
-        "timeEncoder": "iso8601",
-        "durationEncoder": "string",
-        "callerEncoder": "short"
-      },
-      "logRotation": {
-        "enabled": true,
-        "maxSizeMB": 200,
-        "maxBackups": 5,
-        "maxAgeDays": 15,
-        "compress": true
-      },
-      "sanitization": {
-        "sensitiveFields": ["password", "token", "access_token", "refresh_token"],
-        "mask": "****"
-      }
-    },
-    "backend-api": {
+      "logToConsole": false
+    }
+  }
+}
+```
+
+### 2. Single Custom Logger Configuration
+Create one custom logging configuration file for all services. Each service can reference a specific logger by name in its configuration.
+
+```json
+{
+  "loggers": {
+    "api-services": {
       "level": "info",
-      "outputPaths": ["backend-api.log"],
-      "errorOutputPaths": ["backend-api-error.log"],
+      "outputPaths": ["api-services.log"],
+      "errorOutputPaths": ["api-errors.log"],
       "development": false,
       "logToConsole": false,
-      "sampling": {
-        "initial": 100,
-        "thereafter": 100
-      },
       "logRotation": {
         "enabled": true,
         "maxSizeMB": 50,
@@ -325,33 +277,96 @@ If not - default logger for your services will be used and logged into service_d
         "maxAgeDays": 30,
         "compress": true
       }
+    },
+    "frontend-services": {
+      "level": "debug",
+      "outputPaths": ["frontend.log"],
+      "errorOutputPaths": ["frontend-errors.log"],
+      "development": true,
+      "logToConsole": true
     }
   }
 }
 ```
 
-#### Running terraster
-Run the load balancer:
+Use in service configuration:
+```yaml
+services:
+  - name: backend-api
+    log_name: api-services  # References logger name from config
+    # ... rest of service config
+
+  - name: frontend
+    log_name: frontend-services  # References logger name from config
+    # ... rest of service config
+```
+
+### 3. Separate Logger Configuration Per Service
+Create individual log configuration files for each service. Each file must start with the `loggers` key.
+
+`backend-api.log.json`:
+```json
+{
+  "loggers": {
+    "backend-api": {
+      "level": "info",
+      "outputPaths": ["backend-api.log"],
+      "errorOutputPaths": ["backend-api-error.log"],
+      "development": false,
+      "logToConsole": false
+    }
+  }
+}
+```
+
+`frontend.log.json`:
+```json
+{
+  "loggers": {
+    "frontend": {
+      "level": "debug",
+      "outputPaths": ["frontend.log"],
+      "errorOutputPaths": ["frontend-error.log"],
+      "development": true,
+      "logToConsole": true
+    }
+  }
+}
+```
+
+### Running Terraster with Different Logging Configurations
+
 ```bash
+# Using default logger
 ./terraster --config config.yaml
+
+# Using single custom log config
+./terraster --config config.yaml --log_configs custom.log.json
+
+# Using separate log configs for each service
+./terraster --config config.yaml --log_configs backend-api.log.json,frontend.log.json
+
+# Using default logger and appending additional loggers
+./terraster --config config.yaml --log_configs additional.log.json
 ```
-or (with api configuration):
-```bash
-./terraster --config config.yaml --api_config api.config.yaml
-```
 
-## API Examples
+#### Important Notes:
+- All log config files must start with the `loggers` key
+- When using multiple config files, make sure logger names are unique
+- If no log_name is specified in service configuration, the service will use the `service_default` logger
+- You can append additional loggers to the default configuration by providing them via --log_configs
 
-### Admin API
+## 🛠️ Admin API Setup
 
-1. Database setup
-- First, you need to create database configuration file or use provided in repo.
+### Database Configuration
+
+1. Create or use the provided API configuration file:
+
 ```yaml
 api:
   enabled: true
-  host: lb-api.domain.com # defaults to 'localhost' if not defined
+  host: lb-api.domain.com
   port: 8081
-  # this is optional. You can also use services in main config to use load balancer to guard api
   tls:
     cert_file: "./certs/admin.pem"
     key_file: "./certs/admin_key.key"
@@ -360,137 +375,44 @@ database:
   path: "./api.db"
 
 auth:
-  jwt_secret: "HelloFormTheOtherSide"
+  jwt_secret: "YourSecretKey"
   token_cleanup_interval: "7h"
   password_expiry_days: 3
 ```
 
-- Then, create API admin user
-```console
-go run scripts/database/api_util.go --config ./api.config.yaml -username "lb_admin" -password "Test953.Hello" -role "admin"
+2. Create an admin user:
+
+```bash
+go run scripts/database/api_util.go --config ./api.config.yaml \
+  -username "lb_admin" \
+  -password "SecurePassword123" \
+  -role "admin"
 ```
 
-- Admin API is disabled by default so you need to set 'enabled: true' in API configuration to enable it
+### API Examples
 
-2. Get Backend Status:
+#### Get Backend Status
 ```bash
 curl http://localhost:8081/api/backends \
-    -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
+    -H "Authorization: Bearer ${JWT_TOKEN}" \
     -H "Content-Type: application/json"
 ```
 
-3. Add Backend to service:
+#### Add Backend
 ```bash
 curl -X POST http://localhost:8081/api/backends?service_name=backend-api \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
+  -H "Authorization: Bearer ${JWT_TOKEN}" \
   -d '{
     "url": "http://newbackend:8080",
     "weight": 5
   }'
 ```
 
-## Benchmarking Tool
+## 🐳 Docker Deployment
 
-```go
-// tools/benchmark/main.go
-package main
-
-import (
-	"flag"
-	"fmt"
-	"net/http"
-	"sync"
-	"time"
-)
-
-func main() {
-	url := flag.String("url", "http://localhost:8080", "URL to benchmark")
-	concurrency := flag.Int("c", 10, "Number of concurrent requests")
-	requests := flag.Int("n", 1000, "Total number of requests")
-	duration := flag.Duration("d", 0, "Duration of the test")
-	flag.Parse()
-
-	results := make(chan time.Duration, *requests)
-	errors := make(chan error, *requests)
-	var wg sync.WaitGroup
-
-	start := time.Now()
-	client := &http.Client{
-		Timeout: time.Second * 10,
-	}
-
-	if *duration > 0 {
-		timer := time.NewTimer(*duration)
-		go func() {
-			<-timer.C
-			fmt.Println("Duration reached, stopping...")
-			*requests = 0
-		}()
-	}
-
-	// Start workers
-	for i := 0; i < *concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < *requests / *concurrency; i++ {
-				requestStart := time.Now()
-				resp, err := client.Get(*url)
-				if err != nil {
-					errors <- err
-					continue
-				}
-				resp.Body.Close()
-				results <- time.Since(requestStart)
-			}
-		}()
-	}
-
-	// Wait for completion
-	wg.Wait()
-	close(results)
-	close(errors)
-
-	// Process results
-	var total time.Duration
-	var count int
-	var min, max time.Duration
-	errCount := 0
-
-	for d := range results {
-		if min == 0 || d < min {
-			min = d
-		}
-		if d > max {
-			max = d
-		}
-		total += d
-		count++
-	}
-
-	for range errors {
-		errCount++
-	}
-
-	// Print results
-	fmt.Printf("\nBenchmark Results:\n")
-	fmt.Printf("URL: %s\n", *url)
-	fmt.Printf("Concurrency Level: %d\n", *concurrency)
-	fmt.Printf("Time taken: %v\n", time.Since(start))
-	fmt.Printf("Complete requests: %d\n", count)
-	fmt.Printf("Failed requests: %d\n", errCount)
-	fmt.Printf("Requests per second: %.2f\n", float64(count)/time.Since(start).Seconds())
-	fmt.Printf("Mean latency: %v\n", total/time.Duration(count))
-	fmt.Printf("Min latency: %v\n", min)
-	fmt.Printf("Max latency: %v\n", max)
-}
-```
-
-## Docker Deployment
-
+### Dockerfile
 ```dockerfile
-# Dockerfile
 FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
@@ -508,8 +430,8 @@ EXPOSE 8080 8081 9090
 CMD ["./terraster", "--config", "config.yaml"]
 ```
 
+### Docker Compose
 ```yaml
-# docker-compose.yml
 version: '3.8'
 
 services:
@@ -525,6 +447,20 @@ services:
     restart: unless-stopped
 ```
 
-## License
+## 📊 Benchmarking
 
-MIT License
+A benchmarking tool is included in the `tools/benchmark` directory. Run it with:
+
+```bash
+go run tools/benchmark/main.go -url http://localhost:8080 -c 10 -n 1000
+```
+
+Available flags:
+- `-url`: Target URL (default: "http://localhost:8080")
+- `-c`: Number of concurrent requests (default: 10)
+- `-n`: Total number of requests (default: 1000)
+- `-d`: Duration of the test (e.g., "30s", "5m")
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
