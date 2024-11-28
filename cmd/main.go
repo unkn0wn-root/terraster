@@ -168,7 +168,7 @@ func main() {
 		logger.Fatal("Failed to initialize server", zap.Error(err))
 	}
 
-	// start server
+	// start all services
 	go func() {
 		if err := srv.Start(); err != nil {
 			errChan <- err // Send any server start errors to the error channel.
@@ -182,6 +182,7 @@ func main() {
 	select {
 	case <-sigChan:
 		logger.Warn("Shutdown signal received. Initializing graceful shutdown")
+		cancel()
 	case err := <-errChan:
 		logger.Fatal("Server error triggered shutdown", zap.Error(err))
 	case <-ctx.Done():
@@ -196,5 +197,5 @@ func main() {
 		logger.Fatal("Error during shutdown", zap.Error(err))
 	}
 
-	logger.Info("All servers and health checkers shutdown successfully")
+	logger.Info("Server shutdown completed")
 }
