@@ -13,14 +13,14 @@ type LoggerManager struct {
 	defaultConfig *Config
 }
 
-func NewLoggerManager(logsConfigPath string) (*LoggerManager, error) {
+func NewLoggerManager(logsConfigPaths []string) (*LoggerManager, error) {
 	lm := &LoggerManager{
 		loggers:       make(map[string]*zap.Logger),
 		defaultConfig: &DefaultConfig,
 	}
 
 	// init logger but since we need logger - panic if it fails
-	if err := Init(logsConfigPath, lm); err != nil {
+	if err := Init(logsConfigPaths, lm); err != nil {
 		return nil, err
 	}
 

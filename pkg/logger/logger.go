@@ -63,41 +63,59 @@ type SanitizationConfig struct {
 	Mask            string   `json:"mask"`
 }
 
-// Init initializes the loggers based on the configuration file.
+// Init initializes the loggers based on multiple configuration files.
 // It should be called once at the start of the application.
-func Init(configPath string, manager *LoggerManager) error {
+func Init(configPaths []string, manager *LoggerManager) error {
 	managerOnce.Do(func() {
-		var cfgMap map[string]Config
-		data, err := os.ReadFile(configPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				fmt.Println("Configuration file not found. Using default logger configurations.")
-				// left on purpose
-				// No specific loggers defined; use defaults for any logger initialized later
-			} else {
-				initErr = fmt.Errorf("failed to read configuration file: %w", err)
-				return
+		for _, configPath := range configPaths {
+			var cfgMap map[string]Config
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					fmt.Printf("Configuration file '%s' not found. Skipping.\n", configPath)
+					continue
+				} else {
+					initErr = fmt.Errorf("failed to read configuration file '%s': %w", configPath, err)
+					return
+				}
 			}
-		} else {
+
 			var configWrapper struct {
 				Loggers map[string]Config `json:"loggers"`
 			}
 			if err := json.Unmarshal(data, &configWrapper); err != nil {
-				initErr = fmt.Errorf("failed to parse configuration file: %w", err)
+				initErr = fmt.Errorf("failed to parse configuration file '%s': %w", configPath, err)
 				return
 			}
+
 			cfgMap = configWrapper.Loggers
+			for name, cfg := range cfgMap {
+				logger, err := buildLogger(name, &cfg)
+				if err != nil {
+					initErr = fmt.Errorf("failed to build logger '%s': %w", name, err)
+					return
+				}
+				if err := manager.AddLogger(name, logger); err != nil {
+					initErr = fmt.Errorf("failed to add logger '%s' from config '%s': %w", name, configPath, err)
+					return
+				}
+			}
 		}
 
-		for name, cfg := range cfgMap {
-			logger, err := buildLogger(name, &cfg)
+		// If no loggers were loaded from config files, initialize default logger
+		if len(manager.loggers) == 0 {
+			defaultLogger, err := buildLogger("default", manager.defaultConfig)
 			if err != nil {
-				initErr = fmt.Errorf("failed to build logger '%s': %w", name, err)
+				initErr = fmt.Errorf("failed to build default logger: %w", err)
 				return
 			}
-			manager.AddLogger(name, logger)
+			if err := manager.AddLogger("default", defaultLogger); err != nil {
+				initErr = fmt.Errorf("failed to add default logger: %w", err)
+				return
+			}
 		}
 	})
+
 	return initErr
 }
 

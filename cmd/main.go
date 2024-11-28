@@ -126,10 +126,17 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to main config file")
 	servicesDir := flag.String("services", "", "optional directory containing services configurations")
 	apiConfigPath := flag.String("api_config", "api.config.yaml", "path to API config file")
+	customLogConfig := flag.String("log_config", "", "path to custom provided log config file")
 
 	flag.Parse()
 
-	logManager, err := logger.NewLoggerManager("log.config.json")
+	// Collect log configuration paths: default and user-provided
+	logConfigPaths := []string{"log.config.json"} // Default config
+	if *customLogConfig != "" {
+		logConfigPaths = append(logConfigPaths, *customLogConfig)
+	}
+
+	logManager, err := logger.NewLoggerManager(logConfigPaths)
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
