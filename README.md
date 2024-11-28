@@ -219,9 +219,37 @@ services:
 
 #### Logging
 You are free to change any default value inside log.config.json, but you should keep default loggers (terraster and service_default).
-If you want to log your service into diffrent file (requests, errors, service health) - create (append) in log.config.json (see backend-api section example).
+If you want to log your service into diffrent file (requests, errors, service health) - create a new file and use <b>-log_file</b> flag and provide your custom log config
+or append in log.config.json with your custom logger.
 If not - default logger for your services will be used and logged into service_default.log (stdin) and service_default_error.log (stderr).
 
+1. Your custom log config file (e.g. services_log_config.json) - it have to start with "loggers":
+```json
+{
+  "loggers": {
+    "backend-api": {
+      "level": "info",
+      "outputPaths": ["backend-api.log"],
+      "errorOutputPaths": ["backend-api-error.log"],
+      "development": false,
+      "logToConsole": false,
+      "sampling": {
+        "initial": 100,
+        "thereafter": 100
+      },
+      "logRotation": {
+        "enabled": true,
+        "maxSizeMB": 50,
+        "maxBackups": 10,
+        "maxAgeDays": 30,
+        "compress": true
+      }
+    }
+  }
+}
+```
+
+2. ... or use already defined log.config.json to APPEND your custom services log configuration
 ```json
 {
   "loggers": {
@@ -305,7 +333,7 @@ If not - default logger for your services will be used and logged into service_d
 #### Running terraster
 Run the load balancer:
 ```bash
-./terraster --config config.yaml 
+./terraster --config config.yaml
 ```
 or (with api configuration):
 ```bash
