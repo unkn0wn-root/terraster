@@ -147,8 +147,7 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 			} else {
 				file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 				if err != nil {
-					fmt.Printf("Failed to open log file '%s': %v\n", path, err)
-					continue // Skip this file
+					return nil, fmt.Errorf("Failed to open log file '%s': %v\n", path, err)
 				}
 				fileWS = zapcore.AddSync(file)
 			}

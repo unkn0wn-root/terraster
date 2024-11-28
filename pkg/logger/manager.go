@@ -45,8 +45,7 @@ func (lm *LoggerManager) AddLogger(name string, logger *zap.Logger) error {
 	return nil
 }
 
-// Retrieves a logger by name. If it doesn't exist, initializes with defaultConfig.
-// Returns error instead of panicking on initialization failure.
+// Retrieves a logger by name. Returns error if logger doesn't exist.
 func (lm *LoggerManager) GetLogger(name string) (*zap.Logger, error) {
 	// First try read lock
 	lm.mu.RLock()
@@ -56,17 +55,7 @@ func (lm *LoggerManager) GetLogger(name string) (*zap.Logger, error) {
 		return logger, nil
 	}
 
-	// Need to create new logger - use write lock
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
-	logger, err := buildLogger(name, lm.defaultConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build logger '%s': %w", name, err)
-	}
-
-	lm.loggers[name] = logger
-	return logger, nil
+	return nil, fmt.Errorf("logger '%s' not found", name)
 }
 
 // Returns a copy of the map containing all loggers.
