@@ -136,7 +136,7 @@ func NewServer(
 
 	// setup default logger for services in case of if log_name is not defined on service
 	// this is defined in log.config.json file but if not found, we fallback to default server logManager
-	// which will output to stdin and stderr
+	// which will output to service_default.log file and stderr to service_default_error.log
 	defaultSrvcLog, err := logManager.GetLogger(DefaultLogName)
 	if err != nil {
 		// fallback to default logger in case of error
