@@ -37,6 +37,7 @@ const (
 	IdleTimeout         = 60 * time.Second
 	TLSMinVersion       = tls.VersionTLS12
 	ShutdownGracePeriod = 30 * time.Second
+	DefaultLogName      = "service_default"
 )
 
 // Server encapsulates all the components and configurations required to run the Terraster server.
@@ -136,7 +137,7 @@ func NewServer(
 	// setup default logger for services in case of if log_name is not defined on service
 	// this is defined in log.config.json file but if not found, we fallback to default server logManager
 	// which will output to stdin and stderr
-	defaultSrvcLog, err := logManager.GetLogger("service_default")
+	defaultSrvcLog, err := logManager.GetLogger(DefaultLogName)
 	if err != nil {
 		// fallback to default logger in case of error
 		defaultSrvcLog = zLog
