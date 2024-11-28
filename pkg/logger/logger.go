@@ -133,29 +133,29 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 		consoleWS := zapcore.Lock(os.Stdout)
 		consoleCore := zapcore.NewCore(consoleEncoder, consoleWS, atomicLevel)
 		allCores = append(allCores, consoleCore)
-	} else {
-		for _, path := range cfg.OutputPaths {
-			if path == "stdout" || path == "stderr" {
-				// Already handled by consoleCore
-				continue
-			}
+	}
 
-			var fileWS zapcore.WriteSyncer
-			if cfg.LogRotation.Enabled {
-				lj := ljLogger(path, cfg.LogRotation)
-				fileWS = zapcore.AddSync(lj)
-			} else {
-				file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to open log file '%s': %v\n", path, err)
-				}
-				fileWS = zapcore.AddSync(file)
-			}
-
-			fileCore := zapcore.NewCore(jsonEncoder, fileWS, atomicLevel)
-			asyncFileCore := NewAsyncCore(fileCore, 1000, 100, 500*time.Millisecond) // bufferSize, batchSize, flushInterval
-			allCores = append(allCores, asyncFileCore)
+	for _, path := range cfg.OutputPaths {
+		if path == "stdout" || path == "stderr" {
+			// Already handled by consoleCore
+			continue
 		}
+
+		var fileWS zapcore.WriteSyncer
+		if cfg.LogRotation.Enabled {
+			lj := ljLogger(path, cfg.LogRotation)
+			fileWS = zapcore.AddSync(lj)
+		} else {
+			file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to open log file '%s': %v\n", path, err)
+			}
+			fileWS = zapcore.AddSync(file)
+		}
+
+		fileCore := zapcore.NewCore(jsonEncoder, fileWS, atomicLevel)
+		asyncFileCore := NewAsyncCore(fileCore, 1000, 100, 500*time.Millisecond) // bufferSize, batchSize, flushInterval
+		allCores = append(allCores, asyncFileCore)
 	}
 
 	combinedCore := zapcore.NewTee(allCores...)

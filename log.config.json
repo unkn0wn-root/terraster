@@ -4,7 +4,7 @@
       "level": "debug",
       "outputPaths": ["terraster.log"],
       "errorOutputPaths": ["stderr"],
-      "development": true,
+      "development": false,
       "logToConsole": true,
       "sampling": {
         "initial": 100,
