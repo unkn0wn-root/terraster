@@ -218,8 +218,9 @@ services:
 ```
 
 #### Logging
-You are free to change any default value inside log.config.json, but you should keep default loggers (terraster and service_default)
-If you want to log your service into diffrent file (requests, errors, service health) - create (append) in log.config.json (see backend-api section example):
+You are free to change any default value inside log.config.json, but you should keep default loggers (terraster and service_default).
+If you want to log your service into diffrent file (requests, errors, service health) - create (append) in log.config.json (see backend-api section example).
+If not - default logger for your services will be used and logged into service_default.log (stdin) and service_default_error.log (stderr).
 
 ```json
 {
