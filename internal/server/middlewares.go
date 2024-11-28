@@ -15,7 +15,7 @@ func (s *Server) createServiceMiddleware(svc *service.ServiceInfo) http.Handler 
 	baseHandler := http.HandlerFunc(s.handleRequest)
 
 	chain := middleware.NewMiddlewareChain()
-	chain.AddConfiguredMiddlewares(s.config, s.logger)
+	chain.AddConfiguredMiddlewares(s.config, svc.Logger)
 
 	// Check if the service has any specific middleware configurations to override or add.
 	if svc.Middleware != nil {
@@ -61,14 +61,9 @@ func (s *Server) createServiceMiddleware(svc *service.ServiceInfo) http.Handler 
 		}
 	}
 
-	// Retrieve a logger specifically for request logging.
-	requestsLogger, err := s.logManager.GetLogger("requests")
-	if err != nil {
-		s.logger.Error("Failed to get requests logger", zap.Error(err))
-	}
-
+	// add logging middleware to the chain with service logger
 	logger := middleware.NewLoggingMiddleware(
-		requestsLogger,
+		svc.Logger,
 		middleware.WithLogLevel(zap.InfoLevel), // Set the logging level to Info.
 		middleware.WithHeaders(),               // Configure the middleware to log HTTP headers.
 		middleware.WithQueryParams(),           // Configure the middleware to log query parameters.

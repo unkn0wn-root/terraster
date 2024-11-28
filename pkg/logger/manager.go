@@ -14,7 +14,6 @@ type LoggerManager struct {
 }
 
 func NewLoggerManager(logsConfigPath string) (*LoggerManager, error) {
-
 	lm := &LoggerManager{
 		loggers:       make(map[string]*zap.Logger),
 		defaultConfig: &DefaultConfig,

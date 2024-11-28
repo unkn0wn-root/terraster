@@ -44,6 +44,8 @@ type ServiceInfo struct {
 	HealthCheck  *config.HealthCheckConfig // Health check configuration specific to the service.
 	Locations    []*LocationInfo           // A slice of LocationInfo representing different routing paths for the service.
 	Middleware   []config.Middleware       // Middleware configurations for the service.
+	LogName      string                    // LogName will be used to get service logger from config.
+	Logger       *zap.Logger               // Logger instance for logging service activities.
 }
 
 // ServiceType determines the protocol type of the service based on its TLS configuration.
@@ -180,6 +182,7 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		HealthCheck:  serviceHealthCheck,
 		Locations:    locations, // Associated locations with their backends.
 		Middleware:   service.Middleware,
+		LogName:      service.LogName,
 	}
 	m.mu.Unlock()
 
@@ -252,6 +255,15 @@ func (m *Manager) GetServices() []*ServiceInfo {
 	}
 
 	return services
+}
+
+// AssignLogger assigns a logger to a specific service based on its name.
+func (m *Manager) AssignLogger(serviceName string, logger *zap.Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if svc, exists := m.services[serviceName]; exists {
+		svc.Logger = logger
+	}
 }
 
 // createServerPool initializes and configures a ServerPool for a given service location.

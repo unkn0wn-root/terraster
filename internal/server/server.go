@@ -65,7 +65,9 @@ type Server struct {
 	shutdown       *shutdown.GracefulShutdown  // Graceful shutdown manager
 }
 
-// Sets up health checkers for each service, initializes the admin API, and prepares the server for startup.
+// Sets up health checkers for each service,
+// initializes the admin API,
+// setup service log (if any) and prepares the server for startup.
 func NewServer(
 	srvCtx context.Context,
 	errChan chan<- error,
@@ -95,7 +97,7 @@ func NewServer(
 		}
 	}
 
-	// get and put all certificates in memory
+	// get and put all certificates in cache
 	certCache := certmanager.NewInMemoryCertCache()
 	alerting := certmanager.NewAlertingConfig(cfg)
 
@@ -131,7 +133,36 @@ func NewServer(
 		shutdown:       shutdown.NewGracefulShutdown(),
 	}
 
+	// setup default logger for services in case of if log_name is not defined on service
+	// this is defined in log.config.json file but if not found, we fallback to default server logManager
+	// which will output to stdin and stderr
+	defaultSrvcLog, err := logManager.GetLogger("service_default")
+	if err != nil {
+		// fallback to default logger in case of error
+		defaultSrvcLog = zLog
+	}
+
 	for _, svc := range serviceManager.GetServices() {
+		// if log_name is specified in config, we will try to get logger from logManager
+		// in case if this fails, we will fallback to default logger
+		var svcLogger *zap.Logger
+		if svc.LogName != "" {
+			svcLogger, err = logManager.GetLogger(svc.LogName)
+			if err != nil {
+				// fallback to default logger in case of error
+				svcLogger = defaultSrvcLog
+				zLog.Warn("Specified logger not found. Using default logger", zap.String("service_name", svc.Name), zap.Error(err))
+			}
+		} else {
+			// not defined - use default logger
+			svcLogger = defaultSrvcLog
+		}
+
+		// Assign logger to service
+		serviceManager.AssignLogger(svc.Name, svcLogger)
+
+		// setup helt checkers for each service
+		// this will run in own goroutine
 		hcCfg := svc.HealthCheck
 		if (&config.HealthCheckConfig{}) == hcCfg {
 			hcCfg = cfg.HealthCheck
@@ -141,7 +172,7 @@ func NewServer(
 		hc := health.NewChecker(
 			hcCfg.Interval,
 			hcCfg.Timeout,
-			zLog,
+			svcLogger,
 			prefix,
 		)
 		s.healthCheckers[svc.Name] = hc

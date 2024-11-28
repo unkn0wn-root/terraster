@@ -176,6 +176,7 @@ type Service struct {
 	HealthCheck  *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
 	Middleware   []Middleware       `yaml:"middleware"`             // Middleware configurations specific to the service.
 	Locations    []Location         `yaml:"locations"`              // Routing paths and backend configurations for the service.
+	LogName      string             `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
 }
 
 // Middleware defines the configuration for various middleware components.

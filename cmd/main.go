@@ -143,7 +143,7 @@ func main() {
 
 	// this logger is main log for both admin api and application logging
 	// proxy/r,w gets own logger
-	logger, err := logManager.GetLogger("main")
+	logger, err := logManager.GetLogger("terraster")
 	if err != nil {
 		log.Fatalf("Failed to get logger: %v", err)
 	}
