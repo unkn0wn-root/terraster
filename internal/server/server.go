@@ -207,6 +207,9 @@ func (s *Server) Start() error {
 		}
 	}
 
+	// Register shutdown handlers
+	s.registerShutdownHandlers()
+
 	if s.adminAPI == nil {
 		s.logger.Warn("Admin API is not enabled. Bypassing admin server setup")
 		return nil
@@ -216,9 +219,6 @@ func (s *Server) Start() error {
 		s.cancel()
 		return err
 	}
-
-	// Register shutdown handlers
-	s.registerShutdownHandlers()
 
 	return nil
 }
