@@ -50,7 +50,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 ### Building from Source
 
 ```bash
-go build -o terraster cmd/main.go
+go build -o terraster cmd/terraster
 ```
 
 ## ⚙️ Configuration Guide
