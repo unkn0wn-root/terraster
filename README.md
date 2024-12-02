@@ -6,7 +6,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 > [!WARNING]  
 > This project is currently in its early development stages. While the core functionality is in place and working as intended, further improvements and features are actively being developed. Expect updates as the project evolves.
 
-## 🚀 Key Features
+## Key Features
 
 * Multiple load balancing methods including Round Robin, Weighted Round Robin, and IP Hash
 * TLS termination with certificate management
@@ -16,7 +16,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 * HTTP compression
 * Certificate expiration notifications via email
 
-## 🎯 Feature Status
+## Feature Status
 
 ### Load Balancing Algorithms
 - ✅ Round Robin
@@ -36,7 +36,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Circuit Breaker
 - ✅ Rate Limiting
 - ✅ Compression
-- ❌ Custom Request Headers
+- ❌ Custom Request Headers - WIP
 - ✅ Dynamic Middleware Plug-in
 - ✅ Configurable Request Logging
 
@@ -45,7 +45,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Dynamic Configuration via Admin API
 - ✅ Graceful Shutdown
 
-## 🚦 Quick Start
+## Quick Start
 
 ### Building from Source
 
@@ -53,7 +53,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 go build -o terraster cmd/terraster
 ```
 
-## ⚙️ Configuration Guide
+## Configuration Guide
 
 ### Configuration Methods
 
@@ -230,9 +230,7 @@ services:
     redirect_port: 8455
 ```
 
-## 📝 Logging Configuration
-
-Terraster provides a flexible logging system with three main approaches:
+## Logging Configuration
 
 ### 1. Default Logger
 If no custom logging configuration is provided, Terraster will use the default logger configuration from `log.config.json`. Your services will use the `service_default` logger automatically.
@@ -356,7 +354,7 @@ Create individual log configuration files for each service. Each file must start
 - If no log_name is specified in service configuration, the service will use the `service_default` logger
 - You can append additional loggers to the default configuration by providing them via --log_configs
 
-## 🛠️ Admin API Setup
+## Admin API Setup
 
 ### Database Configuration
 
@@ -409,7 +407,7 @@ curl -X POST http://localhost:8081/api/backends?service_name=backend-api \
   }'
 ```
 
-## 🐳 Docker Deployment
+## Docker Deployment
 
 ### Dockerfile
 ```dockerfile
@@ -447,9 +445,9 @@ services:
     restart: unless-stopped
 ```
 
-## 📊 Benchmarking
+## Benchmarking
 
-A benchmarking tool is included in the `tools/benchmark` directory. Run it with:
+A benchmarking script is included in the `tools/benchmark` directory. Run it with:
 
 ```bash
 go run tools/benchmark/main.go -url http://localhost:8080 -c 10 -n 1000
@@ -460,7 +458,3 @@ Available flags:
 - `-c`: Number of concurrent requests (default: 10)
 - `-n`: Total number of requests (default: 1000)
 - `-d`: Duration of the test (e.g., "30s", "5m")
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
