@@ -4,7 +4,7 @@
 A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API.
 
 > [!WARNING]  
-> This project is currently in its early development stages. While the core functionality is in place and working as intended, further improvements and features are actively being developed. Expect updates as the project evolves.
+> This project is in cool-down stage which means that core functionality is in place and working as intended and stable for production use. Further improvements and features are actively being developed.
 
 ## Key Features
 
