@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -117,10 +118,19 @@ func NewReverseProxy(
 		zap.String("rewriteURL", config.RewriteURL),
 	)
 
+	// increase idle connection per host, timeout and HTTP/2
+	// any use of those fileds conservatively disables HTTP/2
+	// so we need to force attempt to try to connect to backend via HTTP/2
+	// it will falback to HTTP/1.1 if backend does not support ver. 2
+	transporter := http.DefaultTransport
+	transporter.(*http.Transport).MaxIdleConnsPerHost = 32
+	transporter.(*http.Transport).IdleConnTimeout = 30 * time.Second
+	transporter.(*http.Transport).ForceAttemptHTTP2 = true
+
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
 	reverseProxy.ModifyResponse = prx.modifyResponse
-	reverseProxy.Transport = NewTransport(http.DefaultTransport, config.SkipTLSVerify)
+	reverseProxy.Transport = NewTransport(transporter, config.SkipTLSVerify)
 	reverseProxy.ErrorHandler = prx.errorHandler
 	reverseProxy.BufferPool = NewBufferPool()
 
