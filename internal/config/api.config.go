@@ -12,6 +12,7 @@ type APIConfig struct {
 	AdminAPI      API            `yaml:"api"`
 	AdminDatabase DatabaseConfig `yaml:"database"`
 	AdminAuth     AuthConfig     `yaml:"auth"`
+	Insecure      bool           `yaml:"insecure"`
 }
 
 type API struct {
