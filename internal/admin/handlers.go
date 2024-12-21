@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	admin "github.com/unkn0wn-root/terraster/internal/admin/middleware"
 	apierr "github.com/unkn0wn-root/terraster/internal/auth"
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/internal/middleware"
@@ -29,10 +30,16 @@ func (a *AdminAPI) Handler() http.Handler {
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
 
+	adminApiHost := a.config.AdminAPI.Host
+	if adminApiHost == "" {
+		adminApiHost = "localhost"
+	}
+
 	var middlewares []middleware.Middleware
 	middlewares = append(middlewares,
 		logger,
-		NewAdminAccessLogMiddleware(),
+		admin.NewAdminAccessLogMiddleware(a.logger),
+		admin.NewHostnameMiddleware(adminApiHost, a.logger),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)
