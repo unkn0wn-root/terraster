@@ -1,7 +1,7 @@
 api:
   enabled: true
-  host: localhost
-  port: 8081
+  host: admin.domain.com
+  port: 8085
 
 database:
   path: "./auth.db"

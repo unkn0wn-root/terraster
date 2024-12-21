@@ -1,25 +1,36 @@
 package admin
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/unkn0wn-root/terraster/internal/middleware"
+	"go.uber.org/zap"
 )
 
-type AdminAccessLogMiddleware struct{}
+type AdminAccessLogMiddleware struct {
+	logger *zap.Logger
+}
 
-func NewAdminAccessLogMiddleware() middleware.Middleware {
-	return &AdminAccessLogMiddleware{}
+func NewAdminAccessLogMiddleware(logger *zap.Logger) middleware.Middleware {
+	return &AdminAccessLogMiddleware{
+		logger: logger,
+	}
 }
 
 func (m *AdminAccessLogMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Admin API access: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		m.logger.Info("Request to Admin API",
+			zap.String("method", r.Method),
+			zap.String("request url", r.URL.Path),
+			zap.String("request addr.", r.RemoteAddr))
+
 		// Wrap response writer to capture status code
 		sw := &statusResponseWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
-		log.Printf("Admin API response: %d for %s %s", sw.status, r.Method, r.URL.Path)
+		m.logger.Info("Response from Admin API",
+			zap.Int("status", sw.status),
+			zap.String("method", r.Method),
+			zap.String("request path", r.URL.Path))
 	})
 }
 

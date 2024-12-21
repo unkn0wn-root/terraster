@@ -273,11 +273,6 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 // We could use cert manager to get certificates for admin server as well
 // but it's better to guard api via load balancer so use LB if you want more advanced config
 func (s *Server) startAdminServer() error {
-	adminApiHost := s.apiConfig.AdminAPI.Host
-	if adminApiHost == "" {
-		s.apiConfig.AdminAPI.Host = "localhost"
-	}
-
 	// try to load api certificate
 	var cert *tls.Certificate
 	if s.apiConfig.AdminAPI.TLS != nil {
@@ -290,7 +285,7 @@ func (s *Server) startAdminServer() error {
 
 	}
 
-	adminAddr := net.JoinHostPort(adminApiHost, strconv.Itoa(s.servicePort(s.apiConfig.AdminAPI.Port)))
+	adminAddr := fmt.Sprintf(":%d", s.servicePort(s.apiConfig.AdminAPI.Port))
 	s.adminServer = &http.Server{
 		Addr:         adminAddr,
 		Handler:      s.adminAPI.Handler(),
@@ -379,7 +374,7 @@ func (s *Server) runServer(
 ) {
 	defer s.wg.Done()
 	n := strings.ToUpper(name)
-	s.logger.Info("Server started", zap.String("name", n), zap.String("server_addr", server.Addr))
+	s.logger.Info("Server started", zap.String("service_name", n), zap.String("listen_on", server.Addr))
 
 	var err error
 	if serviceType == service.HTTPS {
