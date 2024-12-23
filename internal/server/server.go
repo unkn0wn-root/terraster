@@ -283,7 +283,7 @@ func (s *Server) startAdminServer() error {
 			cert = &c
 		}
 
-	} else if !s.apiConfig.Insecure {
+	} else if !s.apiConfig.AdminAPI.Insecure {
 		return errors.New(
 			"TLS not configured and Insecure mode is disabled. If you want to run api on HTTP, set 'insecure' to true",
 		)
