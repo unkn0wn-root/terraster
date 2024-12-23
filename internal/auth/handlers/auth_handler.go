@@ -65,6 +65,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Account is temporarily locked", http.StatusForbidden)
 		case apierr.ErrInvalidCredentials:
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		case apierr.ErrPasswordExpired:
+			http.Error(w, "Password has expired", http.StatusUnauthorized)
 		default:
 			fmt.Println(err)
 			http.Error(w, "Authentication failed", http.StatusInternalServerError)
