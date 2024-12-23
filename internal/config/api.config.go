@@ -12,14 +12,14 @@ type APIConfig struct {
 	AdminAPI      API            `yaml:"api"`
 	AdminDatabase DatabaseConfig `yaml:"database"`
 	AdminAuth     AuthConfig     `yaml:"auth"`
-	Insecure      bool           `yaml:"insecure"`
 }
 
 type API struct {
-	Enabled bool       `yaml:"enabled"`
-	Host    string     `yaml:"host"`
-	Port    int        `yaml:"port"`
-	TLS     *TLSConfig `yaml:"tls"`
+	Enabled  bool       `yaml:"enabled"`
+	Host     string     `yaml:"host"`
+	Port     int        `yaml:"port"`
+	TLS      *TLSConfig `yaml:"tls"`
+	Insecure bool       `yaml:"insecure"`
 }
 
 type DatabaseConfig struct {
