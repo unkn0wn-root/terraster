@@ -56,19 +56,19 @@ func (a *AdminAPI) registerRoutes() {
 
 	// Admin-only routes
 	a.mux.Handle("/api/backends",
-		a.requireAuth(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleBackends))))
+		a.requireAuthStrict(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleBackends))))
 	a.mux.Handle("/api/config",
-		a.requireAuth(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleConfig))))
+		a.requireAuthStrict(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleConfig))))
 
 	// Reader routes
 	a.mux.Handle("/api/services",
-		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleServices))))
+		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleServices))))
 	a.mux.Handle("/api/health",
-		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleHealth))))
+		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleHealth))))
 	a.mux.Handle("/api/stats",
-		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleStats))))
+		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleStats))))
 	a.mux.Handle("/api/locations",
-		a.requireAuth(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleLocations))))
+		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleLocations))))
 }
 
 func (a *AdminAPI) requireRole(role models.Role, next http.Handler) http.Handler {

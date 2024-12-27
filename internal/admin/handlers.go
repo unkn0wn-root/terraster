@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/golang-jwt/jwt/v4"
 	admin "github.com/unkn0wn-root/terraster/internal/admin/middleware"
 	apierr "github.com/unkn0wn-root/terraster/internal/auth"
+	"github.com/unkn0wn-root/terraster/internal/auth/models"
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
@@ -18,6 +20,11 @@ type BackendStatus struct {
 	URL         string `json:"url"`
 	Alive       bool   `json:"alive"`
 	Connections int32  `json:"connections"`
+}
+
+type AuthResult struct {
+	Claims *jwt.MapClaims
+	User   *models.User
 }
 
 // Handler returns the HTTP handler for the AdminAPI, wrapped with necessary middleware.
@@ -272,42 +279,79 @@ func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
-// Helper methods for route protection
-func (a *AdminAPI) requireAuth(next http.Handler) http.Handler {
+// authenticateRequest validates the authentication token from the request and returns user information.
+// It performs the following steps:
+// 1. Extracts and validates the Bearer token from the Authorization header
+// 2. Validates the token's signature and claims
+// 3. Retrieves the associated user information
+func (a *AdminAPI) authenticateRequest(r *http.Request) (*AuthResult, error) {
+	token := r.Header.Get("Authorization")
+	if token == "" || len(token) < 7 || token[:7] != "Bearer " {
+		return nil, apierr.ErrInvalidToken
+	}
+
+	claims, err := a.authService.ValidateToken(token[7:])
+	if err != nil {
+		return nil, err
+	}
+
+	userID := int64((*claims)["user_id"].(float64))
+	user, err := a.authService.GetUserById(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthResult{
+		Claims: claims,
+		User:   user,
+	}, nil
+}
+
+// requireAuthStrict is a middleware that enforces strict authentication requirements.
+// It blocks access if either:
+// 1. The authentication token is invalid
+// 2. The user's password has expired
+// This middleware is used for protected routes that require active, non-expired credentials.
+func (a *AdminAPI) requireAuthStrict(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		if token == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		// Remove "Bearer " prefix
-		if len(token) < 7 || token[:7] != "Bearer " {
-			http.Error(w, "Invalid token format", http.StatusUnauthorized)
-			return
-		}
-		token = token[7:]
-
-		// Validate token
-		claims, err := a.authService.ValidateToken(token)
+		authRes, err := a.authenticateRequest(r)
 		if err != nil {
-			switch err {
-			case apierr.ErrInvalidToken:
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
-			case apierr.ErrRevokedToken:
-				http.Error(w, "Token has been revoked", http.StatusUnauthorized)
-			default:
-				http.Error(w, "Authentication failed", http.StatusUnauthorized)
-			}
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		// Add claims to context
-		ctx := context.WithValue(r.Context(), "user_claims", claims)
+		// block access if password is expired
+		if a.authService.IsPasswordExpired(authRes.User) {
+			http.Error(w, "Password expired", http.StatusForbidden)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "user_claims", authRes.Claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
+// requireAuth is a middleware that implements basic authentication validation.
+// Unlike requireAuthStrict, it allows access with expired passwords.
+// This middleware is used for routes that should be accessible even with expired credentials,
+// such as the password change endpoint.
+func (a *AdminAPI) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authResult, err := a.authenticateRequest(r)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "user_claims", authResult.Claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// handleConfig handles configuration management for service locations.
+// Supports GET and PUT methods to retrieve and update service configurations.
+// The endpoint can be accessed with either a specific service name or will default
+// to the only service if just one exists
 func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.URL.Query().Get("service_name")
 	pathName := r.URL.Query().Get("path")

@@ -241,8 +241,6 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.authService.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {
 		switch err {
-		case apierr.ErrPasswordExpired:
-			http.Error(w, "Password has expired and must be changed", http.StatusForbidden)
 		case apierr.ErrInvalidCredentials:
 			http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
 		default:

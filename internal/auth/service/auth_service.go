@@ -143,7 +143,7 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
-		return errors.New("current password is incorrect")
+		return apierr.ErrInvalidCredentials
 	}
 
 	validator := s.validator()
@@ -152,7 +152,6 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 	}
 
 	previousPasswords := user.GetPreviousPasswords()
-
 	if err := s.ValidatePasswordHistory(newPassword, previousPasswords); err != nil {
 		return err
 	}
@@ -465,6 +464,15 @@ func (s *AuthService) RevokeToken(tokenString string) error {
 // Allows users or administrators to view currently active authentication sessions.
 func (s *AuthService) GetActiveSessions(userID int64) ([]models.Session, error) {
 	return s.db.GetUserSessions(userID)
+}
+
+func (s *AuthService) GetUserById(userID int64) (*models.User, error) {
+	user, err := s.db.GetUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
 // logAudit records an audit log entry for a specific action performed by a user.
