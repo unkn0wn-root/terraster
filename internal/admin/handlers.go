@@ -45,8 +45,9 @@ func (a *AdminAPI) Handler() http.Handler {
 	var middlewares []middleware.Middleware
 	middlewares = append(middlewares,
 		logger,
-		admin.NewAdminAccessLogMiddleware(a.logger),
+		admin.NewAccessLogMiddleware(a.logger),
 		admin.NewHostnameMiddleware(adminApiHost, a.logger),
+		admin.NewIPRestrictionMiddleware(a.config.AdminAPI.AllowedIPs, a.logger),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)
