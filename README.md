@@ -26,21 +26,25 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Adaptive Load Balancing
 
 ### Advanced Features
-- ⏳ WebSocket Support (WIP)
 - ✅ SSL/TLS Support
-- ⏳ Automatic Certificate Management (WIP)
 - ✅ Connection Pooling
 - ✅ Circuit Breaker
 - ✅ Rate Limiting
 - ✅ Compression
-- ❌ Custom Request Headers - WIP
 - ✅ Dynamic Middleware Plug-in
 - ✅ Configurable Request Logging
+- ✅ Restrict access to API via IPs whitelist
 
 ### Core Features
 - ✅ Health Checking
 - ✅ Dynamic Configuration via Admin API
 - ✅ Graceful Shutdown
+
+## WIP
+- ⏳ WebSocket Support (WIP)
+- ⏳ Automatic Certificate Management (WIP)
+- ❌ Custom Request Headers
+
 
 ## Quick Start
 
@@ -365,6 +369,9 @@ api:
   tls:
     cert_file: "./certs/admin.pem"
     key_file: "./certs/admin_key.key"
+  insecure: false # set it ONLY to true if you want to run your API via HTTP (unsecure, NOT RECOMMENDED)
+  allowed_ips:    # allow access to API only from those IP addresses (if not defined - no restrictions)
+    - 10.10.10.10
 
 database:
   path: "./api.db"
