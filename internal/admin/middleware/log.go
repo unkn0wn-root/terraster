@@ -7,17 +7,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type AdminAccessLogMiddleware struct {
+type AccessLogMiddleware struct {
 	logger *zap.Logger
 }
 
-func NewAdminAccessLogMiddleware(logger *zap.Logger) middleware.Middleware {
-	return &AdminAccessLogMiddleware{
+func NewAccessLogMiddleware(logger *zap.Logger) middleware.Middleware {
+	return &AccessLogMiddleware{
 		logger: logger,
 	}
 }
 
-func (m *AdminAccessLogMiddleware) Middleware(next http.Handler) http.Handler {
+func (m *AccessLogMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.logger.Info("Request to Admin API",
 			zap.String("method", r.Method),

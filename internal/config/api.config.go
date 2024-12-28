@@ -15,11 +15,12 @@ type APIConfig struct {
 }
 
 type API struct {
-	Enabled  bool       `yaml:"enabled"`
-	Host     string     `yaml:"host"`
-	Port     int        `yaml:"port"`
-	TLS      *TLSConfig `yaml:"tls"`
-	Insecure bool       `yaml:"insecure"`
+	Enabled    bool       `yaml:"enabled"`
+	Host       string     `yaml:"host"`
+	Port       int        `yaml:"port"`
+	TLS        *TLSConfig `yaml:"tls"`
+	Insecure   bool       `yaml:"insecure"`
+	AllowedIPs []string   `yaml:"allowed_ips"`
 }
 
 type DatabaseConfig struct {
