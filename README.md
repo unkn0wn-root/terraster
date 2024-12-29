@@ -34,7 +34,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Dynamic Middleware Plug-in
 - ✅ Configurable Request Logging
 - ✅ Restrict access to API via IPs whitelist
-- ✅ Custom Request Headers
+- ✅ Custom Request/Response Headers
 
 ### Core Features
 - ✅ Health Checking
