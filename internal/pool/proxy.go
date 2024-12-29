@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/terraster/internal/config"
 	"go.uber.org/zap"
 )
 
@@ -67,13 +69,14 @@ func NewTransport(transport http.RoundTripper, skipTLSVerify bool) *Transport {
 
 // URLRewriteProxy is a custom reverse proxy that handles URL rewriting and redirection based on RouteConfig.
 type URLRewriteProxy struct {
-	proxy       *httputil.ReverseProxy // proxy is the underlying reverse proxy handling the HTTP requests.
-	target      *url.URL               // target is the destination URL to which the proxy forwards requests.
-	path        string                 // path is the URL path prefix that this proxy handles.
-	rewriteURL  string                 // rewriteURL specifies the URL to which incoming requests should be rewritten.
-	urlRewriter *URLRewriter           // urlRewriter handles the logic for rewriting request URLs and managing redirects.
-	rConfig     RewriteConfig          // rConfig holds the rewrite and redirect configurations.
-	logger      *zap.Logger            // logger is used for logging proxy-related activities.
+	proxy        *httputil.ReverseProxy // proxy is the underlying reverse proxy handling the HTTP requests.
+	target       *url.URL               // target is the destination URL to which the proxy forwards requests.
+	path         string                 // path is the URL path prefix that this proxy handles.
+	rewriteURL   string                 // rewriteURL specifies the URL to which incoming requests should be rewritten.
+	urlRewriter  *URLRewriter           // urlRewriter handles the logic for rewriting request URLs and managing redirects.
+	rConfig      RewriteConfig          // rConfig holds the rewrite and redirect configurations.
+	logger       *zap.Logger            // logger is used for logging proxy-related activities.
+	headerConfig *config.HeaderConfig   // headerConfig is used to modify request/response headers
 }
 
 // ProxyOption defines a function type for applying optional configurations to URLRewriteProxy instances.
@@ -173,6 +176,19 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	originalHost := req.Host
 	req.Header.Set(HeaderXForwardedHost, originalHost)
 	req.Header.Set(HeaderXForwardedFor, originalHost)
+
+	hc := p.headerConfig
+	if hc != nil {
+		for _, header := range hc.RemoveRequestHeaders {
+			req.Header.Del(header)
+		}
+
+		// Add/modify configured request headers
+		for key, value := range hc.RequestHeaders {
+			processedValue := p.processHeaderValue(value, req)
+			req.Header.Set(key, processedValue)
+		}
+	}
 }
 
 // handleRedirect processes HTTP redirect responses from the backend server.
@@ -214,6 +230,20 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderServer)
 	resp.Header.Del(HeaderXPoweredBy)
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
+
+	hc := p.headerConfig
+	if hc != nil {
+		// Remove specified response headers
+		for _, header := range hc.RemoveResponseHeaders {
+			resp.Header.Del(header)
+		}
+
+		// Add/modify configured response headers
+		for key, value := range hc.ResponseHeaders {
+			processedValue := p.processHeaderValue(value, resp.Request)
+			resp.Header.Set(key, processedValue)
+		}
+	}
 }
 
 // isRedirect checks if the provided HTTP status code is one that indicates a redirection.
@@ -241,4 +271,24 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 
 	p.logger.Error("Unexpected error in proxy", zap.Error(err))
 	http.Error(w, "Something went wrong", http.StatusInternalServerError)
+}
+
+// processHeaderValue replaces placeholder values with actual req values
+func (p *URLRewriteProxy) processHeaderValue(value string, req *http.Request) string {
+	// Replace placeholders with actual values
+	placeholders := map[string]func(*http.Request) string{
+		"${remote_addr}": func(r *http.Request) string { return r.RemoteAddr },
+		"${host}":        func(r *http.Request) string { return r.Host },
+		"${uri}":         func(r *http.Request) string { return r.RequestURI },
+		"${method}":      func(r *http.Request) string { return r.Method },
+	}
+
+	result := value
+	for placeholder, getter := range placeholders {
+		if strings.Contains(value, placeholder) {
+			result = strings.ReplaceAll(result, placeholder, getter(req))
+		}
+	}
+
+	return result
 }

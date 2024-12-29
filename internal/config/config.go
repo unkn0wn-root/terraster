@@ -177,6 +177,15 @@ type Service struct {
 	Middleware   []Middleware       `yaml:"middleware"`             // Middleware configurations specific to the service.
 	Locations    []Location         `yaml:"locations"`              // Routing paths and backend configurations for the service.
 	LogName      string             `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
+	Headers      HeaderConfig       `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
+}
+
+// HeaderConfig is custom response and request headers modifier
+type HeaderConfig struct {
+	RequestHeaders        map[string]string `yaml:"request_headers,omitempty"`         // Request headers to be added/modified when forwarding to backend
+	ResponseHeaders       map[string]string `yaml:"response_headers,omitempty"`        // Response headers to be added/modified before sending back to client
+	RemoveRequestHeaders  []string          `yaml:"remove_request_headers,omitempty"`  // Headers to be removed from the request before forwarding
+	RemoveResponseHeaders []string          `yaml:"remove_response_headers,omitempty"` // Headers to be removed from the response before sending back
 }
 
 // Middleware defines the configuration for various middleware components.

@@ -46,6 +46,7 @@ type ServiceInfo struct {
 	Middleware   []config.Middleware       // Middleware configurations for the service.
 	LogName      string                    // LogName will be used to get service logger from config.
 	Logger       *zap.Logger               // Logger instance for logging service activities.
+	Headers      config.HeaderConfig       // Request/Response custom headers
 }
 
 // ServiceType determines the protocol type of the service based on its TLS configuration.
@@ -137,7 +138,7 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 
 		locationPaths[location.Path] = true
 
-		serverPool, err := m.createServerPool(location, globalHealthCheck)
+		serverPool, err := m.createServerPool(service, location, globalHealthCheck)
 		if err != nil {
 			return err
 		}
@@ -183,6 +184,7 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		Locations:    locations, // Associated locations with their backends.
 		Middleware:   service.Middleware,
 		LogName:      service.LogName,
+		Headers:      service.Headers,
 	}
 	m.mu.Unlock()
 
@@ -268,17 +270,21 @@ func (m *Manager) AssignLogger(serviceName string, logger *zap.Logger) {
 
 // createServerPool initializes and configures a ServerPool for a given service location.
 // It sets up the load balancing algorithm and adds all backends associated with the location to the pool.
-func (m *Manager) createServerPool(srvc config.Location, serviceHealthCheck *config.HealthCheckConfig) (*pool.ServerPool, error) {
-	serverPool := pool.NewServerPool(m.logger)
+func (m *Manager) createServerPool(
+	svc config.Service,
+	lc config.Location,
+	serviceHealthCheck *config.HealthCheckConfig,
+) (*pool.ServerPool, error) {
+	serverPool := pool.NewServerPool(&svc, m.logger)
 	serverPool.UpdateConfig(pool.PoolConfig{
-		Algorithm: srvc.LoadBalancer,
+		Algorithm: lc.LoadBalancer,
 	})
 
-	for _, backend := range srvc.Backends {
+	for _, backend := range lc.Backends {
 		rc := pool.RouteConfig{
-			Path:          srvc.Path,             // The path associated with the backend.
-			RewriteURL:    srvc.Rewrite,          // URL rewrite rules for the backend.
-			Redirect:      srvc.Redirect,         // Redirect settings if applicable.
+			Path:          lc.Path,               // The path associated with the backend.
+			RewriteURL:    lc.Rewrite,            // URL rewrite rules for the backend.
+			Redirect:      lc.Redirect,           // Redirect settings if applicable.
 			SkipTLSVerify: backend.SkipTLSVerify, // TLS verification settings for the backend.
 		}
 

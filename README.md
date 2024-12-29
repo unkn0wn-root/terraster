@@ -34,6 +34,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Dynamic Middleware Plug-in
 - ✅ Configurable Request Logging
 - ✅ Restrict access to API via IPs whitelist
+- ✅ Custom Request Headers
 
 ### Core Features
 - ✅ Health Checking
@@ -43,7 +44,6 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 ## WIP
 - ⏳ WebSocket Support (WIP)
 - ⏳ Automatic Certificate Management (WIP)
-- ❌ Custom Request Headers
 
 
 ## Quick Start
@@ -156,18 +156,29 @@ services:
     host: internal-api1.local.com
     port: 8455
     log_name: backend-api  # Maps to logger configuration
-    
+    headers:               # Custom headers
+      request_headers:
+        X-Custom-Header: "custom-value"
+      response_headers:
+        Cache-Control: "no-cache"
+      remove_request_headers:
+        - User-Agent
+        - Accept-Encoding
+      remove_response_headers:
+        - Server
+        - X-Powered-By
+
     # Service-specific TLS
     tls:
       cert_file: "/path/to/api-cert.pem"
       key_file: "/path/to/api-key.pem"
-    
+
     # Service-specific middleware (overrides global)
     middleware:
       - rate_limit:
           requests_per_second: 2500
           burst: 500
-    
+
     # Service-specific health check
     health_check:
       type: "http"
@@ -177,7 +188,7 @@ services:
       thresholds:
         healthy: 2
         unhealthy: 3
-    
+
     # Path-based routing
     locations:
       - path: "/api/"
