@@ -32,15 +32,16 @@ type BackendSnapshot struct {
 
 // ServerPool manages a pool of backend servers, handling load balancing and connection management.
 type ServerPool struct {
-	backends       atomic.Value // Atomic value storing the current BackendSnapshot.
-	current        uint64       // Atomic counter used for round-robin load balancing.
-	algorithm      atomic.Value // Atomic value storing the current load balancing algorithm.
-	maxConnections atomic.Int32 // Atomic integer representing the maximum allowed connections per backend.
-	log            *zap.Logger  // Logger instance for logging pool activities.
+	backends       atomic.Value        // Atomic value storing the current BackendSnapshot.
+	current        uint64              // Atomic counter used for round-robin load balancing.
+	algorithm      atomic.Value        // Atomic value storing the current load balancing algorithm.
+	maxConnections atomic.Int32        // Atomic integer representing the maximum allowed connections per backend.
+	log            *zap.Logger         // Logger instance for logging pool activities.
+	serviceHeaders config.HeaderConfig // Service request and response custom headers
 }
 
-func NewServerPool(logger *zap.Logger) *ServerPool {
-	pool := &ServerPool{log: logger}
+func NewServerPool(svc *config.Service, logger *zap.Logger) *ServerPool {
+	pool := &ServerPool{serviceHeaders: svc.Headers, log: logger}
 	initialSnapshot := &BackendSnapshot{
 		Backends:     []*Backend{},
 		BackendCache: make(map[string]*Backend),
@@ -72,6 +73,7 @@ func (s *ServerPool) AddBackend(
 		createProxy,
 		s.log,
 		WithURLRewriter(rc, url),
+		WithHeaderConfig(&s.serviceHeaders),
 	)
 
 	maxConnections := cfg.MaxConnections
