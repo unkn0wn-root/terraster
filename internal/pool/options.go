@@ -25,8 +25,12 @@ func WithLogger(logger *zap.Logger) ProxyOption {
 }
 
 // WithHeaderConfig sets custom req/res headers
-func WithHeaderConfig(config *config.HeaderConfig) ProxyOption {
+func WithHeaderConfig(cfg *config.HeaderConfig) ProxyOption {
 	return func(p *URLRewriteProxy) {
-		p.headerConfig = config
+		if cfg == nil {
+			return
+		}
+
+		p.headerHandler = NewHeaderHandler(*cfg)
 	}
 }

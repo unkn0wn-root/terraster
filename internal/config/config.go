@@ -177,7 +177,7 @@ type Service struct {
 	Middleware   []Middleware       `yaml:"middleware"`             // Middleware configurations specific to the service.
 	Locations    []Location         `yaml:"locations"`              // Routing paths and backend configurations for the service.
 	LogName      string             `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
-	Headers      HeaderConfig       `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
+	Headers      *HeaderConfig      `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
 }
 
 // HeaderConfig is custom response and request headers modifier
