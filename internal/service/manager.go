@@ -46,7 +46,7 @@ type ServiceInfo struct {
 	Middleware   []config.Middleware       // Middleware configurations for the service.
 	LogName      string                    // LogName will be used to get service logger from config.
 	Logger       *zap.Logger               // Logger instance for logging service activities.
-	Headers      config.HeaderConfig       // Request/Response custom headers
+	Headers      *config.HeaderConfig      // Request/Response custom headers
 }
 
 // ServiceType determines the protocol type of the service based on its TLS configuration.
