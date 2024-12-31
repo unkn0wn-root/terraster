@@ -175,9 +175,11 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	req.Header.Set(HeaderXForwardedHost, originalHost)
 	req.Header.Set(HeaderXForwardedFor, originalHost)
 
-	if p.headerHandler != nil {
-		p.headerHandler.ProcessRequestHeaders(req)
+	if p.headerHandler == nil {
+		return
 	}
+
+	p.headerHandler.ProcessRequestHeaders(req)
 }
 
 // handleRedirect processes HTTP redirect responses from the backend server.
@@ -220,9 +222,11 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderXPoweredBy)
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
 
-	if p.headerHandler != nil {
-		p.headerHandler.ProcessResponseHeaders(resp)
+	if p.headerHandler == nil {
+		return
 	}
+
+	p.headerHandler.ProcessResponseHeaders(resp)
 }
 
 // isRedirect checks if the provided HTTP status code is one that indicates a redirection.
