@@ -59,7 +59,8 @@ func (a *AdminAPI) Handler() http.Handler {
 func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		// get service by name
+		w.Header().Set("Content-Type", "application/json")
+		// first get service by name (if provided), else get all services
 		serviceName := r.URL.Query().Get("service_name")
 		if serviceName != "" {
 			service := a.serviceManager.GetServiceByName(serviceName)
@@ -67,10 +68,11 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Service not found", http.StatusNotFound)
 				return
 			}
+
 			json.NewEncoder(w).Encode(service)
 			return
 		}
-		// else get all services
+
 		services := a.serviceManager.GetServices()
 		json.NewEncoder(w).Encode(services)
 	default:
@@ -82,7 +84,6 @@ func (a *AdminAPI) handleServices(w http.ResponseWriter, r *http.Request) {
 // Supports GET, POST, and DELETE methods to retrieve, add, or remove backends.
 func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.URL.Query().Get("service_name")
-	servicePath := r.URL.Query().Get("path")
 	if serviceName == "" {
 		http.Error(w, "service_name and path is required", http.StatusBadRequest)
 		return
@@ -101,9 +102,11 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var location *service.LocationInfo
+	servicePath := r.URL.Query().Get("path")
 	if servicePath == "" {
 		if len(svlc) > 1 {
-			http.Error(w, "'path' parameter is required for services with multiple locations",
+			http.Error(w,
+				"'path' parameter is required for services with multiple locations",
 				http.StatusBadRequest)
 			return
 		}
@@ -125,6 +128,7 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		backends := location.ServerPool.GetBackends()
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(backends)
 	case http.MethodPost:
 		var req BackendRequest
@@ -217,6 +221,7 @@ func (a *AdminAPI) handleLocations(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
 
@@ -244,6 +249,7 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(healthStatus)
 }
 
@@ -277,6 +283,7 @@ func (a *AdminAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
 
@@ -399,6 +406,7 @@ func (a *AdminAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		cfg := location.ServerPool.GetConfig()
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(cfg)
 	case http.MethodPut:
 		var update pool.PoolConfig
