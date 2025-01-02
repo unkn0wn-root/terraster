@@ -236,7 +236,7 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 			serviceHealth := make(map[string]interface{})
 			for _, backend := range backends {
 				serviceHealth[backend.URL] = map[string]interface{}{
-					"alive":       backend.Alive,
+					"alive":       backend.Alive.Load(),
 					"connections": backend.ConnectionCount,
 				}
 			}
