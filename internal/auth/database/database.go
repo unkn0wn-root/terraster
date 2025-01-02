@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until DATETIME,               -- If set, user is locked until this time.
     created_at DATETIME NOT NULL,        -- User creation timestamp.
     updated_at DATETIME NOT NULL,        -- Timestamp for the last update.
-    password_changed_at DATETIME,        -- Tracks last password change time.
-    previous_passwords TEXT              -- JSON array of hashed previous passwords.
+    password_changed_at DATETIME        -- Tracks last password change time.
 );
 
 CREATE TABLE IF NOT EXISTS tokens (
@@ -57,12 +56,23 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at DATETIME NOT NULL,            -- Timestamp when the action occurred.
     FOREIGN KEY (user_id) REFERENCES users (id) -- Foreign key linking to users.
 );
+
+CREATE TABLE IF NOT EXISTS password_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_jti ON tokens(jti);
 CREATE INDEX IF NOT EXISTS idx_tokens_expires_at ON tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);`
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_password_history_user_id ON password_history(user_id);
+`
 
 type SQLiteDB struct {
 	db *sql.DB
@@ -133,12 +143,10 @@ func (s *SQLiteDB) GetUserByUsername(username string) (*models.User, error) {
 // GetUserByID retrieves a user by their ID.
 func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 	var user models.User
-	var previousPasswords sql.NullString
-
 	err := s.db.QueryRow(`
-        SELECT id, username, password, role, last_login_at, last_login_ip,
-               failed_attempts, locked_until, password_changed_at,
-               previous_passwords, created_at, updated_at
+        SELECT id, username, password, role, last_login_at,
+            last_login_ip, failed_attempts, locked_until,
+            password_changed_at, created_at, updated_at
         FROM users
         WHERE id = ?
     `, id).Scan(
@@ -151,19 +159,11 @@ func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 		&user.FailedAttempts,
 		&user.LockedUntil,
 		&user.PasswordChangedAt,
-		&previousPasswords,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	if previousPasswords.Valid {
-		user.PreviousPasswords = previousPasswords.String
-	} else {
-		ea, _ := json.Marshal([]string{})
-		user.PreviousPasswords = string(ea)
 	}
 
 	return &user, nil
@@ -184,7 +184,6 @@ func (s *SQLiteDB) UpdateUser(user *models.User) error {
 	return err
 }
 
-// Token methods
 // CreateToken inserts a new token into the tokens table.
 func (s *SQLiteDB) CreateToken(token *models.Token) error {
 	_, err := s.db.Exec(`
@@ -248,7 +247,6 @@ func (s *SQLiteDB) CleanupExpiredTokens() error {
 	return err
 }
 
-// Audit methods
 // CreateAuditLog inserts a new audit log into the audit_logs table.
 func (s *SQLiteDB) CreateAuditLog(log *models.AuditLog) error {
 	_, err := s.db.Exec(`
@@ -302,19 +300,6 @@ func (s *SQLiteDB) GetUserSessions(userID int64) ([]models.Session, error) {
 		})
 	}
 	return sessions, nil
-}
-
-// UpdateUserPassword updates a user's password and previous passwords.
-func (s *SQLiteDB) UpdateUserPassword(user *models.User) error {
-	_, err := s.db.Exec(`
-        UPDATE users SET
-            password = ?,
-            password_changed_at = ?,
-            previous_passwords = ?,
-            updated_at = ?
-        WHERE id = ?
-    `, user.Password, user.PasswordChangedAt, user.PreviousPasswords, user.UpdatedAt, user.ID)
-	return err
 }
 
 // RevokeAllUserTokens revokes all active tokens for a user.
@@ -391,4 +376,69 @@ func (s *SQLiteDB) GetTokenByRefreshToken(refreshToken string, userID int64) (*m
 		return nil, err
 	}
 	return &token, nil
+}
+
+// AddPasswordToHistory adds a password hash to the user's password history
+func (s *SQLiteDB) AddPasswordToHistory(userID int64, passwordHash string) error {
+	_, err := s.db.Exec(`
+        INSERT INTO password_history (user_id, password_hash, created_at)
+        VALUES (?, ?, ?)
+    `, userID, passwordHash, time.Now())
+
+	return err
+}
+
+// GetPasswordHistory retrieves the password history for a user
+func (s *SQLiteDB) GetPasswordHistory(userID int64, limit int) ([]string, error) {
+	rows, err := s.db.Query(`
+        SELECT password_hash
+        FROM password_history
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+    `, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var passwords []string
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, err
+		}
+		passwords = append(passwords, hash)
+	}
+
+	return passwords, nil
+}
+
+// CleanupOldPasswords removes old password entries keeping only the latest n entries
+func (s *SQLiteDB) CleanupOldPasswords(userID int64, keep int) error {
+	_, err := s.db.Exec(`
+        DELETE FROM password_history
+        WHERE user_id = ?
+        AND id NOT IN (
+            SELECT id
+            FROM password_history
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        )
+    `, userID, userID, keep)
+
+	return err
+}
+
+// UpdateUserPassword updates a user's password and previous passwords.
+func (s *SQLiteDB) UpdateUserPassword(user *models.User) error {
+	_, err := s.db.Exec(`
+        UPDATE users SET
+            password = ?,
+            password_changed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+    `, user.Password, user.PasswordChangedAt, user.UpdatedAt, user.ID)
+	return err
 }

@@ -1,7 +1,6 @@
 package models
 
 import (
-	"encoding/json"
 	"time"
 )
 
@@ -24,7 +23,6 @@ type User struct {
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 	PasswordChangedAt time.Time  `json:"password_changed_at"`
-	PreviousPasswords string     `json:"-"`
 }
 
 type Token struct {
@@ -59,14 +57,4 @@ type Session struct {
 	LastUsed   time.Time `json:"last_used"`
 	ClientInfo string    `json:"client_info"`
 	Active     bool      `json:"active"`
-}
-
-func (u *User) GetPreviousPasswords() []string {
-	var passwords []string
-	if u.PreviousPasswords != "" {
-		if err := json.Unmarshal([]byte(u.PreviousPasswords), &passwords); err != nil {
-			return []string{}
-		}
-	}
-	return passwords
 }

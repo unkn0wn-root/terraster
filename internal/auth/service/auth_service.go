@@ -151,23 +151,30 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 		return fmt.Errorf("invalid new password: %w", err)
 	}
 
-	previousPasswords := user.GetPreviousPasswords()
+	// Get password history
+	previousPasswords, err := s.db.GetPasswordHistory(userID, s.passwordHistory)
+	if err != nil {
+		return err
+	}
+
+	// Check password history
 	if err := s.ValidatePasswordHistory(newPassword, previousPasswords); err != nil {
 		return err
 	}
 
+	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	previousPasswords = append(previousPasswords, user.Password)
-	if len(previousPasswords) > s.passwordHistory {
-		previousPasswords = previousPasswords[len(previousPasswords)-s.passwordHistory:]
+	// Add current password to history before updating
+	if err := s.db.AddPasswordToHistory(userID, user.Password); err != nil {
+		return err
 	}
 
-	passwordHistoryJSON, err := json.Marshal(previousPasswords)
-	if err != nil {
+	// Cleanup old passwords
+	if err := s.db.CleanupOldPasswords(userID, s.passwordHistory); err != nil {
 		return err
 	}
 
@@ -175,14 +182,14 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 	user.Password = string(hashedPassword)
 	user.PasswordChangedAt = now
 	user.UpdatedAt = now
-	user.PreviousPasswords = string(passwordHistoryJSON)
 
-	// Revoke all existing tokens associated with the user to enforce the password change.
-	if err := s.db.RevokeAllUserTokens(userID); err != nil {
+	// Update user record with new password
+	if err := s.db.UpdateUserPassword(user); err != nil {
 		return err
 	}
 
-	return s.db.UpdateUserPassword(user)
+	// Revoke all existing tokens associated with the user to enforce the password change.
+	return s.db.RevokeAllUserTokens(userID)
 }
 
 // CreateUser registers a new user with the provided username, password, and role.
