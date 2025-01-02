@@ -133,6 +133,8 @@ func (s *SQLiteDB) GetUserByUsername(username string) (*models.User, error) {
 // GetUserByID retrieves a user by their ID.
 func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 	var user models.User
+	var previousPasswords sql.NullString
+
 	err := s.db.QueryRow(`
         SELECT id, username, password, role, last_login_at, last_login_ip,
                failed_attempts, locked_until, password_changed_at,
@@ -149,13 +151,21 @@ func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 		&user.FailedAttempts,
 		&user.LockedUntil,
 		&user.PasswordChangedAt,
-		&user.PreviousPasswords,
+		&previousPasswords,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	if previousPasswords.Valid {
+		user.PreviousPasswords = previousPasswords.String
+	} else {
+		ea, _ := json.Marshal([]string{})
+		user.PreviousPasswords = string(ea)
+	}
+
 	return &user, nil
 }
 
