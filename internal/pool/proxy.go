@@ -33,17 +33,6 @@ const (
 	DefaultProxyLabel = "terraster"
 )
 
-// ProxyError represents an error that occurs during proxy operations.
-type ProxyError struct {
-	Op  string // Op describes the operation being performed when the error occurred.
-	Err error  // Err is the underlying error that was encountered.
-}
-
-// Error implements the error interface for ProxyError.
-func (e *ProxyError) Error() string {
-	return fmt.Sprintf("proxy error during %s: %v", e.Op, e.Err)
-}
-
 // RouteConfig holds configuration settings for routing requests through the proxy.
 type RouteConfig struct {
 	Path          string // Path is the proxy path (upstream) used to match incoming requests (optional).
@@ -165,7 +154,12 @@ func (p *URLRewriteProxy) director(req *http.Request) {
 
 // RoundTrip implements the RoundTripper interface for the Transport type.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return t.transport.RoundTrip(req)
+	r, err := t.transport.RoundTrip(req)
+	if err != nil {
+		return nil, NewProxyError("round_trip", err)
+	}
+
+	return r, nil
 }
 
 // updateRequestHeaders modifies the HTTP request headers before forwarding the request to the backend.
@@ -188,7 +182,7 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 	location := resp.Header.Get(HeaderLocation)
 	locURL, err := url.Parse(location)
 	if err != nil {
-		return &ProxyError{Op: "parse_redirect_url", Err: err} // Return a ProxyError if parsing fails.
+		return NewProxyError("handle_redirect", fmt.Errorf("invalid redirect URL: %w", err))
 	}
 
 	// Ensure that redirects to external hosts are not rewritten.
@@ -252,6 +246,11 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	p.logger.Error("Unexpected error in proxy", zap.Error(err))
-	http.Error(w, "Something went wrong", http.StatusInternalServerError)
+	p.logger.Error("Proxy error",
+		zap.Error(err),
+		zap.String("method", r.Method),
+		zap.String("path", r.URL.Path),
+	)
+
+	WriteErrorResponse(w, err)
 }
