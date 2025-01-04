@@ -1,7 +1,6 @@
 package pool
 
 import (
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -242,10 +241,15 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 	// so as for Go 1.23 this is still an issue and we have to live with it
 	// We don't want to overflow logs with this error as this can happen quite often
 	// so we just ignore it for now until Go team provide a better solution
-	if errors.Is(err, context.Canceled) {
-		return
+	var proxyErr *ProxyError
+	if errors.As(err, &proxyErr) {
+		if proxyErr.Code == ErrCodeClientDisconnect {
+			return
+		}
 	}
 
+	// log every error even if error could be non-proxy
+	// WriteErrorResponse will handle all non-proxy errors but it should not happen (just in case)
 	p.logger.Error("Proxy error",
 		zap.Error(err),
 		zap.String("method", r.Method),

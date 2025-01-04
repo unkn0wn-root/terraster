@@ -24,6 +24,13 @@ const (
 	RetryAfterSec = 5
 )
 
+// ErrorResponse represents the structure of error responses sent to clients
+type ErrorResponse struct {
+	Status     string `json:"status"`
+	Message    string `json:"message"`
+	RetryAfter int    `json:"retry_after,omitempty"`
+}
+
 // ProxyErrorCode represents specific error conditions in the proxy
 type ProxyErrorCode int
 
@@ -187,13 +194,6 @@ func NewProxyError(op string, err error) *ProxyError {
 	}
 
 	return pe
-}
-
-// ErrorResponse represents the structure of error responses sent to clients
-type ErrorResponse struct {
-	Status     string `json:"status"`
-	Message    string `json:"message"`
-	RetryAfter int    `json:"retry_after,omitempty"`
 }
 
 // WriteErrorResponse writes a structured error response to the client
