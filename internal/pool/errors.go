@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"syscall"
 )
 
@@ -15,6 +16,12 @@ var (
 	ErrBackendUnavailable = errors.New("server unavailable")
 	ErrBackendTimeout     = errors.New("server timeout")
 	ErrInvalidRedirect    = errors.New("invalid redirect received from server")
+)
+
+// Retry header constants define the retry mechanism configuration.
+const (
+	RetryAfter    = "Retry-After"
+	RetryAfterSec = 5
 )
 
 // ProxyErrorCode represents specific error conditions in the proxy
@@ -184,8 +191,9 @@ func NewProxyError(op string, err error) *ProxyError {
 
 // ErrorResponse represents the structure of error responses sent to clients
 type ErrorResponse struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status     string `json:"status"`
+	Message    string `json:"message"`
+	RetryAfter int    `json:"retry_after,omitempty"`
 }
 
 // WriteErrorResponse writes a structured error response to the client
@@ -198,6 +206,12 @@ func WriteErrorResponse(w http.ResponseWriter, err error) {
 	response := ErrorResponse{
 		Status:  "error",
 		Message: pe.Message,
+	}
+
+	// tell the client to retry after some time if error is recoverable
+	if pe.Retryable {
+		response.RetryAfter = RetryAfterSec
+		w.Header().Set(RetryAfter, strconv.Itoa(RetryAfterSec))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
