@@ -349,7 +349,7 @@ func (cm *CertManager) checkCerts() {
 		cm.logger.Debug("Certificate valid",
 			zap.String("domain", domain),
 			zap.Time("expires_at", status.expiresAt),
-			zap.Duration("time_left", timeLeft))
+			zap.String("time_left", formatDuration(timeLeft)))
 
 		return true
 	})
@@ -387,4 +387,20 @@ func (e *EmailAlerter) Alert(domain string, expiry time.Time) error {
 
 func (cm *CertManager) Stop() {
 	close(cm.stopChan)
+}
+
+// formatDuration formats time to more human readable string
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Hour) // round to nearest hour
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh", hours)
+	default:
+		return "less than 1h"
+	}
 }
