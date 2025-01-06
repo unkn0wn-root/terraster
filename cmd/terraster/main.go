@@ -19,8 +19,8 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to main config file")
 	servicesDir := flag.String("services", "", "optional directory containing services configurations")
-	apiConfigPath := flag.String("api_config", "api.config.yaml", "path to API config file")
-	customLogConfigs := flag.String("log_configs", "", "comma-separated paths to custom provided log config files")
+	apiConfigPath := flag.String("api-config", "api.config.yaml", "path to API config file")
+	customLogConfigs := flag.String("log-config", "", "comma-separated paths to custom provided log config files")
 
 	flag.Parse()
 
