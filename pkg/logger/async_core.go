@@ -120,7 +120,7 @@ func (ac *AsyncCore) processEntries() {
 func (ac *AsyncCore) writeBatch(batch []LogEntry) {
 	for _, logEntry := range batch {
 		if err := ac.core.Write(logEntry.Entry, logEntry.Fields); err != nil {
-			// Optionally handle write errors (e.g., log to stderr)
+			// should not happen but in case if we can't write to log - just print out to stdout
 			fmt.Printf("Failed to write log entry: %v\n", err)
 		}
 	}
