@@ -20,8 +20,8 @@ const (
 )
 
 type PoolConfig struct {
-	Algorithm string // The name of the load balancing algorithm to use (e.g., "round-robin").
-	MaxConns  int32  // The maximum number of concurrent connections allowed per backend.
+	Algorithm string `json:"algorithm"`       // The name of the load balancing algorithm to use (e.g., "round-robin").
+	MaxConns  int32  `json:"max_connections"` // The maximum number of concurrent connections allowed per backend.
 }
 
 // BackendSnapshot represents a snapshot of the current state of backends in the ServerPool.

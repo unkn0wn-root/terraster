@@ -38,7 +38,7 @@ type RouteConfig struct {
 	RewriteURL    string // RewriteURL is the URL to rewrite the incoming request to (downstream) (optional).
 	Redirect      string // Redirect is the URL to redirect the request to (optional).
 	SkipTLSVerify bool   // SkipTLSVerify determines whether to skip TLS certificate verification for backend connections (optional).
-	ServerName    string // Server name is used to supprot virtual hosts
+	ServerName    string // Server name is the backend virtual host name separate from proxy server name
 }
 
 // Transport wraps an http.RoundTripper to allow for custom transport configurations.
