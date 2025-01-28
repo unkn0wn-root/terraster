@@ -129,6 +129,7 @@ type BackendConfig struct {
 	MaxConnections int32              `yaml:"max_connections"`        // Maximum number of concurrent connections to the backend.
 	SkipTLSVerify  bool               `yaml:"skip_tls_verify"`        // Whether to skip TLS certificate verification for the backend.
 	HealthCheck    *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional health check configuration specific to the backend.
+	ServerName     string             `yaml:"virtual_server_name"`    // Optional to support virtual hosts
 }
 
 // Thresholds defines the thresholds for determining the health status of a backend.

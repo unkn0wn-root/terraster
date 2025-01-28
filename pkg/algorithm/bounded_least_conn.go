@@ -20,7 +20,7 @@ func (blc *BoundedLeastConnections) Name() string {
 	return "bounded-least-connections"
 }
 
-func (blc *BoundedLeastConnections) NextServer(pool ServerPool, _ *http.Request) *Server {
+func (blc *BoundedLeastConnections) NextServer(pool ServerPool, _ *http.Request, w http.ResponseWriter) *Server {
 	backends := pool.GetBackends()
 	if len(backends) == 0 {
 		return nil

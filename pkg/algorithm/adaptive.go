@@ -36,12 +36,12 @@ func NewAdaptiveLoadBalancer() *AdaptiveLoadBalancer {
 	return alb
 }
 
-func (alb *AdaptiveLoadBalancer) NextServer(pool ServerPool, r *http.Request) *Server {
+func (alb *AdaptiveLoadBalancer) NextServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
 	alb.mu.RLock()
 	algo := alb.algorithms[alb.currentAlgo]
 	alb.mu.RUnlock()
 
-	return algo.NextServer(pool, r)
+	return algo.NextServer(pool, r, w)
 }
 
 func (alb *AdaptiveLoadBalancer) RecordMetrics(algorithm string, responseTime time.Duration, isError bool) {

@@ -10,7 +10,7 @@ func (rr *RoundRobin) Name() string {
 	return "round-robin"
 }
 
-func (rr *RoundRobin) NextServer(pool ServerPool, _ *http.Request) *Server {
+func (rr *RoundRobin) NextServer(pool ServerPool, _ *http.Request, w *http.ResponseWriter) *Server {
 	servers := pool.GetBackends()
 	if len(servers) == 0 {
 		return nil

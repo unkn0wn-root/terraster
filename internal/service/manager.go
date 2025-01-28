@@ -286,6 +286,7 @@ func (m *Manager) createServerPool(
 			RewriteURL:    lc.Rewrite,            // URL rewrite rules for the backend.
 			Redirect:      lc.Redirect,           // Redirect settings if applicable.
 			SkipTLSVerify: backend.SkipTLSVerify, // TLS verification settings for the backend.
+			ServerName:    backend.ServerName,    // Virtual server host name (if any)
 		}
 
 		backendHealthCheck := serviceHealthCheck

@@ -20,14 +20,19 @@ const (
 )
 
 type PoolConfig struct {
-	Algorithm string `json:"algorithm"`       // The name of the load balancing algorithm to use (e.g., "round-robin").
-	MaxConns  int32  `json:"max_connections"` // The maximum number of concurrent connections allowed per backend.
+	Algorithm string // The name of the load balancing algorithm to use (e.g., "round-robin").
+	MaxConns  int32  // The maximum number of concurrent connections allowed per backend.
 }
 
 // BackendSnapshot represents a snapshot of the current state of backends in the ServerPool.
 type BackendSnapshot struct {
 	Backends     []*Backend          // Slice of all backend servers in the pool.
 	BackendCache map[string]*Backend // Map for quick access to backends by their URL string.
+}
+
+// BackendAlgorithm wrapps backend load balancing algorithm
+type BackendAlgorithm struct {
+	Algo algorithm.Algorithm
 }
 
 // ServerPool manages a pool of backend servers, handling load balancing and connection management.
@@ -47,7 +52,12 @@ func NewServerPool(svc *config.Service, logger *zap.Logger) *ServerPool {
 		BackendCache: make(map[string]*Backend),
 	}
 	pool.backends.Store(initialSnapshot)
-	pool.algorithm.Store(algorithm.CreateAlgorithm("round-robin"))
+
+	alg := &BackendAlgorithm{
+		Algo: algorithm.CreateAlgorithm("round-robin"),
+	}
+	pool.algorithm.Store(alg)
+
 	pool.maxConnections.Store(1000)
 	return pool
 }
@@ -318,7 +328,10 @@ func (s *ServerPool) UpdateConfig(update PoolConfig) {
 	}
 
 	if update.Algorithm != "" {
-		s.algorithm.Store(algorithm.CreateAlgorithm(update.Algorithm))
+		algo := &BackendAlgorithm{
+			Algo: algorithm.CreateAlgorithm(update.Algorithm),
+		}
+		s.algorithm.Store(algo)
 	}
 }
 

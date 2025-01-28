@@ -7,7 +7,7 @@ import (
 )
 
 type Algorithm interface {
-	NextServer(pool ServerPool, r *http.Request) *Server
+	NextServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server
 	Name() string
 }
 
@@ -39,6 +39,8 @@ func CreateAlgorithm(name string) Algorithm {
 		return &IPHash{}
 	case "least-response-time":
 		return NewLeastResponseTime()
+	case "sticky-session":
+		return NewStickySession()
 	default:
 		return &RoundRobin{} // default algorithm
 	}
