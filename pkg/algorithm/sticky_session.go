@@ -4,6 +4,7 @@ import (
 	"hash/fnv"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 const (
@@ -40,17 +41,10 @@ func (ss *StickySession) NextServer(pool ServerPool, r *http.Request, w *http.Re
 		}
 
 		// Generate new session ID based on server URL
-		h := fnv.New32a()
-		h.Write([]byte(server.URL))
-		sessionID := h.Sum32()
+		sessionID := generateHash(server.URL)
 
 		// Add cookie to response
-		http.SetCookie(*w, &http.Cookie{
-			Name:     stickySessionCookie,
-			Value:    strconv.FormatUint(uint64(sessionID), 10),
-			Path:     "/",
-			HttpOnly: true,
-		})
+		http.SetCookie(*w, sessionCookie(sessionID))
 
 		return server
 	}
@@ -62,7 +56,7 @@ func (ss *StickySession) NextServer(pool ServerPool, r *http.Request, w *http.Re
 		return ss.fallback.NextServer(pool, r, w)
 	}
 
-	idx := uint32(sessionID) % uint32(len(servers))
+	idx := consistentHash(uint32(sessionID), len(servers))
 	server := servers[idx]
 
 	// Check if the sticky server is still healthy
@@ -74,18 +68,33 @@ func (ss *StickySession) NextServer(pool ServerPool, r *http.Request, w *http.Re
 	newServer := ss.fallback.NextServer(pool, r, w)
 	if newServer != nil {
 		// Generate new session ID
-		h := fnv.New32a()
-		h.Write([]byte(newServer.URL))
-		newSessionID := h.Sum32()
+		newSessionID := generateHash(newServer.URL)
 
 		// Update cookie with new server
-		http.SetCookie(*w, &http.Cookie{
-			Name:     stickySessionCookie,
-			Value:    strconv.FormatUint(uint64(newSessionID), 10),
-			Path:     "/",
-			HttpOnly: true,
-		})
+		http.SetCookie(*w, sessionCookie(newSessionID))
 	}
 
 	return newServer
+}
+
+func sessionCookie(sessionID uint32) *http.Cookie {
+	return &http.Cookie{
+		Name:     stickySessionCookie,
+		Value:    strconv.FormatUint(uint64(sessionID), 10),
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   3600, // 1 hour
+	}
+}
+
+func consistentHash(sessionID uint32, numServers int) int {
+	return int(sessionID % uint32(numServers))
+}
+
+func generateHash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	h.Write([]byte(time.Now().String()))
+	return h.Sum32()
 }
