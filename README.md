@@ -24,6 +24,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ IP Hash
 - ✅ Consistent Hashing
 - ✅ Adaptive Load Balancing
+- ✅ Sticky session
 
 ### Advanced Features
 - ✅ SSL/TLS Support
