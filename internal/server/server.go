@@ -451,7 +451,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Select an appropriate backend based on the configured load balancing algorithm.
-	backend, err := s.getBackend(srvc, r)
+	backend, err := s.getBackend(srvc, r, w)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
@@ -517,8 +517,12 @@ func (s *Server) getServiceFromManager(host, path string, port int) (*service.Lo
 
 // getBackend selects an appropriate backend server from the service's server pool based on the load balancing algorithm.
 // Returns the selected backend or an error if no suitable backend is available.
-func (s *Server) getBackend(srvc *service.LocationInfo, r *http.Request) (*pool.Backend, error) {
-	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r)
+func (s *Server) getBackend(
+	srvc *service.LocationInfo,
+	r *http.Request,
+	w http.ResponseWriter,
+) (*pool.Backend, error) {
+	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r, &w)
 	if backendAlgo == nil {
 		return nil, errors.New("no service available")
 	}

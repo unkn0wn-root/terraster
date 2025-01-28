@@ -12,7 +12,7 @@ func (wrr *WeightedRoundRobin) Name() string {
 	return "weighted-round-robin"
 }
 
-func (wrr *WeightedRoundRobin) NextServer(pool ServerPool, _ *http.Request) *Server {
+func (wrr *WeightedRoundRobin) NextServer(pool ServerPool, _ *http.Request, w *http.ResponseWriter) *Server {
 	servers := pool.GetBackends()
 	if len(servers) == 0 {
 		return nil

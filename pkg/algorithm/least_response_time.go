@@ -27,7 +27,11 @@ func (lrt *LeastResponseTime) Name() string {
 	return "least-response-time"
 }
 
-func (lrt *LeastResponseTime) NextServer(pool ServerPool, _ *http.Request) *Server {
+func (lrt *LeastResponseTime) NextServer(
+	pool ServerPool,
+	_ *http.Request,
+	w *http.ResponseWriter,
+) *Server {
 	backends := pool.GetBackends()
 	if len(backends) == 0 {
 		return nil

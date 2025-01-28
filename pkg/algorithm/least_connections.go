@@ -10,7 +10,7 @@ func (lc *LeastConnections) Name() string {
 	return "least-connections"
 }
 
-func (lc *LeastConnections) NextServer(pool ServerPool, _ *http.Request) *Server {
+func (lc *LeastConnections) NextServer(pool ServerPool, _ *http.Request, w *http.ResponseWriter) *Server {
 	servers := pool.GetBackends()
 	if len(servers) == 0 {
 		return nil

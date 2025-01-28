@@ -12,7 +12,7 @@ func (ih *IPHash) Name() string {
 	return "ip-hash"
 }
 
-func (ih *IPHash) NextServer(pool ServerPool, r *http.Request) *Server {
+func (ih *IPHash) NextServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
 	servers := pool.GetBackends()
 	if len(servers) == 0 {
 		return nil
@@ -26,7 +26,6 @@ func (ih *IPHash) NextServer(pool ServerPool, r *http.Request) *Server {
 	h.Write([]byte(ip))
 	hash := h.Sum32()
 
-	// Get available servers
 	available := make([]*Server, 0)
 	for _, server := range servers {
 		if server.Alive.Load() {

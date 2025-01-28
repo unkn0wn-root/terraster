@@ -30,6 +30,11 @@ type BackendSnapshot struct {
 	BackendCache map[string]*Backend // Map for quick access to backends by their URL string.
 }
 
+// PoolAlgorithm wrapps backend load balancing algorithm
+type PoolAlgorithm struct {
+	Algo algorithm.Algorithm
+}
+
 // ServerPool manages a pool of backend servers, handling load balancing and connection management.
 type ServerPool struct {
 	backends       atomic.Value         // Atomic value storing the current BackendSnapshot.
@@ -47,7 +52,12 @@ func NewServerPool(svc *config.Service, logger *zap.Logger) *ServerPool {
 		BackendCache: make(map[string]*Backend),
 	}
 	pool.backends.Store(initialSnapshot)
-	pool.algorithm.Store(algorithm.CreateAlgorithm("round-robin"))
+
+	alg := &PoolAlgorithm{
+		Algo: algorithm.CreateAlgorithm("round-robin"),
+	}
+	pool.algorithm.Store(alg)
+
 	pool.maxConnections.Store(1000)
 	return pool
 }
@@ -318,25 +328,29 @@ func (s *ServerPool) UpdateConfig(update PoolConfig) {
 	}
 
 	if update.Algorithm != "" {
-		s.algorithm.Store(algorithm.CreateAlgorithm(update.Algorithm))
+		algo := &PoolAlgorithm{
+			Algo: algorithm.CreateAlgorithm(update.Algorithm),
+		}
+		s.algorithm.Store(algo)
 	}
 }
 
 // GetConfig retrieves the current configuration of the ServerPool, including the load balancing algorithm and maximum connections.
 func (s *ServerPool) GetConfig() PoolConfig {
+	ag := s.algorithm.Load().(*PoolAlgorithm)
 	return PoolConfig{
-		Algorithm: s.algorithm.Load().(algorithm.Algorithm).Name(),
+		Algorithm: ag.Algo.Name(),
 		MaxConns:  s.maxConnections.Load(),
 	}
 }
 
 // GetAlgorithm returns the current load balancing algorithm used by the ServerPool.
 func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
-	return s.algorithm.Load().(algorithm.Algorithm)
+	return s.algorithm.Load().(*PoolAlgorithm).Algo
 }
 
 // SetAlgorithm sets a new load balancing algorithm for the ServerPool.
-func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) {
+func (s *ServerPool) SetAlgorithm(algorithm *PoolAlgorithm) {
 	s.algorithm.Store(algorithm)
 }
 

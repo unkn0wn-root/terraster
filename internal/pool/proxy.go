@@ -38,6 +38,7 @@ type RouteConfig struct {
 	RewriteURL    string // RewriteURL is the URL to rewrite the incoming request to (downstream) (optional).
 	Redirect      string // Redirect is the URL to redirect the request to (optional).
 	SkipTLSVerify bool   // SkipTLSVerify determines whether to skip TLS certificate verification for backend connections (optional).
+	ServerName    string // Server name is the backend virtual host name separate from proxy server name
 }
 
 // Transport wraps an http.RoundTripper to allow for custom transport configurations.
@@ -48,8 +49,12 @@ type Transport struct {
 // NewTransport creates a new Transport instance with the provided RoundTripper.
 // It configures the TLS settings based on the skipTLSVerify parameter.
 // If skipTLSVerify is true, the Transport will not verify the server's TLS certificate.
-func NewTransport(transport http.RoundTripper, skipTLSVerify bool) *Transport {
-	transport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: skipTLSVerify}
+func NewTransport(transport http.RoundTripper, serverName string, skipTLSVerify bool) *Transport {
+	transport.(*http.Transport).TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: skipTLSVerify,
+		ServerName:         serverName,
+	}
+
 	return &Transport{transport: transport}
 }
 
@@ -119,7 +124,7 @@ func NewReverseProxy(
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
 	reverseProxy.ModifyResponse = prx.modifyResponse
-	reverseProxy.Transport = NewTransport(transporter, config.SkipTLSVerify)
+	reverseProxy.Transport = NewTransport(transporter, config.ServerName, config.SkipTLSVerify)
 	reverseProxy.ErrorHandler = prx.errorHandler
 	reverseProxy.BufferPool = NewBufferPool()
 
