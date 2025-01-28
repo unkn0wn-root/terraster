@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	stickySessionCookie = "SESSION_ID"
+	stickySessionCookie = "PX_SESSION_ID"
 )
 
 type StickySession struct {
