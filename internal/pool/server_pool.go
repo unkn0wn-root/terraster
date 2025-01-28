@@ -30,8 +30,8 @@ type BackendSnapshot struct {
 	BackendCache map[string]*Backend // Map for quick access to backends by their URL string.
 }
 
-// BackendAlgorithm wrapps backend load balancing algorithm
-type BackendAlgorithm struct {
+// PoolAlgorithm wrapps backend load balancing algorithm
+type PoolAlgorithm struct {
 	Algo algorithm.Algorithm
 }
 
@@ -53,7 +53,7 @@ func NewServerPool(svc *config.Service, logger *zap.Logger) *ServerPool {
 	}
 	pool.backends.Store(initialSnapshot)
 
-	alg := &BackendAlgorithm{
+	alg := &PoolAlgorithm{
 		Algo: algorithm.CreateAlgorithm("round-robin"),
 	}
 	pool.algorithm.Store(alg)
@@ -328,7 +328,7 @@ func (s *ServerPool) UpdateConfig(update PoolConfig) {
 	}
 
 	if update.Algorithm != "" {
-		algo := &BackendAlgorithm{
+		algo := &PoolAlgorithm{
 			Algo: algorithm.CreateAlgorithm(update.Algorithm),
 		}
 		s.algorithm.Store(algo)
@@ -337,19 +337,20 @@ func (s *ServerPool) UpdateConfig(update PoolConfig) {
 
 // GetConfig retrieves the current configuration of the ServerPool, including the load balancing algorithm and maximum connections.
 func (s *ServerPool) GetConfig() PoolConfig {
+	ag := s.algorithm.Load().(*PoolAlgorithm)
 	return PoolConfig{
-		Algorithm: s.algorithm.Load().(algorithm.Algorithm).Name(),
+		Algorithm: ag.Algo.Name(),
 		MaxConns:  s.maxConnections.Load(),
 	}
 }
 
 // GetAlgorithm returns the current load balancing algorithm used by the ServerPool.
 func (s *ServerPool) GetAlgorithm() algorithm.Algorithm {
-	return s.algorithm.Load().(algorithm.Algorithm)
+	return s.algorithm.Load().(*PoolAlgorithm).Algo
 }
 
 // SetAlgorithm sets a new load balancing algorithm for the ServerPool.
-func (s *ServerPool) SetAlgorithm(algorithm algorithm.Algorithm) {
+func (s *ServerPool) SetAlgorithm(algorithm *PoolAlgorithm) {
 	s.algorithm.Store(algorithm)
 }
 
