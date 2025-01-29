@@ -10,54 +10,61 @@ import (
 )
 
 const (
-	stickySessionCookie = "t_px__SESSION_ID" // client cookie session name
-	defaultCookieTTL    = 24 * time.Hour     // cookie expiration time
+	// sessionCookie is the cookie identifier for client session tracking
+	sessionCookie = "t_px__SESSION_ID"
+	// defaultSessionTTL defines the default cookie lifetime
+	defaultSessionTTL = 24 * time.Hour
 )
 
-type StickySession struct {
-	fallback  Algorithm // if current server is not active or alive - use fallback to pick server
-	cookieTTL time.Duration
-	secure    bool
+type SessionAffinity struct {
+	fallbackAlgo Algorithm     // alternative algorithm when sticky session fails
+	sessionTTL   time.Duration // session cookie lifetime
+	useSecure    bool          // secure cookie settings
 }
 
-func NewStickySession() *StickySession {
-	return &StickySession{
-		fallback:  &RoundRobin{},
-		cookieTTL: defaultCookieTTL,
-		secure:    true,
+// NewSessionAffinity creates a new sticky session manager with default settings
+func NewSessionAffinity() *SessionAffinity {
+	return &SessionAffinity{
+		fallbackAlgo: &RoundRobin{},
+		sessionTTL:   defaultSessionTTL,
+		useSecure:    true,
 	}
 }
 
-func (ss *StickySession) Name() string {
+// Name returns the identifier of the session affinity
+func (ss *SessionAffinity) Name() string {
 	return "sticky-session"
 }
 
-func (ss *StickySession) NextServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
+// NextServer selects the appropriate backend server based on session stickiness
+func (ss *SessionAffinity) NextServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
 	servers := pool.GetBackends()
 	if len(servers) == 0 {
 		return nil
 	}
 
-	cookie, err := r.Cookie(stickySessionCookie)
+	cookie, err := r.Cookie(sessionCookie)
 	if err == http.ErrNoCookie {
-		return ss.handleNewSession(pool, r, w)
+		return ss.selectNewServer(pool, r, w)
 	}
 
-	return ss.handleExistingSession(cookie, servers, pool, r, w)
+	return ss.selectServerFromSession(cookie, servers, pool, r, w)
 }
 
-func (ss *StickySession) handleNewSession(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
-	server := ss.fallback.NextServer(pool, r, w)
+// selectNewServer handles new client connections without existing session
+func (ss *SessionAffinity) selectNewServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
+	server := ss.fallbackAlgo.NextServer(pool, r, w)
 	if server == nil {
 		return nil
 	}
 
-	sessionID := ss.generateSessionID(server.URL)
-	http.SetCookie(*w, ss.createSessionCookie(sessionID))
+	sessionID := ss.newSessionID(server.URL)
+	http.SetCookie(*w, ss.newSessionCookie(sessionID))
 	return server
 }
 
-func (ss *StickySession) handleExistingSession(
+// selectServerFromSession handles clients with existing session cookies
+func (ss *SessionAffinity) selectServerFromSession(
 	cookie *http.Cookie,
 	servers []*Server,
 	pool ServerPool,
@@ -66,12 +73,12 @@ func (ss *StickySession) handleExistingSession(
 ) *Server {
 	sessionID, err := strconv.ParseUint(cookie.Value, 10, 64)
 	if err != nil {
-		return ss.handleNewSession(pool, r, w)
+		return ss.selectNewServer(pool, r, w)
 	}
 
 	serverHash := uint32(sessionID >> 32)
 	for _, s := range servers {
-		if hashServerURL(s.URL) == serverHash {
+		if computeURLHash(s.URL) == serverHash {
 			if s.Alive.Load() && s.CanAcceptConnection() {
 				return s
 			}
@@ -79,43 +86,48 @@ func (ss *StickySession) handleExistingSession(
 		}
 	}
 
-	return ss.handleFailover(pool, r, w)
+	return ss.selectFallbackServer(pool, r, w)
 }
 
-func (ss *StickySession) handleFailover(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
-	newServer := ss.fallback.NextServer(pool, r, w)
+// selectFallbackServer manages failover when the original server is unavailable
+func (ss *SessionAffinity) selectFallbackServer(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
+	newServer := ss.fallbackAlgo.NextServer(pool, r, w)
 	if newServer != nil {
-		newSessionID := ss.generateSessionID(newServer.URL)
-		http.SetCookie(*w, ss.createSessionCookie(newSessionID))
+		newSessionID := ss.newSessionID(newServer.URL)
+		http.SetCookie(*w, ss.newSessionCookie(newSessionID))
 	}
 	return newServer
 }
 
-func (ss *StickySession) createSessionCookie(sessionID uint64) *http.Cookie {
+// newSessionCookie creates an HTTP cookie with the session information
+func (ss *SessionAffinity) newSessionCookie(sessionID uint64) *http.Cookie {
 	return &http.Cookie{
-		Name:     stickySessionCookie,
+		Name:     sessionCookie,
 		Value:    strconv.FormatUint(sessionID, 10),
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   ss.secure,
+		Secure:   ss.useSecure,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   int(ss.cookieTTL.Seconds()),
+		MaxAge:   int(ss.sessionTTL.Seconds()),
 	}
 }
 
-func (ss *StickySession) generateSessionID(serverURL string) uint64 {
-	serverHash := hashServerURL(serverURL)
-	nonce := generateRandomNonce()
+// newSessionID generates a unique session identifier for a server
+func (ss *SessionAffinity) newSessionID(serverURL string) uint64 {
+	serverHash := computeURLHash(serverURL)
+	nonce := generateNonce()
 	return (uint64(serverHash) << 32) | uint64(nonce)
 }
 
-func hashServerURL(url string) uint32 {
+// computeURLHash creates a hash of the server URL for consistent mapping
+func computeURLHash(url string) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(url))
 	return h.Sum32()
 }
 
-func generateRandomNonce() uint32 {
+// generateNonce creates a random 32-bit value for session uniqueness
+func generateNonce() uint32 {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return binary.BigEndian.Uint32(b)

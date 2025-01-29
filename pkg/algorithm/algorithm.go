@@ -40,7 +40,7 @@ func CreateAlgorithm(name string) Algorithm {
 	case "least-response-time":
 		return NewLeastResponseTime()
 	case "sticky-session":
-		return NewStickySession()
+		return NewSessionAffinity()
 	default:
 		return &RoundRobin{} // default algorithm
 	}
