@@ -39,6 +39,7 @@ type RouteConfig struct {
 	Redirect      string // Redirect is the URL to redirect the request to (optional).
 	SkipTLSVerify bool   // SkipTLSVerify determines whether to skip TLS certificate verification for backend connections (optional).
 	SNI           string // SNI (Server Name Indication) is the backend virtual host name separate from proxy server name
+	HTTP2         bool   // HTTP2 enables proxy to force connect to backend server via HTTP/2 protocol
 }
 
 // Transport wraps an http.RoundTripper to allow for custom transport configurations.
@@ -49,11 +50,18 @@ type Transport struct {
 // NewTransport creates a new Transport instance with the provided RoundTripper.
 // It configures the TLS settings based on the skipTLSVerify parameter.
 // If skipTLSVerify is true, the Transport will not verify the server's TLS certificate.
-func NewTransport(transport http.RoundTripper, serverName string, skipTLSVerify bool) *Transport {
-	transport.(*http.Transport).TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: skipTLSVerify,
-		ServerName:         serverName,
+func NewTransport(transport *http.Transport, serverName string, skipTLSVerify bool) *Transport {
+	tlsConfig := transport.TLSClientConfig
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{}
 	}
+
+	// disable/enable TLS verification from backend
+	tlsConfig.InsecureSkipVerify = skipTLSVerify
+	// SNI configuration for TLS (empty if not set)
+	tlsConfig.ServerName = serverName
+
+	transport.TLSClientConfig = tlsConfig
 
 	return &Transport{transport: transport}
 }
@@ -69,6 +77,7 @@ type URLRewriteProxy struct {
 	logger        *zap.Logger            // logger is used for logging proxy-related activities.
 	headerHandler *HeaderHandler         // headerHandler is used to modify request/response headers
 	routeSNI      string                 // serverName is the backend virtual host name (SNI) separate from proxy server name
+	h2            bool                   // h2 enables connection to backend service via http/2 protocol
 }
 
 // ProxyOption defines a function type for applying optional configurations to URLRewriteProxy instances.
@@ -98,6 +107,7 @@ func NewReverseProxy(
 		logger:     proxyLogger,
 		proxy:      px,
 		routeSNI:   config.SNI,
+		h2:         config.HTTP2,
 	}
 
 	for _, opt := range opts {
@@ -114,14 +124,23 @@ func NewReverseProxy(
 		zap.String("rewriteURL", config.RewriteURL),
 	)
 
-	// increase idle connection per host, timeout and HTTP/2
-	// any use of those fileds conservatively disables HTTP/2
-	// so we need to force attempt to try to connect to backend via HTTP/2
-	// it will falback to HTTP/1.1 if backend does not support ver. 2
-	transporter := http.DefaultTransport
-	transporter.(*http.Transport).MaxIdleConnsPerHost = 32
-	transporter.(*http.Transport).IdleConnTimeout = 30 * time.Second
-	transporter.(*http.Transport).ForceAttemptHTTP2 = true
+	// Increase idle connection per host, timeout and HTTP/2
+	// Clone the default transport to avoid modifying the global one
+	// If http2 is set, we need to force attempt to try to connect to backend via HTTP/2
+	// If http2 is not set (which is by default), we're disabling http2 completly
+	transporter := http.DefaultTransport.(*http.Transport).Clone()
+	transporter.MaxIdleConnsPerHost = 32
+	transporter.IdleConnTimeout = 30 * time.Second
+
+	if !prx.h2 {
+		// this will effectively disable HTTP/2
+		transporter.ForceAttemptHTTP2 = false
+		transporter.TLSClientConfig.NextProtos = []string{"http/1.1"}
+		transporter.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) http.RoundTripper)
+	} else {
+		// try to force http2 to the backend route if http2 is set
+		transporter.ForceAttemptHTTP2 = true
+	}
 
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director

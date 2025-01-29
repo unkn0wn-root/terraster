@@ -130,6 +130,7 @@ type BackendConfig struct {
 	SkipTLSVerify  bool               `yaml:"skip_tls_verify"`        // Whether to skip TLS certificate verification for the backend.
 	HealthCheck    *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional health check configuration specific to the backend.
 	ServerName     string             `yaml:"sni"`                    // Optional to support virtual hosts
+	HTTP2          bool               `yaml:"http2"`                  // Optional to enable http2 protocol to the backend service
 }
 
 // Thresholds defines the thresholds for determining the health status of a backend.
