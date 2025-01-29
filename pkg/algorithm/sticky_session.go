@@ -1,23 +1,30 @@
 package algorithm
 
 import (
-	"hash/fnv"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"net/http"
 	"strconv"
 	"time"
 )
 
 const (
-	stickySessionCookie = "PX_SESSION_ID"
+	stickySessionCookie = "t_px_SESSION_ID"
+	defaultCookieTTL    = 24 * time.Hour
 )
 
 type StickySession struct {
-	fallback Algorithm // Fallback algorithm when no cookie exists
+	fallback  Algorithm // Fallback algorithm when no cookie exists
+	cookieTTL time.Duration
+	secure    bool
 }
 
 func NewStickySession() *StickySession {
 	return &StickySession{
-		fallback: &RoundRobin{},
+		fallback:  &RoundRobin{},
+		cookieTTL: defaultCookieTTL,
+		secure:    true,
 	}
 }
 
@@ -31,70 +38,82 @@ func (ss *StickySession) NextServer(pool ServerPool, r *http.Request, w *http.Re
 		return nil
 	}
 
-	// Try to get existing cookie
 	cookie, err := r.Cookie(stickySessionCookie)
 	if err == http.ErrNoCookie {
-		// No cookie found, use fallback algorithm to choose server
-		server := ss.fallback.NextServer(pool, r, w)
-		if server == nil {
-			return nil
-		}
-
-		// Generate new session ID based on server URL
-		sessionID := generateHash(server.URL)
-
-		// Add cookie to response
-		http.SetCookie(*w, sessionCookie(sessionID))
-
-		return server
+		return ss.handleNewSession(pool, r, w)
 	}
 
-	// Cookie exists, try to find the corresponding server
-	sessionID, err := strconv.ParseUint(cookie.Value, 10, 32)
+	return ss.handleExistingSession(cookie, servers, pool, r, w)
+}
+
+func (ss *StickySession) handleNewSession(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
+	server := ss.fallback.NextServer(pool, r, w)
+	if server == nil {
+		return nil
+	}
+
+	sessionID := ss.generateSessionID(server.URL)
+	http.SetCookie(*w, ss.createSessionCookie(sessionID))
+
+	return server
+}
+
+func (ss *StickySession) handleExistingSession(
+	cookie *http.Cookie,
+	servers []*Server,
+	pool ServerPool,
+	r *http.Request,
+	w *http.ResponseWriter,
+) *Server {
+	sessionID, err := strconv.ParseUint(cookie.Value, 10, 64)
 	if err != nil {
-		// Invalid cookie value, use fallback
-		return ss.fallback.NextServer(pool, r, w)
+		return ss.handleNewSession(pool, r, w)
 	}
 
-	idx := consistentHash(uint32(sessionID), len(servers))
+	idx := ss.consistentHash(sessionID, len(servers))
 	server := servers[idx]
 
-	// Check if the sticky server is still healthy
 	if server.Alive.Load() && server.CanAcceptConnection() {
 		return server
 	}
 
-	// Sticky server is down, use fallback and update cookie
+	return ss.handleFailover(pool, r, w)
+}
+
+func (ss *StickySession) handleFailover(pool ServerPool, r *http.Request, w *http.ResponseWriter) *Server {
 	newServer := ss.fallback.NextServer(pool, r, w)
 	if newServer != nil {
-		// Generate new session ID
-		newSessionID := generateHash(newServer.URL)
-
-		// Update cookie with new server
-		http.SetCookie(*w, sessionCookie(newSessionID))
+		newSessionID := ss.generateSessionID(newServer.URL)
+		http.SetCookie(*w, ss.createSessionCookie(newSessionID))
 	}
-
 	return newServer
 }
 
-func sessionCookie(sessionID uint32) *http.Cookie {
+func (ss *StickySession) createSessionCookie(sessionID uint64) *http.Cookie {
 	return &http.Cookie{
 		Name:     stickySessionCookie,
-		Value:    strconv.FormatUint(uint64(sessionID), 10),
+		Value:    strconv.FormatUint(sessionID, 10),
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   ss.secure,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   3600, // 1 hour
+		MaxAge:   int(ss.cookieTTL.Seconds()),
 	}
 }
 
-func consistentHash(sessionID uint32, numServers int) int {
-	return int(sessionID % uint32(numServers))
+func (ss *StickySession) generateSessionID(serverURL string) uint64 {
+	hash := sha256.New()
+	random := make([]byte, 16)
+	rand.Read(random)
+
+	hash.Write(random)
+	hash.Write([]byte(serverURL))
+	hash.Write([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
+
+	sum := hash.Sum(nil)
+	return binary.BigEndian.Uint64(sum[:8])
 }
 
-func generateHash(s string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	h.Write([]byte(time.Now().String()))
-	return h.Sum32()
+func (ss *StickySession) consistentHash(sessionID uint64, numServers int) int {
+	return int(sessionID % uint64(numServers))
 }

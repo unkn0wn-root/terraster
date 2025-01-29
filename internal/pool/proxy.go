@@ -38,7 +38,7 @@ type RouteConfig struct {
 	RewriteURL    string // RewriteURL is the URL to rewrite the incoming request to (downstream) (optional).
 	Redirect      string // Redirect is the URL to redirect the request to (optional).
 	SkipTLSVerify bool   // SkipTLSVerify determines whether to skip TLS certificate verification for backend connections (optional).
-	ServerName    string // Server name is the backend virtual host name separate from proxy server name
+	SNI           string // SNI (Server Name Indication) is the backend virtual host name separate from proxy server name
 }
 
 // Transport wraps an http.RoundTripper to allow for custom transport configurations.
@@ -68,6 +68,7 @@ type URLRewriteProxy struct {
 	rConfig       RewriteConfig          // rConfig holds the rewrite and redirect configurations.
 	logger        *zap.Logger            // logger is used for logging proxy-related activities.
 	headerHandler *HeaderHandler         // headerHandler is used to modify request/response headers
+	routeSNI      string                 // serverName is the backend virtual host name (SNI) separate from proxy server name
 }
 
 // ProxyOption defines a function type for applying optional configurations to URLRewriteProxy instances.
@@ -96,6 +97,7 @@ func NewReverseProxy(
 		rConfig:    rewriteConfig,
 		logger:     proxyLogger,
 		proxy:      px,
+		routeSNI:   config.SNI,
 	}
 
 	for _, opt := range opts {
@@ -124,7 +126,7 @@ func NewReverseProxy(
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
 	reverseProxy.ModifyResponse = prx.modifyResponse
-	reverseProxy.Transport = NewTransport(transporter, config.ServerName, config.SkipTLSVerify)
+	reverseProxy.Transport = NewTransport(transporter, config.SNI, config.SkipTLSVerify)
 	reverseProxy.ErrorHandler = prx.errorHandler
 	reverseProxy.BufferPool = NewBufferPool()
 
@@ -173,6 +175,15 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	req.Header.Set(HeaderXForwardedHost, originalHost)
 	req.Header.Set(HeaderXForwardedFor, originalHost)
 
+	// if backend hostname requires SNI, we need to make sure request
+	// host i set to the matching location host name
+	// proxy [px.domain.com] -> sni [api1.internal.io]
+	// request host header needs to match `api1.internal.io` else SNI will not work
+	if p.routeSNI != "" {
+		req.Host = p.routeSNI
+	}
+
+	// return if handler is not set so we know there aren't any config entries defined
 	if p.headerHandler == nil {
 		return
 	}
