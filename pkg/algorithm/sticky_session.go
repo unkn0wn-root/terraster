@@ -2,20 +2,20 @@ package algorithm
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/binary"
+	"hash/fnv"
 	"net/http"
 	"strconv"
 	"time"
 )
 
 const (
-	stickySessionCookie = "t_px_SESSION_ID"
-	defaultCookieTTL    = 24 * time.Hour
+	stickySessionCookie = "t_px__SESSION_ID" // client cookie session name
+	defaultCookieTTL    = 24 * time.Hour     // cookie expiration time
 )
 
 type StickySession struct {
-	fallback  Algorithm // Fallback algorithm when no cookie exists
+	fallback  Algorithm // if current server is not active or alive - use fallback to pick server
 	cookieTTL time.Duration
 	secure    bool
 }
@@ -54,7 +54,6 @@ func (ss *StickySession) handleNewSession(pool ServerPool, r *http.Request, w *h
 
 	sessionID := ss.generateSessionID(server.URL)
 	http.SetCookie(*w, ss.createSessionCookie(sessionID))
-
 	return server
 }
 
@@ -70,11 +69,14 @@ func (ss *StickySession) handleExistingSession(
 		return ss.handleNewSession(pool, r, w)
 	}
 
-	idx := ss.consistentHash(sessionID, len(servers))
-	server := servers[idx]
-
-	if server.Alive.Load() && server.CanAcceptConnection() {
-		return server
+	serverHash := uint32(sessionID >> 32)
+	for _, s := range servers {
+		if hashServerURL(s.URL) == serverHash {
+			if s.Alive.Load() && s.CanAcceptConnection() {
+				return s
+			}
+			break
+		}
 	}
 
 	return ss.handleFailover(pool, r, w)
@@ -102,18 +104,19 @@ func (ss *StickySession) createSessionCookie(sessionID uint64) *http.Cookie {
 }
 
 func (ss *StickySession) generateSessionID(serverURL string) uint64 {
-	hash := sha256.New()
-	random := make([]byte, 16)
-	rand.Read(random)
-
-	hash.Write(random)
-	hash.Write([]byte(serverURL))
-	hash.Write([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
-
-	sum := hash.Sum(nil)
-	return binary.BigEndian.Uint64(sum[:8])
+	serverHash := hashServerURL(serverURL)
+	nonce := generateRandomNonce()
+	return (uint64(serverHash) << 32) | uint64(nonce)
 }
 
-func (ss *StickySession) consistentHash(sessionID uint64, numServers int) int {
-	return int(sessionID % uint64(numServers))
+func hashServerURL(url string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(url))
+	return h.Sum32()
+}
+
+func generateRandomNonce() uint32 {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return binary.BigEndian.Uint32(b)
 }
