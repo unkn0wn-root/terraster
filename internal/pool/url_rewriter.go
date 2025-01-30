@@ -79,10 +79,6 @@ func (r *URLRewriter) rewriteRequestURL(req *http.Request, targetURL *url.URL) {
 
 // stripPathPrefix removes the configured path prefix from the incoming HTTP request's URL path.
 func (r *URLRewriter) stripPathPrefix(req *http.Request) {
-	if !r.shouldStripPath {
-		return
-	}
-
 	trimmed := strings.TrimPrefix(req.URL.Path, r.path)
 	if !strings.HasPrefix(trimmed, "/") {
 		trimmed = "/" + trimmed

@@ -52,16 +52,16 @@ type Transport struct {
 // It configures the TLS settings based on the skipTLSVerify parameter.
 // If skipTLSVerify is true, the Transport will not verify the server's TLS certificate.
 func NewTransport(transport *http.Transport, serverName string, skipTLSVerify bool) *Transport {
-	tlsConfig := transport.TLSClientConfig
-	if tlsConfig == nil {
-		tlsConfig = &tls.Config{}
+	tc := transport.TLSClientConfig
+	if tc == nil {
+		tc = &tls.Config{}
 	}
 
 	// disable/enable TLS verification from backend and adds SNI support
-	tlsConfig.InsecureSkipVerify = skipTLSVerify
-	tlsConfig.ServerName = serverName
+	tc.InsecureSkipVerify = skipTLSVerify
+	tc.ServerName = serverName
 
-	transport.TLSClientConfig = tlsConfig
+	transport.TLSClientConfig = tc
 
 	return &Transport{transport: transport}
 }
