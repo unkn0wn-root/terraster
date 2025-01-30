@@ -287,7 +287,10 @@ func (m *Manager) createServerPool(
 			Redirect:      lc.Redirect,           // Redirect settings if applicable.
 			SkipTLSVerify: backend.SkipTLSVerify, // TLS verification settings for the backend.
 			SNI:           backend.ServerName,    // SNI (Server Name Indication name)
-			HTTP2:         backend.HTTP2,         // HTTP2 enables http/2 protocol
+			// allow http2 since most backends will support that so
+			// if http2 is not explicitly set i config - http2 is allowed
+			// if is set then use config value
+			HTTP2: backend.HTTP2 == nil || *backend.HTTP2, // HTTP2 enables http/2 protocol
 		}
 
 		backendHealthCheck := serviceHealthCheck

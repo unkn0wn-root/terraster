@@ -118,6 +118,7 @@ type TLSConfig struct {
 	CipherSuites           []uint16 `yaml:"cipher_suites"`            // List of supported cipher suites.
 	SessionTicketsDisabled bool     `yaml:"session_tickets_disabled"` // Disables session ticket support if true.
 	NextProtos             []string `yaml:"next_protos"`              // List of supported application protocols.
+	HTTP2Enabled           *bool    `yaml:"http2"`                    // Whether to enable HTTP/2
 }
 
 // BackendConfig defines the configuration for a single backend service.
@@ -130,7 +131,7 @@ type BackendConfig struct {
 	SkipTLSVerify  bool               `yaml:"skip_tls_verify"`        // Whether to skip TLS certificate verification for the backend.
 	HealthCheck    *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional health check configuration specific to the backend.
 	ServerName     string             `yaml:"sni"`                    // Optional to support virtual hosts
-	HTTP2          bool               `yaml:"http2"`                  // Optional to enable http2 protocol to the backend service
+	HTTP2          *bool              `yaml:"http2"`                  // Optional to enable http2 protocol to the backend service
 }
 
 // Thresholds defines the thresholds for determining the health status of a backend.

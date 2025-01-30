@@ -344,6 +344,13 @@ func (s *Server) createServer(
 		GetCertificate: s.certManager.GetCertificate,
 	}
 
+	// check if http2 is enabled
+	// we want to be able to use http2 if `http2` is not explicitly set in config
+	if svc.TLS.HTTP2Enabled != nil && !*svc.TLS.HTTP2Enabled {
+		server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+		server.TLSConfig.NextProtos = []string{"http/1.1"}
+	}
+
 	// set cipher suites, session tickets and next protos if provided
 	if svc.TLS.CipherSuites != nil {
 		server.TLSConfig.CipherSuites = svc.TLS.CipherSuites
@@ -524,12 +531,12 @@ func (s *Server) getBackend(
 ) (*pool.Backend, error) {
 	backendAlgo := srvc.Algorithm.NextServer(srvc.ServerPool, r, &w)
 	if backendAlgo == nil {
-		return nil, errors.New("no service available")
+		return nil, errors.New("No Service Available")
 	}
 
 	backend := srvc.ServerPool.GetBackendByURL(backendAlgo.URL)
 	if backend == nil {
-		return nil, errors.New("no peers available")
+		return nil, errors.New("No Peers are currently active")
 	}
 
 	return backend, nil

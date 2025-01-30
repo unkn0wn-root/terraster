@@ -21,12 +21,13 @@ const (
 	StatusPermanentRedirect = http.StatusPermanentRedirect
 
 	HeaderServer         = "Server"           // The Server header identifies the server software handling the request.
+	HeaderLocation       = "Location"         // The Location header is used in redirection or when a new resource has been created.
+	HeaderHost           = "Host"             // The Host header specifies the domain name of the server and the TCP port number on which the server is listening.
 	HeaderXPoweredBy     = "X-Powered-By"     // The X-Powered-By header indicates technologies supporting the server.
 	HeaderXProxyBy       = "X-Proxy-By"       // The X-Proxy-By header identifies the proxy handling the request.
-	HeaderLocation       = "Location"         // The Location header is used in redirection or when a new resource has been created.
+	HeaderXRealIP        = "X-Real-IP"        // The X-Real-IP header identifies the originating IP address of a client
 	HeaderXForwardedFor  = "X-Forwarded-For"  // The X-Forwarded-For header identifies the originating IP address of a client connecting to a web server through a proxy.
 	HeaderXForwardedHost = "X-Forwarded-Host" // The X-Forwarded-Host header identifies the original host requested by the client.
-	HeaderHost           = "Host"             // The Host header specifies the domain name of the server and the TCP port number on which the server is listening.
 
 	DefaultScheme     = "http"
 	DefaultProxyLabel = "terraster"
@@ -56,9 +57,8 @@ func NewTransport(transport *http.Transport, serverName string, skipTLSVerify bo
 		tlsConfig = &tls.Config{}
 	}
 
-	// disable/enable TLS verification from backend
+	// disable/enable TLS verification from backend and adds SNI support
 	tlsConfig.InsecureSkipVerify = skipTLSVerify
-	// SNI configuration for TLS (empty if not set)
 	tlsConfig.ServerName = serverName
 
 	transport.TLSClientConfig = tlsConfig
@@ -138,7 +138,8 @@ func NewReverseProxy(
 		transporter.TLSClientConfig.NextProtos = []string{"http/1.1"}
 		transporter.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) http.RoundTripper)
 	} else {
-		// try to force http2 to the backend route if http2 is set
+		// this is ON by default in `DefaultTransporter`
+		// we want to explicitly show our intentions
 		transporter.ForceAttemptHTTP2 = true
 	}
 
@@ -190,8 +191,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 // updateRequestHeaders modifies the HTTP request headers before forwarding the request to the backend.
 // Sets the X-Forwarded-Host and X-Forwarded-For headers to preserve the original host information.
 func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
+	remoteAddr := req.RemoteAddr
+	req.Header.Set(HeaderXForwardedHost, remoteAddr)
+	req.Header.Set(HeaderXRealIP, remoteAddr)
+
 	originalHost := req.Host
-	req.Header.Set(HeaderXForwardedHost, originalHost)
 	req.Header.Set(HeaderXForwardedFor, originalHost)
 
 	// if backend hostname requires SNI, we need to make sure request
