@@ -1,13 +1,11 @@
 package pool
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -41,29 +39,6 @@ type RouteConfig struct {
 	SkipTLSVerify bool   // SkipTLSVerify determines whether to skip TLS certificate verification for backend connections (optional).
 	SNI           string // SNI (Server Name Indication) is the backend virtual host name separate from proxy server name
 	HTTP2         bool   // HTTP2 enables proxy to force connect to backend server via HTTP/2 protocol
-}
-
-// Transport wraps an http.RoundTripper to allow for custom transport configurations.
-type Transport struct {
-	transport http.RoundTripper
-}
-
-// NewTransport creates a new Transport instance with the provided RoundTripper.
-// It configures the TLS settings based on the skipTLSVerify parameter.
-// If skipTLSVerify is true, the Transport will not verify the server's TLS certificate.
-func NewTransport(transport *http.Transport, serverName string, skipTLSVerify bool) *Transport {
-	tc := transport.TLSClientConfig
-	if tc == nil {
-		tc = &tls.Config{}
-	}
-
-	// disable/enable TLS verification from backend and adds SNI support
-	tc.InsecureSkipVerify = skipTLSVerify
-	tc.ServerName = serverName
-
-	transport.TLSClientConfig = tc
-
-	return &Transport{transport: transport}
 }
 
 // URLRewriteProxy is a custom reverse proxy that handles URL rewriting and redirection based on RouteConfig.
@@ -122,31 +97,18 @@ func NewReverseProxy(
 		zap.String("target", target.String()),
 		zap.String("path", config.Path),
 		zap.String("rewriteURL", config.RewriteURL),
+		zap.Bool("http2_enabled", prx.h2),
 	)
 
-	// Increase idle connection per host, timeout and HTTP/2
 	// Clone the default transport to avoid modifying the global one
-	// If http2 is set, we need to force attempt to try to connect to backend via HTTP/2
-	// If http2 is not set (which is by default), we're disabling http2 completly
-	transporter := http.DefaultTransport.(*http.Transport).Clone()
-	transporter.MaxIdleConnsPerHost = 32
-	transporter.IdleConnTimeout = 30 * time.Second
-
-	if !prx.h2 {
-		// this will effectively disable HTTP/2
-		transporter.ForceAttemptHTTP2 = false
-		transporter.TLSClientConfig.NextProtos = []string{"http/1.1"}
-		transporter.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) http.RoundTripper)
-	} else {
-		// this is ON by default in `DefaultTransporter`
-		// we want to explicitly show our intentions
-		transporter.ForceAttemptHTTP2 = true
-	}
+	dt := http.DefaultTransport.(*http.Transport).Clone()
+	transporter := NewTransport(dt)
+	transporter.ConfigureTransport(config.SNI, config.SkipTLSVerify, prx.h2)
 
 	reverseProxy := prx.proxy
 	reverseProxy.Director = prx.director
 	reverseProxy.ModifyResponse = prx.modifyResponse
-	reverseProxy.Transport = NewTransport(transporter, config.SNI, config.SkipTLSVerify)
+	reverseProxy.Transport = transporter
 	reverseProxy.ErrorHandler = prx.errorHandler
 	reverseProxy.BufferPool = NewBufferPool()
 
@@ -176,16 +138,6 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *URLRewriteProxy) director(req *http.Request) {
 	p.updateRequestHeaders(req)
 	p.urlRewriter.rewriteRequestURL(req, p.target)
-}
-
-// RoundTrip implements the RoundTripper interface for the Transport type.
-func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	r, err := t.transport.RoundTrip(req)
-	if err != nil {
-		return nil, NewProxyError("round_trip", err)
-	}
-
-	return r, nil
 }
 
 // updateRequestHeaders modifies the HTTP request headers before forwarding the request to the backend.
@@ -264,7 +216,7 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	// If we still can't determinate Content-Type - don't do anything. Leave it to the downsteam then
 	if ct := resp.Header.Get("Content-Type"); ct == "" {
 		if path := resp.Request.URL.Path; path != "" {
-			resp.Header.Set("Content-Type", contentType(path))
+			resp.Header.Set("Content-Type", TypeByURLPath(path))
 		}
 	}
 

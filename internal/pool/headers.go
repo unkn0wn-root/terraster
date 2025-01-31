@@ -67,7 +67,8 @@ func (h *HeaderHandler) processPlaceholders(value string, req *http.Request) str
 	return result
 }
 
-func contentType(path string) string {
+// TypeByURLPath checks if provided URL path (image123.jpg) is in whitelised extensions
+func TypeByURLPath(path string) string {
 	ext := filepath.Ext(path)
 	// Whitelist of allowed content types
 	switch ext {
