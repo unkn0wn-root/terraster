@@ -255,8 +255,8 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
 
 	if !p.h2 {
-		// Go should automatically handle keep alive sessions in the backend
-		// we are only setting it to inform downstream that the session should will be reused
+		// Go will automatically handle keep alive sessions in the backend
+		// we are only setting it to inform downstream that the session will be reused
 		resp.Header.Set("Connection", "keep-alive")
 	}
 
