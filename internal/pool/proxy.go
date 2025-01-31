@@ -254,6 +254,12 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderXPoweredBy)
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
 
+	if !p.h2 {
+		// Go should automatically handle keep alive sessions in the backend
+		// we are only setting it to inform downstream that the session should will be reused
+		resp.Header.Set("Connection", "keep-alive")
+	}
+
 	// If `Content-Type` is empty, try to determinate it by checking file extension
 	// If we still can't determinate Content-Type - don't do anything. Leave it to the downsteam then
 	if ct := resp.Header.Get("Content-Type"); ct == "" {
