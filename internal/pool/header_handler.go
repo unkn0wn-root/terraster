@@ -2,6 +2,7 @@ package pool
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/unkn0wn-root/terraster/internal/config"
@@ -64,4 +65,35 @@ func (h *HeaderHandler) processPlaceholders(value string, req *http.Request) str
 	}
 
 	return result
+}
+
+func contentType(path string) string {
+	ext := filepath.Ext(path)
+	// Whitelist of allowed content types
+	switch ext {
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js":
+		return "application/javascript"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	default:
+		return "application/octet-stream" // fallback to octet-stream if we can't determinate content type
+	}
 }

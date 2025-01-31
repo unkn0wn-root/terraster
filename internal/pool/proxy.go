@@ -4,11 +4,9 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"mime"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"path/filepath"
 	"time"
 
 	"go.uber.org/zap"
@@ -260,11 +258,7 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	// If we still can't determinate Content-Type - don't do anything. Leave it to the downsteam then
 	if ct := resp.Header.Get("Content-Type"); ct == "" {
 		if path := resp.Request.URL.Path; path != "" {
-			if ext := filepath.Ext(path); ext != "" {
-				if mimeType := mime.TypeByExtension(ext); mimeType != "" {
-					resp.Header.Set("Content-Type", mimeType)
-				}
-			}
+			resp.Header.Set("Content-Type", contentType(path))
 		}
 	}
 
