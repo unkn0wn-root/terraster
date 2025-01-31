@@ -1,9 +1,11 @@
 package pool
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -253,6 +255,20 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderServer)
 	resp.Header.Del(HeaderXPoweredBy)
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
+
+	// if no content-type is set - try to determinate it.
+	// this will return empty string back if we cannot
+	if resp.Header.Get("Content-Type") == "" {
+		// Read first 512 bytes
+		buffer := make([]byte, 512)
+		n, _ := resp.Body.Read(buffer)
+
+		// Create a new body that prepends our read bytes, wrapped in NopCloser
+		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buffer[:n]), resp.Body))
+
+		// Detect content type from the sniffed bytes
+		resp.Header.Set("Content-Type", http.DetectContentType(buffer[:n]))
+	}
 
 	if p.headerHandler == nil {
 		return
