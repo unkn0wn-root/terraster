@@ -256,8 +256,8 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	resp.Header.Del(HeaderXPoweredBy)
 	resp.Header.Set(HeaderXProxyBy, DefaultProxyLabel)
 
-	// if no content-type is set - try to determinate it.
-	// this will return empty string back if we cannot
+	// If no content-type is set - try to determinate it.
+	// This will return empty string back if we cannot
 	if resp.Header.Get("Content-Type") == "" {
 		// Read first 512 bytes
 		buffer := make([]byte, 512)
