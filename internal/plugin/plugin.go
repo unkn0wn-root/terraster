@@ -16,18 +16,16 @@ import (
 )
 
 const (
-	PluginDir      = "./plugins" // Default directory for plugins
-	DefaultTimeout = 100 * time.Millisecond
+	PluginDir      = "./plugins"     // Default directory for plugins
+	DefaultTimeout = 5 * time.Second // Defalt processing timeout
 )
 
 // Handler defines the interface that all plugins must implement
 type Handler interface {
 	// ProcessRequest processes the request before it's sent to the backend
-	// Context MUST be honored for cancellation and timeouts
 	ProcessRequest(ctx context.Context, req *http.Request)
 
 	// ProcessResponse processes the response before it's sent back to the client
-	// Context MUST be honored for cancellation and timeouts
 	ProcessResponse(ctx context.Context, resp *http.Response)
 
 	// Name returns the plugin name

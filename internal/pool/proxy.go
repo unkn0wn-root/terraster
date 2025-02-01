@@ -33,7 +33,7 @@ const (
 	DefaultScheme     = "http"
 	DefaultProxyLabel = "terraster"
 
-	PluginLoadTime = 5 * time.Second
+	PluginLoadTime = 10 * time.Second
 )
 
 // RouteConfig holds configuration settings for routing requests through the proxy.
