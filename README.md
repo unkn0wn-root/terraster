@@ -27,6 +27,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Sticky session
 
 ### Advanced Features
+- ✅ Plugin (modules) support to extend proxy functionality
 - ✅ SSL/TLS Support
 - ✅ Connection Pooling
 - ✅ Circuit Breaker
