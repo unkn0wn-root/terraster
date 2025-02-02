@@ -33,7 +33,8 @@ const (
 	DefaultScheme     = "http"
 	DefaultProxyLabel = "terraster"
 
-	PluginLoadTime = 10 * time.Second
+	PluginStorePath = "./plugins"
+	PluginLoadTime  = 10 * time.Second
 )
 
 // RouteConfig holds configuration settings for routing requests through the proxy.
@@ -111,7 +112,7 @@ func NewReverseProxy(
 	defer cancel()
 
 	pm := plugin.NewManager(prx.logger)
-	if err := pm.Initialize(ctx); err != nil {
+	if err := pm.Initialize(ctx, PluginStorePath); err != nil {
 		prx.logger.Error("Failed to initialize plugin system", zap.Error(err))
 	} else {
 		prx.pluginManager = pm
@@ -149,9 +150,29 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Pass request to external plugin if defined
-	// this will allow modification to request object before passing down
+	// this will allow modification to request object before passing down.
+	// End resquest if plugin return an error
 	if p.isPluginEnabled() {
-		p.pluginManager.ProcessRequest(r)
+		result := p.pluginManager.ProcessRequest(r)
+		defer func() {
+			if result != plugin.ResultContinue && result != plugin.ResultModify {
+				result.Release()
+			}
+		}()
+
+		if result.Action() == plugin.Stop {
+			for k, v := range result.Headers {
+				w.Header()[k] = v
+			}
+
+			if result.ResponseBody != nil {
+				w.WriteHeader(result.StatusCode)
+				w.Write(result.ResponseBody)
+			} else {
+				http.Error(w, http.StatusText(result.StatusCode), result.StatusCode)
+			}
+			return
+		}
 	}
 
 	p.proxy.ServeHTTP(w, r)
@@ -215,7 +236,22 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 // Handle redirects and updates response headers to remove or set specific headers for security and consistency.
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 	if p.isPluginEnabled() {
-		p.pluginManager.ProcessResponse(resp)
+		result := p.pluginManager.ProcessResponse(resp)
+		defer func() {
+			if result != plugin.ResultContinue && result != plugin.ResultModify {
+				result.Release()
+			}
+		}()
+
+		if result.Action() == plugin.Stop {
+			for k, v := range result.Headers {
+				resp.Header[k] = v
+			}
+			if result.StatusCode > 0 {
+				resp.StatusCode = result.StatusCode
+			}
+			return nil
+		}
 	}
 
 	if isRedirect(resp.StatusCode) {
@@ -291,6 +327,7 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 	WriteErrorResponse(w, err)
 }
 
+// helper method to check if plugin manager is enabled
 func (p *URLRewriteProxy) isPluginEnabled() bool {
 	return p.pluginManager != nil && p.pluginManager.IsEnabled()
 }
