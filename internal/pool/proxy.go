@@ -60,6 +60,7 @@ type URLRewriteProxy struct {
 	routeSNI      string                 // serverName is the backend virtual host name (SNI) separate from proxy server name
 	h2            bool                   // h2 enables connection to backend service via http/2 protocol
 	pluginManager *plugin.Manager
+	pluginEnabled bool
 }
 
 // ProxyOption defines a function type for applying optional configurations to URLRewriteProxy instances.
@@ -100,13 +101,6 @@ func NewReverseProxy(
 		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
 	}
 
-	prx.logger.Info("Creating proxy",
-		zap.String("target", target.String()),
-		zap.String("path", config.Path),
-		zap.String("rewriteURL", config.RewriteURL),
-		zap.Bool("http2_enabled", prx.h2),
-	)
-
 	// default timeout when loading plugins. After `x`time, plugins will be skiped
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(PluginLoadTime))
 	defer cancel()
@@ -116,7 +110,16 @@ func NewReverseProxy(
 		prx.logger.Error("Failed to initialize plugin system", zap.Error(err))
 	} else {
 		prx.pluginManager = pm
+		prx.pluginEnabled = pm.IsEnabled()
 	}
+
+	prx.logger.Info("Creating proxy",
+		zap.String("target", target.String()),
+		zap.String("path", config.Path),
+		zap.String("rewriteURL", config.RewriteURL),
+		zap.Bool("http2_enabled", prx.h2),
+		zap.Bool("plugin_enabled", prx.pluginEnabled),
+	)
 
 	// Clone the default transport to avoid modifying the global one
 	dt := http.DefaultTransport.(*http.Transport).Clone()
@@ -151,8 +154,8 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Pass request to external plugin if defined
 	// this will allow modification to request object before passing down.
-	// End resquest if plugin return an error
-	if p.isPluginEnabled() {
+	// End request if plugin return an error
+	if p.pluginEnabled {
 		result := p.pluginManager.ProcessRequest(r)
 		defer func() {
 			if result != plugin.ResultContinue && result != plugin.ResultModify {
@@ -235,7 +238,8 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 // modifyResponse is a callback function that modifies the HTTP response received from the backend server.
 // Handle redirects and updates response headers to remove or set specific headers for security and consistency.
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
-	if p.isPluginEnabled() {
+	// pass response object to the plugin
+	if p.pluginEnabled {
 		result := p.pluginManager.ProcessResponse(resp)
 		defer func() {
 			if result != plugin.ResultContinue && result != plugin.ResultModify {
@@ -325,9 +329,4 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 	)
 
 	WriteErrorResponse(w, err)
-}
-
-// helper method to check if plugin manager is enabled
-func (p *URLRewriteProxy) isPluginEnabled() bool {
-	return p.pluginManager != nil && p.pluginManager.IsEnabled()
 }
