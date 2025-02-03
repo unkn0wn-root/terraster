@@ -9,10 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unknown-root/terraster/pkg/plugin" // Import your plugin package
+	"github.com/unkn0wn-root/terraster/pkg/plugin"
 )
 
-// Config holds the plugin configuration
 type Config struct {
 	AllowedOrigins []string `json:"allowed_origins"`
 	RateLimit      int      `json:"rate_limit"`
@@ -20,7 +19,6 @@ type Config struct {
 	Debug          bool     `json:"debug"`
 }
 
-// ExamplePlugin demonstrates various plugin capabilities
 type ExamplePlugin struct {
 	config     Config
 	rateLimits sync.Map // client -> limit data
@@ -34,13 +32,11 @@ type RateLimitData struct {
 	lastAccess time.Time
 }
 
-// Logger interface allows for dependency injection of logging
 type Logger interface {
 	Info(msg string, fields ...interface{})
 	Error(msg string, fields ...interface{})
 }
 
-// New is the exported plugin constructor
 func New() plugin.Handler {
 	// Read config from environment or file
 	config := loadConfig()
@@ -147,10 +143,9 @@ func (p *ExamplePlugin) ProcessResponse(ctx context.Context, resp *http.Response
 
 		// Optionally modify error response
 		if p.config.Debug {
-			return plugin.ResultModify // Let the original error through in debug mode
+			return plugin.ResultModify
 		}
 
-		// In production, return a sanitized error
 		return plugin.NewResult(
 			plugin.Stop,
 			plugin.WithStatus(http.StatusBadGateway),
@@ -162,8 +157,6 @@ func (p *ExamplePlugin) ProcessResponse(ctx context.Context, resp *http.Response
 
 	return plugin.ResultModify
 }
-
-// Helper methods
 
 func (p *ExamplePlugin) handleCORS(req *http.Request) *plugin.Result {
 	origin := req.Header.Get("Origin")
@@ -191,7 +184,7 @@ func (p *ExamplePlugin) handleCORS(req *http.Request) *plugin.Result {
 }
 
 func (p *ExamplePlugin) isRateLimitExceeded(req *http.Request) (bool, time.Time) {
-	clientID := req.RemoteAddr // Or use X-Forwarded-For, or auth token, etc.
+	clientID := req.RemoteAddr
 
 	now := time.Now()
 	if data, exists := p.rateLimits.Load(clientID); exists {
@@ -224,7 +217,7 @@ func (p *ExamplePlugin) isRateLimitExceeded(req *http.Request) (bool, time.Time)
 
 func (p *ExamplePlugin) isAuthenticated(req *http.Request) bool {
 	authToken := req.Header.Get(p.config.AuthHeader)
-	return authToken != "" // Replace with real auth logic
+	return authToken != "" // Just example. Shoudl have real auth logic
 }
 
 func (p *ExamplePlugin) isOriginAllowed(origin string) bool {
