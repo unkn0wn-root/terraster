@@ -17,3 +17,4 @@ terraster
 ./tmp
 config.yaml
 ./certs
+./plugins

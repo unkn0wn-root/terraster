@@ -16,16 +16,18 @@ import (
 )
 
 const (
-	DefaultTimeout = 5 * time.Second
+	DefaultTimeout = 5 * time.Second // DefaultTimeout defines the maximum time allowed for plugin processing
 )
 
+// Manager handles loading, initialization, and execution of plugins
 type Manager struct {
-	plugins []Handler
+	plugins []Handler // Ordered list of plugin handlers
 	logger  *zap.Logger
 	enabled atomic.Bool
 	mu      sync.RWMutex
 }
 
+// NewManager creates a Manager instance with initial capacity of 10 plugins
 func NewManager(logger *zap.Logger) *Manager {
 	return &Manager{
 		plugins: make([]Handler, 0, 10),
@@ -33,6 +35,9 @@ func NewManager(logger *zap.Logger) *Manager {
 	}
 }
 
+// Initialize loads all .so plugin files from the specified directory.
+// Plugins are sorted by priority after loading.
+// Context is used to cancel the initialization process.
 func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 	if _, err := os.Stat(pluginDir); os.IsNotExist(err) {
 		pm.logger.Info("No plugins directory found", zap.String("path", pluginDir))
@@ -42,6 +47,11 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 	files, err := filepath.Glob(filepath.Join(pluginDir, "*.so"))
 	if err != nil {
 		return fmt.Errorf("failed to read plugin directory: %w", err)
+	}
+
+	// return if there are no plugins
+	if len(files) == 0 {
+		return nil
 	}
 
 	plugins := make([]Handler, 0, len(files))
@@ -81,6 +91,8 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 	return nil
 }
 
+// loadPlugin loads a single plugin from the given path.
+// The plugin must export a "New" function that returns a Handler.
 func (pm *Manager) loadPlugin(path string) (Handler, error) {
 	p, err := plugin.Open(path)
 	if err != nil {
@@ -107,6 +119,9 @@ func (pm *Manager) loadPlugin(path string) (Handler, error) {
 	return handler, nil
 }
 
+// ProcessRequest executes plugins in priority order for HTTP requests.
+// Returns early on timeout or if a plugin returns Stop action.
+// Uses default timeout if request context has no deadline.
 func (pm *Manager) ProcessRequest(req *http.Request) *Result {
 	if !pm.enabled.Load() {
 		return ResultContinue
@@ -148,6 +163,8 @@ func (pm *Manager) ProcessRequest(req *http.Request) *Result {
 	return ResultContinue
 }
 
+// ProcessResponse executes plugins in priority order for HTTP responses.
+// Returns early on context cancellation or if a plugin returns Stop action.
 func (pm *Manager) ProcessResponse(resp *http.Response) *Result {
 	if !pm.enabled.Load() {
 		return ResultContinue
@@ -177,10 +194,13 @@ func (pm *Manager) ProcessResponse(resp *http.Response) *Result {
 	return ResultContinue
 }
 
+// getPluginsNoLock returns the current plugins slice without locking
 func (pm *Manager) getPluginsNoLock() []Handler {
 	return pm.plugins
 }
 
+// Shutdown cleans up all plugins and disables the manager.
+// Context can be used to cancel the shutdown process
 func (pm *Manager) Shutdown(ctx context.Context) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -204,6 +224,7 @@ func (pm *Manager) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// IsEnabled returns whether the plugin manager is currently enabled.
 func (pm *Manager) IsEnabled() bool {
 	return pm.enabled.Load()
 }
