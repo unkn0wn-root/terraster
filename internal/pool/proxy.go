@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/unkn0wn-root/terraster/internal/plugin"
+	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"go.uber.org/zap"
 )
 
