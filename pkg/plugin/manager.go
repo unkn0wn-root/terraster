@@ -55,7 +55,6 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 	}
 
 	plugins := make([]Handler, 0, len(files))
-
 	for _, file := range files {
 		select {
 		case <-ctx.Done():
@@ -66,11 +65,16 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 					zap.String("file", file),
 					zap.Error(err),
 				)
-				continue
+				continue // go to the next one
 			} else {
 				plugins = append(plugins, handler)
 			}
 		}
+	}
+
+	// in case of error, we just skip loading current plugin
+	if len(plugins) == 0 {
+		return nil
 	}
 
 	// Sort plugins by priority
