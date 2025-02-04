@@ -2,30 +2,31 @@ package shutdown
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 )
 
-type GracefulShutdown struct {
+type Manager struct {
 	handlers []func(context.Context) error
 	mu       sync.Mutex
 }
 
-func NewGracefulShutdown() *GracefulShutdown {
-	return &GracefulShutdown{
+func NewManager() *Manager {
+	return &Manager{
 		handlers: make([]func(context.Context) error, 0),
 	}
 }
 
-func (gs *GracefulShutdown) AddHandler(handler func(context.Context) error) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.handlers = append(gs.handlers, handler)
+func (sh *Manager) AddHandler(handler func(context.Context) error) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.handlers = append(sh.handlers, handler)
 }
 
-func (gs *GracefulShutdown) Shutdown(ctx context.Context) error {
+func (sh *Manager) Shutdown(ctx context.Context) error {
 	var wg sync.WaitGroup
-	for _, handler := range gs.handlers {
+	for _, handler := range sh.handlers {
 		wg.Add(1)
 		go func(h func(context.Context) error) {
 			defer wg.Done()
@@ -47,4 +48,13 @@ func (gs *GracefulShutdown) Shutdown(ctx context.Context) error {
 	case <-done:
 		return nil
 	}
+}
+
+func (sh *Manager) RegisterShutdown(name string, shutdown func(context.Context) error) {
+	sh.AddHandler(func(ctx context.Context) error {
+		if err := shutdown(ctx); err != nil {
+			return fmt.Errorf("%s shutdown: %w", name, err)
+		}
+		return nil
+	})
 }

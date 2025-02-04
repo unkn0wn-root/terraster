@@ -46,28 +46,28 @@ const (
 // Server encapsulates all the components and configurations required to run the Terraster server.
 // Manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
 type Server struct {
-	config         *config.Config              // Configuration settings for the server
-	apiConfig      *config.APIConfig           // API configuration settings
-	healthChecker  *health.Checker             // Global health checker (if any)
-	adminAPI       *admin.AdminAPI             // Admin API handler
-	adminServer    *http.Server                // HTTP server for admin API
-	healthCheckers map[string]*health.Checker  // Individual health checkers per service
-	serviceManager *service.Manager            // Manages the lifecycle and configuration of services
-	tlsConfigs     map[string]*tls.Certificate // Loaded TLS certificates
-	certManager    *certmanager.CertManager    // Manages TLS certificates
-	serverPool     *pool.ServerPool            // Pool of server instances
-	servers        []*http.Server              // Slice of all HTTP/HTTPS servers
-	serviceCache   *sync.Map                   // Concurrent map for caching service lookups
-	portServers    map[int]*http.Server        // Mapping of ports to their corresponding servers
-	logger         *zap.Logger                 // Logger instance for logging server activities
-	logManager     *logger.LoggerManager       // Manages different loggers
-	mu             sync.RWMutex                // Mutex for synchronizing access to shared resources
-	ctx            context.Context             // Context for managing server lifecycle
-	cancel         context.CancelFunc          // Function to cancel the server context
-	wg             sync.WaitGroup              // WaitGroup to wait for goroutines to finish
-	errorChan      chan<- error                // Channel to report server errors
-	shutdown       *shutdown.GracefulShutdown  // Graceful shutdown manager
-	pluginManager  *plugin.Manager             // Global plugin manager instance
+	config          *config.Config              // Configuration settings for the server
+	apiConfig       *config.APIConfig           // API configuration settings
+	healthChecker   *health.Checker             // Global health checker (if any)
+	adminAPI        *admin.AdminAPI             // Admin API handler
+	adminServer     *http.Server                // HTTP server for admin API
+	healthCheckers  map[string]*health.Checker  // Individual health checkers per service
+	serviceManager  *service.Manager            // Manages the lifecycle and configuration of services
+	tlsConfigs      map[string]*tls.Certificate // Loaded TLS certificates
+	certManager     *certmanager.CertManager    // Manages TLS certificates
+	serverPool      *pool.ServerPool            // Pool of server instances
+	servers         []*http.Server              // Slice of all HTTP/HTTPS servers
+	serviceCache    *sync.Map                   // Concurrent map for caching service lookups
+	portServers     map[int]*http.Server        // Mapping of ports to their corresponding servers
+	logger          *zap.Logger                 // Logger instance for logging server activities
+	logManager      *logger.LoggerManager       // Manages different loggers
+	mu              sync.RWMutex                // Mutex for synchronizing access to shared resources
+	ctx             context.Context             // Context for managing server lifecycle
+	cancel          context.CancelFunc          // Function to cancel the server context
+	wg              sync.WaitGroup              // WaitGroup to wait for goroutines to finish
+	errorChan       chan<- error                // Channel to report server errors
+	shutdownManager *shutdown.Manager           // Server shutdown manager
+	pluginManager   *plugin.Manager             // Global plugin manager instance
 }
 
 // Sets up health checkers for each service,
@@ -143,22 +143,22 @@ func NewServer(
 	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
-		config:         cfg,
-		apiConfig:      apiCfg,
-		healthCheckers: make(map[string]*health.Checker),
-		serviceManager: serviceManager,
-		certManager:    certManager,
-		pluginManager:  pluginManager,
-		adminAPI:       adminAPI,
-		ctx:            ctx,
-		cancel:         cancel,
-		servers:        make([]*http.Server, 0),
-		serviceCache:   &sync.Map{},
-		portServers:    make(map[int]*http.Server),
-		errorChan:      make(chan error),
-		logger:         zLog,
-		logManager:     logManager,
-		shutdown:       shutdown.NewGracefulShutdown(),
+		config:          cfg,
+		apiConfig:       apiCfg,
+		healthCheckers:  make(map[string]*health.Checker),
+		serviceManager:  serviceManager,
+		certManager:     certManager,
+		pluginManager:   pluginManager,
+		adminAPI:        adminAPI,
+		ctx:             ctx,
+		cancel:          cancel,
+		servers:         make([]*http.Server, 0),
+		serviceCache:    &sync.Map{},
+		portServers:     make(map[int]*http.Server),
+		errorChan:       make(chan error),
+		logger:          zLog,
+		logManager:      logManager,
+		shutdownManager: shutdown.NewManager(),
 	}
 
 	// setup default logger for services in case of if log_name is not defined on service
@@ -304,7 +304,6 @@ func (s *Server) startAdminServer() error {
 		} else {
 			cert = &c
 		}
-
 	} else if !s.apiConfig.AdminAPI.Insecure {
 		return errors.New(
 			"TLS not configured and Insecure mode is disabled. If you want to run api on HTTP, set 'insecure' to true",
@@ -420,9 +419,10 @@ func (s *Server) runServer(
 		s.logger.Error("Error starting server", zap.String("server_name", n), zap.Error(err))
 		defer s.cancel()
 		errorChan <- err
-	} else {
-		s.logger.Info("Server stopped gracefully", zap.String("server_name", n))
+		return
 	}
+
+	s.logger.Info("Server stopped gracefully", zap.String("server_name", n))
 }
 
 // createRedirectHandler creates an HTTP handler that redirects all incoming HTTP requests to HTTPS.
@@ -572,44 +572,27 @@ func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, dura
 }
 
 func (s *Server) registerShutdownHandlers() {
-	// Admin server shutdown handler
+	// Register admin server
 	if s.adminServer != nil {
-		s.shutdown.AddHandler(func(ctx context.Context) error {
-			if err := s.adminServer.Shutdown(ctx); err != nil {
-				s.logger.Error("Admin server shutdown error", zap.Error(err))
-				return err
-			}
-			s.logger.Info("Admin server shutdown successfully")
-			return nil
-		})
+		s.shutdownManager.RegisterShutdown("Admin server", s.adminServer.Shutdown)
 	}
 
-	// Service servers shutdown handlers
-	for _, srv := range s.servers {
-		s.shutdown.AddHandler(func(ctx context.Context) error {
-			if err := srv.Shutdown(ctx); err != nil {
-				s.logger.Error("Server shutdown error", zap.Error(err))
-				return err
-			}
-
-			return nil
-		})
+	// Register service servers
+	for i, srv := range s.servers {
+		name := fmt.Sprintf("Server %d", i+1)
+		s.shutdownManager.RegisterShutdown(name, srv.Shutdown)
 	}
 
-	// Health checkers shutdown handlers
-	for svcName, hc := range s.healthCheckers {
-		s.shutdown.AddHandler(func(ctx context.Context) error {
-			hc.Stop()
-			s.logger.Info("Health checker stopped", zap.String("name", svcName))
-			return nil
-		})
-	}
-
-	// Plugin manager shutdown handler
+	// Register plugin manager
 	if s.pluginManager != nil {
-		s.shutdown.AddHandler(func(ctx context.Context) error {
-			s.pluginManager.Shutdown(ctx)
-			s.logger.Info("Plugin manager stopped")
+		s.shutdownManager.RegisterShutdown("Plugin manager", s.pluginManager.Shutdown)
+	}
+
+	// Register health checkers (they have a different shutdown pattern)
+	for svcName, hc := range s.healthCheckers {
+		s.shutdownManager.AddHandler(func(ctx context.Context) error {
+			hc.Stop()
+			s.logger.Info("Health checker stopped", zap.String("service_name", svcName))
 			return nil
 		})
 	}
@@ -619,5 +602,5 @@ func (s *Server) registerShutdownHandlers() {
 // Also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.cancel()
-	return s.shutdown.Shutdown(ctx)
+	return s.shutdownManager.Shutdown(ctx)
 }

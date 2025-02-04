@@ -81,7 +81,6 @@ func (c *Checker) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
-
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -165,7 +164,6 @@ func (c *Checker) performHTTPHealthCheck(b *pool.Backend) {
 
 	healthURL := *b.URL
 	healthURL.Path = healthPath
-
 	req, err := http.NewRequest("GET", healthURL.String(), nil)
 	if err != nil {
 		c.logf(zap.WarnLevel, "Failed to create HTTP health check request for %s: %v", b.URL, err)
@@ -202,14 +200,15 @@ func (c *Checker) performTCPHealthCheck(b *pool.Backend) {
 			port = "80"
 		}
 	}
-	tcpAddress := net.JoinHostPort(host, port)
 
+	tcpAddress := net.JoinHostPort(host, port)
 	conn, err := net.DialTimeout("tcp", tcpAddress, c.timeout)
 	if err != nil {
 		c.logf(zap.WarnLevel, "TCP health check failed for %s: %v", b.URL, err)
 		c.updateBackendHealth(b, false)
 		return
 	}
+
 	conn.Close()
 	c.updateBackendHealth(b, true)
 }
@@ -266,5 +265,6 @@ func findServerPool(pools []*pool.ServerPool, backend *pool.Backend) *pool.Serve
 			}
 		}
 	}
+
 	return nil
 }

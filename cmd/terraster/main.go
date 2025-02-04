@@ -82,7 +82,6 @@ func loadConfigs(configPath, servicesDir, apiConfigPath *string, logger *zap.Log
 
 	configManager := NewConfigManager(logger)
 	apiConfig := configManager.LoadAPIConfig(*apiConfigPath)
-
 	return cfg, apiConfig
 }
 
@@ -103,7 +102,6 @@ func runServer(
 	// Set up a channel to listen for OS signals for graceful shutdown (e.g., SIGINT, SIGTERM).
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
 	select {
 	case <-sigChan:
 		logger.Warn("Shutdown signal received. Initializing graceful shutdown")
@@ -116,10 +114,8 @@ func runServer(
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
-
 	if err := srv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
 		logger.Fatal("Error during shutdown", zap.Error(err))
 	}
-
 	logger.Info("Server shutdown completed")
 }
