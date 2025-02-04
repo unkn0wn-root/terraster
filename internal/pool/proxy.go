@@ -1,13 +1,11 @@
 package pool
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 
 	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"go.uber.org/zap"
@@ -32,9 +30,6 @@ const (
 
 	DefaultScheme     = "http"
 	DefaultProxyLabel = "terraster"
-
-	PluginStorePath = "./plugins"
-	PluginLoadTime  = 10 * time.Second
 )
 
 // RouteConfig holds configuration settings for routing requests through the proxy.
@@ -97,22 +92,6 @@ func NewReverseProxy(
 		opt(prx)
 	}
 
-	if prx.urlRewriter == nil {
-		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
-	}
-
-	// default timeout when loading plugins. After `x`time, plugins will be skiped
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(PluginLoadTime))
-	defer cancel()
-
-	pm := plugin.NewManager(prx.logger)
-	if err := pm.Initialize(ctx, PluginStorePath); err != nil {
-		prx.logger.Error("Failed to initialize plugin system", zap.Error(err))
-	} else {
-		prx.pluginManager = pm
-		prx.pluginEnabled = pm.IsEnabled()
-	}
-
 	prx.logger.Info("Creating proxy",
 		zap.String("target", target.String()),
 		zap.String("path", config.Path),
@@ -120,6 +99,10 @@ func NewReverseProxy(
 		zap.Bool("http2_enabled", prx.h2),
 		zap.Bool("plugin_enabled", prx.pluginEnabled),
 	)
+
+	if prx.urlRewriter == nil {
+		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
+	}
 
 	// Clone the default transport to avoid modifying the global one
 	dt := http.DefaultTransport.(*http.Transport).Clone()

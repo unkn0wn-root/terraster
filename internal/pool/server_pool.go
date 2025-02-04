@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
+	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"go.uber.org/zap"
 )
 
@@ -43,22 +44,30 @@ type ServerPool struct {
 	maxConnections atomic.Int32         // Atomic integer representing the maximum allowed connections per backend.
 	log            *zap.Logger          // Logger instance for logging pool activities.
 	serviceHeaders *config.HeaderConfig // Service request and response custom headers
+	pluginManager  *plugin.Manager
 }
 
-func NewServerPool(svc *config.Service, logger *zap.Logger) *ServerPool {
-	pool := &ServerPool{serviceHeaders: svc.Headers, log: logger}
+func NewServerPool(svc *config.Service, pm *plugin.Manager, logger *zap.Logger) *ServerPool {
+	pool := &ServerPool{
+		serviceHeaders: svc.Headers,
+		pluginManager:  pm,
+		log:            logger,
+	}
+
 	initialSnapshot := &BackendSnapshot{
 		Backends:     []*Backend{},
 		BackendCache: make(map[string]*Backend),
 	}
+
 	pool.backends.Store(initialSnapshot)
 
 	alg := &PoolAlgorithm{
 		Algo: algorithm.CreateAlgorithm("round-robin"),
 	}
-	pool.algorithm.Store(alg)
 
+	pool.algorithm.Store(alg)
 	pool.maxConnections.Store(1000)
+
 	return pool
 }
 
@@ -66,11 +75,7 @@ func NewServerPool(svc *config.Service, logger *zap.Logger) *ServerPool {
 // route settings, and health check configuration.
 // Parses the backend URL, creates a reverse proxy,
 // initializes the backend, and updates the BackendSnapshot atomically.
-func (s *ServerPool) AddBackend(
-	cfg config.BackendConfig,
-	rc RouteConfig,
-	hcCfg *config.HealthCheckConfig,
-) error {
+func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg *config.HealthCheckConfig) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
 		return err
@@ -83,6 +88,7 @@ func (s *ServerPool) AddBackend(
 		createProxy,
 		s.log,
 		WithURLRewriter(rc, url),
+		WithPluginManager(s.pluginManager),
 		WithHeaderConfig(s.serviceHeaders),
 	)
 

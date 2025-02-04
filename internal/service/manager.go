@@ -9,6 +9,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
+	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"go.uber.org/zap"
 )
 
@@ -28,9 +29,10 @@ const (
 
 // Manager is responsible for managing all the services within the Terraster application.
 type Manager struct {
-	services map[string]*ServiceInfo // A map of service identifiers to their corresponding ServiceInfo.
-	logger   *zap.Logger             // Logger instance for logging service manager activities.
-	mu       sync.RWMutex            // Mutex to ensure thread-safe access to the services map.
+	services      map[string]*ServiceInfo // A map of service identifiers to their corresponding ServiceInfo.
+	pluginManager *plugin.Manager
+	logger        *zap.Logger  // Logger instance for logging service manager activities.
+	mu            sync.RWMutex // Mutex to ensure thread-safe access to the services map.
 }
 
 // ServiceInfo contains comprehensive information about a service, including its routing and backend configurations.
@@ -70,10 +72,11 @@ type LocationInfo struct {
 // NewManager initializes and returns a new instance of Manager.
 // It sets up services based on the provided configuration and initializes their respective server pools.
 // If no services are defined in the configuration but backends are provided, it creates a default service.
-func NewManager(cfg *config.Config, logger *zap.Logger) (*Manager, error) {
+func NewManager(cfg *config.Config, logger *zap.Logger, pm *plugin.Manager) (*Manager, error) {
 	m := &Manager{
-		services: make(map[string]*ServiceInfo),
-		logger:   logger,
+		services:      make(map[string]*ServiceInfo),
+		pluginManager: pm,
+		logger:        logger,
 	}
 
 	// If no services are defined in the config but backends are provided, create a default service.
@@ -275,7 +278,11 @@ func (m *Manager) createServerPool(
 	lc config.Location,
 	serviceHealthCheck *config.HealthCheckConfig,
 ) (*pool.ServerPool, error) {
-	serverPool := pool.NewServerPool(&svc, m.logger)
+	pm := m.pluginManager
+	if svc.DisablePluginLoad {
+		pm = nil // do not load plugin for service if explicitly disabled in config
+	}
+	serverPool := pool.NewServerPool(&svc, pm, m.logger)
 	serverPool.UpdateConfig(pool.PoolConfig{
 		Algorithm: lc.LoadBalancer,
 	})
@@ -290,7 +297,7 @@ func (m *Manager) createServerPool(
 			// allow http2 since most backends will support that so
 			// if http2 is not explicitly set i config - http2 is allowed
 			// if is set then use config value
-			HTTP2: backend.HTTP2 == nil || *backend.HTTP2, // HTTP2 enables http/2 protocol
+			HTTP2: backend.HTTP2 == nil || *backend.HTTP2,
 		}
 
 		backendHealthCheck := serviceHealthCheck

@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,6 +18,11 @@ import (
 
 const (
 	DefaultTimeout = 5 * time.Second // DefaultTimeout defines the maximum time allowed for plugin processing
+)
+
+var (
+	ErrFailedToRead = errors.New("Failed to read plugin directory")
+	ErrFailedToLoad = errors.New("Failed to load plugin")
 )
 
 // Manager handles loading, initialization, and execution of plugins
@@ -40,13 +46,13 @@ func NewManager(logger *zap.Logger) *Manager {
 // Context is used to cancel the initialization process.
 func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 	if _, err := os.Stat(pluginDir); os.IsNotExist(err) {
-		pm.logger.Info("No plugins directory found", zap.String("path", pluginDir))
+		pm.logger.Info("Plugins directory not found. Plugin not enabled", zap.String("path", pluginDir))
 		return nil
 	}
 
 	files, err := filepath.Glob(filepath.Join(pluginDir, "*.so"))
 	if err != nil {
-		return fmt.Errorf("failed to read plugin directory: %w", err)
+		return errors.Join(ErrFailedToRead, err)
 	}
 
 	// return if there are no plugins
@@ -60,21 +66,15 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if handler, err := pm.loadPlugin(file); err != nil {
+			handler, err := pm.loadPlugin(file)
+			if err != nil {
 				pm.logger.Error("Failed to load plugin",
 					zap.String("file", file),
-					zap.Error(err),
-				)
-				continue // go to the next one
-			} else {
-				plugins = append(plugins, handler)
+					zap.Error(err))
+				return ErrFailedToLoad
 			}
+			plugins = append(plugins, handler)
 		}
-	}
-
-	// in case of error, we just skip loading current plugin
-	if len(plugins) == 0 {
-		return nil
 	}
 
 	// Sort plugins by priority
@@ -139,7 +139,6 @@ func (pm *Manager) ProcessRequest(req *http.Request) *Result {
 	}
 
 	plugins := pm.getPluginsNoLock()
-
 	for _, p := range plugins {
 		select {
 		case <-ctx.Done():
@@ -153,7 +152,6 @@ func (pm *Manager) ProcessRequest(req *http.Request) *Result {
 		default:
 			result := p.ProcessRequest(ctx, req)
 			action := result.Action()
-
 			if action == Stop {
 				return result
 			}

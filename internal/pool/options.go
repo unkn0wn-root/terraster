@@ -4,6 +4,7 @@ import (
 	"net/url"
 
 	"github.com/unkn0wn-root/terraster/internal/config"
+	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"go.uber.org/zap"
 )
 
@@ -32,5 +33,12 @@ func WithHeaderConfig(cfg *config.HeaderConfig) ProxyOption {
 		}
 
 		p.headerHandler = NewHeaderHandler(*cfg)
+	}
+}
+
+func WithPluginManager(pm *plugin.Manager) ProxyOption {
+	return func(p *URLRewriteProxy) {
+		p.pluginManager = pm
+		p.pluginEnabled = pm != nil && pm.IsEnabled()
 	}
 }

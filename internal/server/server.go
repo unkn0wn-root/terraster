@@ -23,6 +23,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/service"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
 	"github.com/unkn0wn-root/terraster/pkg/logger"
+	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"github.com/unkn0wn-root/terraster/pkg/shutdown"
 	"go.uber.org/zap"
 )
@@ -38,6 +39,8 @@ const (
 	TLSMinVersion       = tls.VersionTLS12
 	ShutdownGracePeriod = 30 * time.Second
 	DefaultLogName      = "service_default"
+	DefaultPluginPath   = "./plugins"
+	PluginLoadTime      = 10 * time.Second
 )
 
 // Server encapsulates all the components and configurations required to run the Terraster server.
@@ -64,6 +67,7 @@ type Server struct {
 	wg             sync.WaitGroup              // WaitGroup to wait for goroutines to finish
 	errorChan      chan<- error                // Channel to report server errors
 	shutdown       *shutdown.GracefulShutdown  // Graceful shutdown manager
+	pluginManager  *plugin.Manager             // Global plugin manager instance
 }
 
 // Sets up health checkers for each service,
@@ -78,9 +82,31 @@ func NewServer(
 	zLog *zap.Logger,
 	logManager *logger.LoggerManager,
 ) (*Server, error) {
-	serviceManager, err := service.NewManager(cfg, zLog)
+	// creates default (max timeout) context for plugin plugin manager
+	// we need to set max value for proccessing timeout but still give
+	// users ability do define their own context timeout
+	// @ToDo: Shoud get from config or be more dynamic in the future
+	ctxPlugin, cancelPlugin := context.WithTimeout(srvCtx, PluginLoadTime)
+	defer cancelPlugin()
+
+	// check if plugins directory is defined in config or use default `./plugins`
+	var pluginDir string
+	if cfg.PluginDir == "" {
+		pluginDir = DefaultPluginPath
+	}
+
+	// Initialize plugin manager which handles external (user provided) modules
+	// Assume is important since we must compile with `CGO` to enable plugins
+	// Return error and halt init if something goes wrong
+	pluginManager := plugin.NewManager(zLog)
+	if err := pluginManager.Initialize(ctxPlugin, pluginDir); err != nil {
+		return nil, fmt.Errorf("Failed to initialize plugin manager %w", err)
+	}
+
+	// Initialize service manager which handles all backends and locations
+	serviceManager, err := service.NewManager(cfg, zLog, pluginManager)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to initialize service manager %w", err)
 	}
 
 	var adminAPI *admin.AdminAPI
@@ -122,6 +148,7 @@ func NewServer(
 		healthCheckers: make(map[string]*health.Checker),
 		serviceManager: serviceManager,
 		certManager:    certManager,
+		pluginManager:  pluginManager,
 		adminAPI:       adminAPI,
 		ctx:            ctx,
 		cancel:         cancel,
@@ -579,6 +606,15 @@ func (s *Server) registerShutdownHandlers() {
 		s.shutdown.AddHandler(func(ctx context.Context) error {
 			hc.Stop()
 			s.logger.Info("Health checker stopped", zap.String("name", svcName))
+			return nil
+		})
+	}
+
+	// Plugin manager shutdown handler
+	if s.pluginManager != nil {
+		s.shutdown.AddHandler(func(ctx context.Context) error {
+			s.pluginManager.Shutdown(ctx)
+			s.logger.Info("Plugin manager stopped")
 			return nil
 		})
 	}

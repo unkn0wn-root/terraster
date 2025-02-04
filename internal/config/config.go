@@ -95,18 +95,19 @@ func loadServiceConfig(path string) (*ServiceConfig, error) {
 // load balancing algorithms, connection pooling, backends, authentication, administrative APIs,
 // health checks, services, and middleware configurations.
 type Config struct {
-	Port        int                `yaml:"port"`            // The port on which the main server listens.
-	Host        string             `yaml:"host"`            // The host on which the main server listens.
-	HTTPPort    int                `yaml:"http_port"`       // The port for handling HTTP (non-TLS) traffic.
-	HTTPSPort   int                `yaml:"https_port"`      // The port for handling HTTPS (TLS) traffic.
-	TLS         TLSConfig          `yaml:"tls"`             // TLS configuration settings.
-	Algorithm   string             `yaml:"algorithm"`       // The load balancing algorithm to use (e.g., "round-robin").
-	ConnPool    PoolConfig         `yaml:"connection_pool"` // Configuration for the connection pool.
-	Backends    []BackendConfig    `yaml:"backends"`        // A list of backend services.
-	HealthCheck *HealthCheckConfig `yaml:"health_check"`    // Global health check configuration.
-	Services    []Service          `yaml:"services"`        // A list of services with their specific configurations.
-	Middleware  []Middleware       `yaml:"middleware"`      // Global middleware configurations.
-	CertManager CertManagerConfig  `json:"cert_manager"`    // Configuration for the certificate manager.
+	Port        int                `yaml:"port"`             // The port on which the main server listens.
+	Host        string             `yaml:"host"`             // The host on which the main server listens.
+	HTTPPort    int                `yaml:"http_port"`        // The port for handling HTTP (non-TLS) traffic.
+	HTTPSPort   int                `yaml:"https_port"`       // The port for handling HTTPS (TLS) traffic.
+	TLS         TLSConfig          `yaml:"tls"`              // TLS configuration settings.
+	Algorithm   string             `yaml:"algorithm"`        // The load balancing algorithm to use (e.g., "round-robin").
+	ConnPool    PoolConfig         `yaml:"connection_pool"`  // Configuration for the connection pool.
+	Backends    []BackendConfig    `yaml:"backends"`         // A list of backend services.
+	HealthCheck *HealthCheckConfig `yaml:"health_check"`     // Global health check configuration.
+	Services    []Service          `yaml:"services"`         // A list of services with their specific configurations.
+	Middleware  []Middleware       `yaml:"middleware"`       // Global middleware configurations.
+	CertManager CertManagerConfig  `json:"cert_manager"`     // Configuration for the certificate manager.
+	PluginDir   string             `yaml:"plugin_directory"` // Plugins directory. Will default to `./plugins` if not specified
 }
 
 // TLSConfig holds configuration settings related to TLS (HTTPS) for the server.
@@ -170,17 +171,18 @@ type PoolConfig struct {
 // It includes service identification, routing settings, TLS configurations,
 // redirection policies, health checks, middleware, and associated locations.
 type Service struct {
-	Name         string             `yaml:"name"`                   // Unique name of the service.
-	Host         string             `yaml:"host"`                   // Host address where the service is accessible.
-	Port         int                `yaml:"port"`                   // Port number on which the service listens.
-	TLS          *TLSConfig         `yaml:"tls"`                    // Optional TLS configuration for the service.
-	HTTPRedirect bool               `yaml:"http_redirect"`          // Indicates whether HTTP requests should be redirected to HTTPS.
-	RedirectPort int                `yaml:"redirect_port"`          // Custom port for redirection if applicable.
-	HealthCheck  *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
-	Middleware   []Middleware       `yaml:"middleware"`             // Middleware configurations specific to the service.
-	Locations    []Location         `yaml:"locations"`              // Routing paths and backend configurations for the service.
-	LogName      string             `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
-	Headers      *HeaderConfig      `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
+	Name              string             `yaml:"name"`                   // Unique name of the service.
+	Host              string             `yaml:"host"`                   // Host address where the service is accessible.
+	Port              int                `yaml:"port"`                   // Port number on which the service listens.
+	TLS               *TLSConfig         `yaml:"tls"`                    // Optional TLS configuration for the service.
+	HTTPRedirect      bool               `yaml:"http_redirect"`          // Indicates whether HTTP requests should be redirected to HTTPS.
+	RedirectPort      int                `yaml:"redirect_port"`          // Custom port for redirection if applicable.
+	HealthCheck       *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
+	Middleware        []Middleware       `yaml:"middleware"`             // Middleware configurations specific to the service.
+	Locations         []Location         `yaml:"locations"`              // Routing paths and backend configurations for the service.
+	LogName           string             `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
+	Headers           *HeaderConfig      `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
+	DisablePluginLoad bool               `yaml:"plugin_disabled"`        // enabled or disable plugin load for specific service. False by default
 }
 
 // HeaderConfig is custom response and request headers modifier
