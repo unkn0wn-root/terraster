@@ -145,11 +145,12 @@ type Thresholds struct {
 // HealthCheckConfig holds configuration settings for performing health checks on backends.
 // It defines the type of health check, intervals, timeouts, and success/failure thresholds.
 type HealthCheckConfig struct {
-	Type       string        `yaml:"type"`           // "http" or "tcp"
-	Path       string        `yaml:"path,omitempty"` // Applicable for HTTP health checks
-	Interval   time.Duration `yaml:"interval"`       // e.g., "10s"
-	Timeout    time.Duration `yaml:"timeout"`        // e.g., "2s"
-	Thresholds Thresholds    `yaml:"thresholds"`     // Healthy and Unhealthy thresholds
+	Type          string        `yaml:"type"`            // "http" or "tcp"
+	Path          string        `yaml:"path,omitempty"`  // Applicable for HTTP health checks
+	Interval      time.Duration `yaml:"interval"`        // e.g., "10s"
+	Timeout       time.Duration `yaml:"timeout"`         // e.g., "2s"
+	Thresholds    Thresholds    `yaml:"thresholds"`      // Healthy and Unhealthy thresholds
+	SkipTLSVerify bool          `yaml:"skip_tls_verify"` // Skip backend service health check tls verify
 }
 
 // RateLimitConfig defines the configuration for rate limiting middleware.

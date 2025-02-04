@@ -52,7 +52,7 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 
 	files, err := filepath.Glob(filepath.Join(pluginDir, "*.so"))
 	if err != nil {
-		return errors.Join(ErrFailedToRead, err)
+		return fmt.Errorf("%w: %v", ErrFailedToRead, err)
 	}
 
 	// return if there are no plugins

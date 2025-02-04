@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/unkn0wn-root/terraster/internal/config"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -36,16 +38,31 @@ type Checker struct {
 }
 
 // creates a new health checker with the given interval and timeout.
-func NewChecker(interval, timeout time.Duration, logger *zap.Logger, prefix string) *Checker {
+func NewChecker(
+	config *config.HealthCheckConfig,
+	logger *zap.Logger,
+	prefix string,
+) *Checker {
+	hc := &http.Client{
+		Timeout: config.Timeout,
+	}
+
+	// do not try to attempt to verify TLS SNI on the backend
+	if config.SkipTLSVerify {
+		hc.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+	}
+
 	return &Checker{
-		interval: interval,
-		timeout:  timeout,
+		interval: config.Interval,
+		timeout:  config.Timeout,
 		pools:    make([]*pool.ServerPool, 0),
-		client: &http.Client{
-			Timeout: timeout,
-		},
-		logger: logger,
-		prefix: prefix,
+		client:   hc,
+		logger:   logger,
+		prefix:   prefix,
 	}
 }
 

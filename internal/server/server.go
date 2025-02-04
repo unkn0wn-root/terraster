@@ -197,12 +197,7 @@ func NewServer(
 		}
 
 		prefix := "[HealthChecker-" + svc.Name + "]"
-		hc := health.NewChecker(
-			hcCfg.Interval,
-			hcCfg.Timeout,
-			svcLogger,
-			prefix,
-		)
+		hc := health.NewChecker(hcCfg, svcLogger, prefix)
 		s.healthCheckers[svc.Name] = hc
 
 		for _, loc := range svc.Locations {
