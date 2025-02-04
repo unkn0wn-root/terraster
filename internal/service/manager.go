@@ -279,7 +279,7 @@ func (m *Manager) createServerPool(
 	serviceHealthCheck *config.HealthCheckConfig,
 ) (*pool.ServerPool, error) {
 	pm := m.pluginManager
-	if svc.DisablePluginLoad {
+	if pm != nil && svc.DisablePluginLoad {
 		pm = nil // do not load plugin for service if explicitly disabled in config
 	}
 	serverPool := pool.NewServerPool(&svc, pm, m.logger)
