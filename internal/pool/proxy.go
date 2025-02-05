@@ -117,7 +117,6 @@ func NewReverseProxy(
 	reverseProxy.BufferPool = NewBufferPool()
 
 	prx.proxy = reverseProxy
-
 	return prx
 }
 
@@ -160,7 +159,6 @@ func (p *URLRewriteProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 	p.proxy.ServeHTTP(w, r)
 }
 
@@ -192,7 +190,6 @@ func (p *URLRewriteProxy) updateRequestHeaders(req *http.Request) {
 	if p.headerHandler == nil {
 		return
 	}
-
 	p.headerHandler.ProcessRequestHeaders(req)
 }
 
@@ -263,17 +260,15 @@ func (p *URLRewriteProxy) updateResponseHeaders(resp *http.Response) {
 	}
 
 	// If `Content-Type` is empty, try to determinate it by checking file extension
-	// If we still can't determinate Content-Type - don't do anything. Leave it to the downsteam then
 	if ct := resp.Header.Get("Content-Type"); ct == "" {
 		if path := resp.Request.URL.Path; path != "" {
-			resp.Header.Set("Content-Type", TypeByURLPath(path))
+			resp.Header.Set("Content-Type", TypeByURLPath(path)) // Fallbacks to octet-stream
 		}
 	}
 
 	if p.headerHandler == nil {
 		return
 	}
-
 	p.headerHandler.ProcessResponseHeaders(resp)
 }
 
