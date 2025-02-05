@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/unkn0wn-root/terraster/internal/auth/handlers"
@@ -59,6 +60,18 @@ func (a *AdminAPI) registerRoutes() {
 		a.requireAuthStrict(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleBackends))))
 	a.mux.Handle("/api/config",
 		a.requireAuthStrict(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleConfig))))
+
+	// Admin-only debug route
+	debugMiddleware := func(h http.Handler) http.Handler {
+		return a.requireAuthStrict(a.requireRole(models.RoleAdmin, h))
+	}
+	a.mux.Handle("/debug/pprof/", debugMiddleware(http.HandlerFunc(pprof.Index)))
+	a.mux.Handle("/debug/pprof/cmdline", debugMiddleware(http.HandlerFunc(pprof.Cmdline)))
+	a.mux.Handle("/debug/pprof/profile", debugMiddleware(http.HandlerFunc(pprof.Profile)))
+	a.mux.Handle("/debug/pprof/symbol", debugMiddleware(http.HandlerFunc(pprof.Symbol)))
+	a.mux.Handle("/debug/pprof/trace", debugMiddleware(http.HandlerFunc(pprof.Trace)))
+	a.mux.Handle("/debug/pprof/heap", debugMiddleware(pprof.Handler("heap")))
+	a.mux.Handle("/debug/pprof/goroutine", debugMiddleware(pprof.Handler("goroutine")))
 
 	// Reader routes
 	a.mux.Handle("/api/services",
