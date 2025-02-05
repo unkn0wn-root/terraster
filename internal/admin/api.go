@@ -56,32 +56,23 @@ func (a *AdminAPI) registerRoutes() {
 		a.requireAuth(http.HandlerFunc(a.authHandler.ChangePassword)))
 
 	// Admin-only routes
-	a.mux.Handle("/api/backends",
-		a.requireAuthStrict(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleBackends))))
-	a.mux.Handle("/api/config",
-		a.requireAuthStrict(a.requireRole(models.RoleAdmin, http.HandlerFunc(a.handleConfig))))
+	a.mux.Handle("/api/backends", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(a.handleBackends)))
+	a.mux.Handle("/api/config", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(a.handleConfig)))
 
 	// Admin-only debug route
-	debugMiddleware := func(h http.Handler) http.Handler {
-		return a.requireAuthStrict(a.requireRole(models.RoleAdmin, h))
-	}
-	a.mux.Handle("/debug/pprof/", debugMiddleware(http.HandlerFunc(pprof.Index)))
-	a.mux.Handle("/debug/pprof/cmdline", debugMiddleware(http.HandlerFunc(pprof.Cmdline)))
-	a.mux.Handle("/debug/pprof/profile", debugMiddleware(http.HandlerFunc(pprof.Profile)))
-	a.mux.Handle("/debug/pprof/symbol", debugMiddleware(http.HandlerFunc(pprof.Symbol)))
-	a.mux.Handle("/debug/pprof/trace", debugMiddleware(http.HandlerFunc(pprof.Trace)))
-	a.mux.Handle("/debug/pprof/heap", debugMiddleware(pprof.Handler("heap")))
-	a.mux.Handle("/debug/pprof/goroutine", debugMiddleware(pprof.Handler("goroutine")))
+	a.mux.Handle("/debug/pprof/", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Index)))
+	a.mux.Handle("/debug/pprof/cmdline", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Cmdline)))
+	a.mux.Handle("/debug/pprof/profile", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Profile)))
+	a.mux.Handle("/debug/pprof/symbol", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Symbol)))
+	a.mux.Handle("/debug/pprof/trace", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Trace)))
+	a.mux.Handle("/debug/pprof/heap", a.registerMiddleware(models.RoleAdmin, pprof.Handler("heap")))
+	a.mux.Handle("/debug/pprof/goroutine", a.registerMiddleware(models.RoleAdmin, pprof.Handler("goroutine")))
 
 	// Reader routes
-	a.mux.Handle("/api/services",
-		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleServices))))
-	a.mux.Handle("/api/health",
-		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleHealth))))
-	a.mux.Handle("/api/stats",
-		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleStats))))
-	a.mux.Handle("/api/locations",
-		a.requireAuthStrict(a.requireRole(models.RoleReader, http.HandlerFunc(a.handleLocations))))
+	a.mux.Handle("/api/services", a.registerMiddleware(models.RoleReader, http.HandlerFunc(a.handleServices)))
+	a.mux.Handle("/api/health", a.registerMiddleware(models.RoleReader, http.HandlerFunc(a.handleHealth)))
+	a.mux.Handle("/api/stats", a.registerMiddleware(models.RoleReader, http.HandlerFunc(a.handleStats)))
+	a.mux.Handle("/api/locations", a.registerMiddleware(models.RoleReader, http.HandlerFunc(a.handleLocations)))
 }
 
 func (a *AdminAPI) requireRole(role models.Role, next http.Handler) http.Handler {
@@ -96,4 +87,8 @@ func (a *AdminAPI) requireRole(role models.Role, next http.Handler) http.Handler
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (a *AdminAPI) registerMiddleware(role models.Role, h http.Handler) http.Handler {
+	return a.requireAuthStrict(a.requireRole(role, h))
 }
