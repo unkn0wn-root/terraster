@@ -6,12 +6,15 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 ## Key Features
 
 * Multiple load balancing methods including Round Robin, Weighted Round Robin, and IP Hash
+* Support for external plugins (third-party modules) for middleware (request, response)
 * TLS termination with certificate management
 * Path rewriting and service-to-service redirection
 * Dynamic configuration via comprehensive Admin API
 * Multiple host support on the same port
 * HTTP compression
 * Certificate expiration notifications via email
+* HTTP/1.1 & HTTP/2 support
+
 
 ## Feature Status
 
@@ -27,13 +30,13 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Sticky session
 
 ### Advanced Features
-- ✅ Plugin (modules) support to extend proxy functionality
 - ✅ SSL/TLS Support
+- ✅ Dynamic Middleware Plug-in
+- ✅ Server Name Indication (SNI)
 - ✅ Connection Pooling
 - ✅ Circuit Breaker
 - ✅ Rate Limiting
 - ✅ Compression
-- ✅ Dynamic Middleware Plug-in
 - ✅ Configurable Request Logging
 - ✅ Restrict access to API via IPs whitelist
 - ✅ Custom Request/Response Headers
@@ -187,6 +190,7 @@ services:
       path: "/"
       interval: "5s"
       timeout: "3s"
+      skip_tls_verify: true # only if you don't want to health checker to verify SSL
       thresholds:
         healthy: 2
         unhealthy: 3
@@ -194,12 +198,14 @@ services:
     # Path-based routing
     locations:
       - path: "/api/"
-        lb_policy: round-robin
+        lb_policy: sticky-session # cookie based
         redirect: "/"
         backends:
           - url: http://internal-api1.local.com:8455
             weight: 5
             max_connections: 1000
+            http2: false # use http1/1
+            sni: "api.domain.com"
             # Backend-specific health check
             health_check:
               type: "http"
@@ -212,6 +218,8 @@ services:
           - url: http://internal-api2.local.com:8455
             weight: 3
             max_connections: 800
+            http2: false
+            sni: "api.domain.com"
 
   # Frontend Service
   - name: frontend
