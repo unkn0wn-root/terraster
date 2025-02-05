@@ -19,23 +19,23 @@ var (
 )
 
 type Config struct {
-	Level            string             `json:"level"`
-	OutputPaths      []string           `json:"outputPaths"`
-	ErrorOutputPaths []string           `json:"errorOutputPaths"`
-	Development      bool               `json:"development"`
-	LogToConsole     bool               `json:"logToConsole"`
-	Sampling         SamplingConfig     `json:"sampling"`
-	EncodingConfig   EncodingConfig     `json:"encodingConfig"`
-	LogRotation      LogRotationConfig  `json:"logRotation"`
-	Sanitization     SanitizationConfig `json:"sanitization"`
+	Level            string       `json:"level"`
+	OutputPaths      []string     `json:"outputPaths"`
+	ErrorOutputPaths []string     `json:"errorOutputPaths"`
+	Development      bool         `json:"development"`
+	LogToConsole     bool         `json:"logToConsole"`
+	Sampling         Sampling     `json:"sampling"`
+	Encoding         Encoding     `json:"encodingConfig"`
+	LogRotation      LogRotation  `json:"logRotation"`
+	Sanitization     Sanitization `json:"sanitization"`
 }
 
-type SamplingConfig struct {
+type Sampling struct {
 	Initial    int `json:"initial"`
 	Thereafter int `json:"thereafter"`
 }
 
-type EncodingConfig struct {
+type Encoding struct {
 	TimeKey         string `json:"timeKey"`
 	LevelKey        string `json:"levelKey"`
 	NameKey         string `json:"nameKey"`
@@ -49,7 +49,7 @@ type EncodingConfig struct {
 	CallerEncoder   string `json:"callerEncoder"`
 }
 
-type LogRotationConfig struct {
+type LogRotation struct {
 	Enabled    bool `json:"enabled"`
 	MaxSizeMB  int  `json:"maxSizeMB"`
 	MaxBackups int  `json:"maxBackups"`
@@ -57,8 +57,8 @@ type LogRotationConfig struct {
 	Compress   bool `json:"compress"`
 }
 
-// SanitizationConfig configures sensitive field sanitization.
-type SanitizationConfig struct {
+// Sanitization configures sensitive field sanitization.
+type Sanitization struct {
 	SensitiveFields []string `json:"sensitiveFields"`
 	Mask            string   `json:"mask"`
 }
@@ -124,17 +124,17 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 	assignDefaultValues(cfg)
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        cfg.EncodingConfig.TimeKey,
-		LevelKey:       cfg.EncodingConfig.LevelKey,
-		NameKey:        cfg.EncodingConfig.NameKey,
-		CallerKey:      cfg.EncodingConfig.CallerKey,
-		MessageKey:     cfg.EncodingConfig.MessageKey,
-		StacktraceKey:  cfg.EncodingConfig.StacktraceKey,
-		LineEnding:     cfg.EncodingConfig.LineEnding,
-		EncodeLevel:    getZapLevelEncoder(cfg.EncodingConfig.LevelEncoder),
-		EncodeTime:     getZapTimeEncoder(cfg.EncodingConfig.TimeEncoder),
-		EncodeDuration: getZapDurationEncoder(cfg.EncodingConfig.DurationEncoder),
-		EncodeCaller:   getZapCallerEncoder(cfg.EncodingConfig.CallerEncoder),
+		TimeKey:        cfg.Encoding.TimeKey,
+		LevelKey:       cfg.Encoding.LevelKey,
+		NameKey:        cfg.Encoding.NameKey,
+		CallerKey:      cfg.Encoding.CallerKey,
+		MessageKey:     cfg.Encoding.MessageKey,
+		StacktraceKey:  cfg.Encoding.StacktraceKey,
+		LineEnding:     cfg.Encoding.LineEnding,
+		EncodeLevel:    getZapLevelEncoder(cfg.Encoding.LevelEncoder),
+		EncodeTime:     getZapTimeEncoder(cfg.Encoding.TimeEncoder),
+		EncodeDuration: getZapDurationEncoder(cfg.Encoding.DurationEncoder),
+		EncodeCaller:   getZapCallerEncoder(cfg.Encoding.CallerEncoder),
 	}
 
 	// Console Encoder with colored levels
@@ -292,7 +292,7 @@ func coloredLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 }
 
 // creates a new Lumberjack logger with the given path and configuration.
-func ljLogger(path string, l LogRotationConfig) *lumberjack.Logger {
+func ljLogger(path string, l LogRotation) *lumberjack.Logger {
 	return &lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    l.MaxSizeMB,

@@ -9,11 +9,11 @@ var DefaultConfig = Config{
 	},
 	Development:  false,
 	LogToConsole: false,
-	Sampling: SamplingConfig{
+	Sampling: Sampling{
 		Initial:    100,
 		Thereafter: 100,
 	},
-	EncodingConfig: EncodingConfig{
+	Encoding: Encoding{
 		TimeKey:         "time",
 		LevelKey:        "level",
 		NameKey:         "logger",
@@ -26,14 +26,14 @@ var DefaultConfig = Config{
 		DurationEncoder: "string",
 		CallerEncoder:   "short",
 	},
-	LogRotation: LogRotationConfig{
+	LogRotation: LogRotation{
 		Enabled:    true,
 		MaxSizeMB:  100,
 		MaxBackups: 7,
 		MaxAgeDays: 30,
 		Compress:   true,
 	},
-	Sanitization: SanitizationConfig{
+	Sanitization: Sanitization{
 		SensitiveFields: []string{
 			"password",
 			"token",
@@ -54,17 +54,17 @@ func assignDefaultValues(cfg *Config) {
 	if len(cfg.ErrorOutputPaths) == 0 {
 		cfg.ErrorOutputPaths = DefaultConfig.ErrorOutputPaths
 	}
-	if cfg.EncodingConfig.LevelEncoder == "" {
-		cfg.EncodingConfig.LevelEncoder = DefaultConfig.EncodingConfig.LevelEncoder
+	if cfg.Encoding.LevelEncoder == "" {
+		cfg.Encoding.LevelEncoder = DefaultConfig.Encoding.LevelEncoder
 	}
-	if cfg.EncodingConfig.TimeEncoder == "" {
-		cfg.EncodingConfig.TimeEncoder = DefaultConfig.EncodingConfig.TimeEncoder
+	if cfg.Encoding.TimeEncoder == "" {
+		cfg.Encoding.TimeEncoder = DefaultConfig.Encoding.TimeEncoder
 	}
-	if cfg.EncodingConfig.DurationEncoder == "" {
-		cfg.EncodingConfig.DurationEncoder = DefaultConfig.EncodingConfig.DurationEncoder
+	if cfg.Encoding.DurationEncoder == "" {
+		cfg.Encoding.DurationEncoder = DefaultConfig.Encoding.DurationEncoder
 	}
-	if cfg.EncodingConfig.CallerEncoder == "" {
-		cfg.EncodingConfig.CallerEncoder = DefaultConfig.EncodingConfig.CallerEncoder
+	if cfg.Encoding.CallerEncoder == "" {
+		cfg.Encoding.CallerEncoder = DefaultConfig.Encoding.CallerEncoder
 	}
 	if cfg.LogRotation.MaxSizeMB == 0 {
 		cfg.LogRotation.MaxSizeMB = DefaultConfig.LogRotation.MaxSizeMB
