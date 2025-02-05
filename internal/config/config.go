@@ -17,7 +17,7 @@ type ServiceConfig struct {
 }
 
 // MergeConfigs merges multiple configuration files into a single Config
-func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Config, error) {
+func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Terraster, error) {
 	// load main config first
 	mainConfig, err := Load(mainConfigPath)
 	if err != nil {
@@ -47,7 +47,6 @@ func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Conf
 	if err := mainConfig.Validate(logger); err != nil {
 		return nil, fmt.Errorf("invalid merged configuration: %w", err)
 	}
-
 	return mainConfig, nil
 }
 
@@ -64,14 +63,12 @@ func findServiceFiles(dir string) ([]string, error) {
 		if !info.IsDir() && (strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
 			files = append(files, path)
 		}
-
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
-
 	return files, nil
 }
 
@@ -86,33 +83,32 @@ func loadServiceConfig(path string) (*ServiceConfig, error) {
 	if err := yaml.UnmarshalStrict(data, &config); err != nil {
 		return nil, fmt.Errorf("invalid service config in %s: %w", path, err)
 	}
-
 	return &config, nil
 }
 
-// Config represents the main configuration structure for the Terraster application.
+// Terraster represents the main configuration structure for the Terraster application.
 // It aggregates various configuration sections such as server ports, TLS settings,
 // load balancing algorithms, connection pooling, backends, authentication, administrative APIs,
 // health checks, services, and middleware configurations.
-type Config struct {
-	Port        int                `yaml:"port"`             // The port on which the main server listens.
-	Host        string             `yaml:"host"`             // The host on which the main server listens.
-	HTTPPort    int                `yaml:"http_port"`        // The port for handling HTTP (non-TLS) traffic.
-	HTTPSPort   int                `yaml:"https_port"`       // The port for handling HTTPS (TLS) traffic.
-	TLS         TLSConfig          `yaml:"tls"`              // TLS configuration settings.
-	Algorithm   string             `yaml:"algorithm"`        // The load balancing algorithm to use (e.g., "round-robin").
-	ConnPool    PoolConfig         `yaml:"connection_pool"`  // Configuration for the connection pool.
-	Backends    []BackendConfig    `yaml:"backends"`         // A list of backend services.
-	HealthCheck *HealthCheckConfig `yaml:"health_check"`     // Global health check configuration.
-	Services    []Service          `yaml:"services"`         // A list of services with their specific configurations.
-	Middleware  []Middleware       `yaml:"middleware"`       // Global middleware configurations.
-	CertManager CertManagerConfig  `json:"cert_manager"`     // Configuration for the certificate manager.
-	PluginDir   string             `yaml:"plugin_directory"` // Plugins directory. Will default to `./plugins` if not specified
+type Terraster struct {
+	Port        int          `yaml:"port"`             // The port on which the main server listens.
+	Host        string       `yaml:"host"`             // The host on which the main server listens.
+	HTTPPort    int          `yaml:"http_port"`        // The port for handling HTTP (non-TLS) traffic.
+	HTTPSPort   int          `yaml:"https_port"`       // The port for handling HTTPS (TLS) traffic.
+	TLS         TLS          `yaml:"tls"`              // TLS configuration settings.
+	Algorithm   string       `yaml:"algorithm"`        // The load balancing algorithm to use (e.g., "round-robin").
+	ConnPool    Pool         `yaml:"connection_pool"`  // Configuration for the connection pool.
+	Backends    []Backend    `yaml:"backends"`         // A list of backend services.
+	HealthCheck *HealthCheck `yaml:"health_check"`     // Global health check configuration.
+	Services    []Service    `yaml:"services"`         // A list of services with their specific configurations.
+	Middleware  []Middleware `yaml:"middleware"`       // Global middleware configurations.
+	CertManager CertManager  `json:"cert_manager"`     // Configuration for the certificate manager.
+	PluginDir   string       `yaml:"plugin_directory"` // Plugins directory. Will default to `./plugins` if not specified
 }
 
-// TLSConfig holds configuration settings related to TLS (HTTPS) for the server.
+// TLS holds configuration settings related to TLS (HTTPS) for the server.
 // It includes flags and file paths necessary for setting up TLS.
-type TLSConfig struct {
+type TLS struct {
 	Enabled                bool     `yaml:"enabled"`                  // Indicates whether TLS is enabled.
 	CertFile               string   `yaml:"cert_file"`                // Path to the TLS certificate file.
 	KeyFile                string   `yaml:"key_file"`                 // Path to the TLS private key file.
@@ -122,17 +118,17 @@ type TLSConfig struct {
 	HTTP2Enabled           *bool    `yaml:"http2"`                    // Whether to enable HTTP/2
 }
 
-// BackendConfig defines the configuration for a single backend service.
+// Backend defines the configuration for a single backend service.
 // It includes the backend's URL, load balancing weight, connection limits,
 // TLS verification settings, and optional health check configurations.
-type BackendConfig struct {
-	URL            string             `yaml:"url"`                    // The URL of the backend service.
-	Weight         int                `yaml:"weight"`                 // The weight for load balancing purposes.
-	MaxConnections int32              `yaml:"max_connections"`        // Maximum number of concurrent connections to the backend.
-	SkipTLSVerify  bool               `yaml:"skip_tls_verify"`        // Whether to skip TLS certificate verification for the backend.
-	HealthCheck    *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional health check configuration specific to the backend.
-	ServerName     string             `yaml:"sni"`                    // Optional to support virtual hosts
-	HTTP2          *bool              `yaml:"http2"`                  // Optional to enable http2 protocol to the backend service
+type Backend struct {
+	URL            string       `yaml:"url"`                    // The URL of the backend service.
+	Weight         int          `yaml:"weight"`                 // The weight for load balancing purposes.
+	MaxConnections int32        `yaml:"max_connections"`        // Maximum number of concurrent connections to the backend.
+	SkipTLSVerify  bool         `yaml:"skip_tls_verify"`        // Whether to skip TLS certificate verification for the backend.
+	HealthCheck    *HealthCheck `yaml:"health_check,omitempty"` // Optional health check configuration specific to the backend.
+	ServerName     string       `yaml:"sni"`                    // Optional to support virtual hosts
+	HTTP2          *bool        `yaml:"http2"`                  // Optional to enable http2 protocol to the backend service
 }
 
 // Thresholds defines the thresholds for determining the health status of a backend.
@@ -142,9 +138,9 @@ type Thresholds struct {
 	Unhealthy int `yaml:"unhealthy"` // Number of consecutive failed health checks required to mark the backend as unhealthy.
 }
 
-// HealthCheckConfig holds configuration settings for performing health checks on backends.
+// HealthCheck holds configuration settings for performing health checks on backends.
 // It defines the type of health check, intervals, timeouts, and success/failure thresholds.
-type HealthCheckConfig struct {
+type HealthCheck struct {
 	Type          string        `yaml:"type"`            // "http" or "tcp"
 	Path          string        `yaml:"path,omitempty"`  // Applicable for HTTP health checks
 	Interval      time.Duration `yaml:"interval"`        // e.g., "10s"
@@ -153,16 +149,16 @@ type HealthCheckConfig struct {
 	SkipTLSVerify bool          `yaml:"skip_tls_verify"` // Skip backend service health check tls verify
 }
 
-// RateLimitConfig defines the configuration for rate limiting middleware.
+// RateLimit defines the configuration for rate limiting middleware.
 // It specifies the number of requests allowed per second and the burst size.
-type RateLimitConfig struct {
+type RateLimit struct {
 	RequestsPerSecond float64 `yaml:"requests_per_second"` // Number of allowed requests per second.
 	Burst             int     `yaml:"burst"`               // Maximum number of burst requests allowed.
 }
 
-// PoolConfig configures the connection pool used by the server.
+// Pool configures the connection pool used by the server.
 // It sets limits on idle and open connections and defines the idle timeout duration.
-type PoolConfig struct {
+type Pool struct {
 	MaxIdle     int           `yaml:"max_idle"`     // Maximum number of idle connections in the pool.
 	MaxOpen     int           `yaml:"max_open"`     // Maximum number of open connections allowed.
 	IdleTimeout time.Duration `yaml:"idle_timeout"` // Duration after which idle connections are closed. e.g., "90s"
@@ -172,22 +168,22 @@ type PoolConfig struct {
 // It includes service identification, routing settings, TLS configurations,
 // redirection policies, health checks, middleware, and associated locations.
 type Service struct {
-	Name              string             `yaml:"name"`                   // Unique name of the service.
-	Host              string             `yaml:"host"`                   // Host address where the service is accessible.
-	Port              int                `yaml:"port"`                   // Port number on which the service listens.
-	TLS               *TLSConfig         `yaml:"tls"`                    // Optional TLS configuration for the service.
-	HTTPRedirect      bool               `yaml:"http_redirect"`          // Indicates whether HTTP requests should be redirected to HTTPS.
-	RedirectPort      int                `yaml:"redirect_port"`          // Custom port for redirection if applicable.
-	HealthCheck       *HealthCheckConfig `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
-	Middleware        []Middleware       `yaml:"middleware"`             // Middleware configurations specific to the service.
-	Locations         []Location         `yaml:"locations"`              // Routing paths and backend configurations for the service.
-	LogName           string             `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
-	Headers           *HeaderConfig      `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
-	DisablePluginLoad bool               `yaml:"plugin_disabled"`        // enabled or disable plugin load for specific service. False by default
+	Name              string       `yaml:"name"`                   // Unique name of the service.
+	Host              string       `yaml:"host"`                   // Host address where the service is accessible.
+	Port              int          `yaml:"port"`                   // Port number on which the service listens.
+	TLS               *TLS         `yaml:"tls"`                    // Optional TLS configuration for the service.
+	HTTPRedirect      bool         `yaml:"http_redirect"`          // Indicates whether HTTP requests should be redirected to HTTPS.
+	RedirectPort      int          `yaml:"redirect_port"`          // Custom port for redirection if applicable.
+	HealthCheck       *HealthCheck `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
+	Middleware        []Middleware `yaml:"middleware"`             // Middleware configurations specific to the service.
+	Locations         []Location   `yaml:"locations"`              // Routing paths and backend configurations for the service.
+	LogName           string       `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
+	Headers           *Header      `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
+	DisablePluginLoad bool         `yaml:"plugin_disabled"`        // enabled or disable plugin load for specific service. False by default
 }
 
-// HeaderConfig is custom response and request headers modifier
-type HeaderConfig struct {
+// Header is custom response and request headers modifier
+type Header struct {
 	RequestHeaders        map[string]string `yaml:"request_headers,omitempty"`         // Request headers to be added/modified when forwarding to backend
 	ResponseHeaders       map[string]string `yaml:"response_headers,omitempty"`        // Response headers to be added/modified before sending back to client
 	RemoveRequestHeaders  []string          `yaml:"remove_request_headers,omitempty"`  // Headers to be removed from the request before forwarding
@@ -197,21 +193,21 @@ type HeaderConfig struct {
 // Middleware defines the configuration for various middleware components.
 // Each field corresponds to a different type of middleware that can be applied.
 type Middleware struct {
-	RateLimit      *RateLimitConfig `yaml:"rate_limit"`      // Rate limiting configuration.
-	CircuitBreaker *CircuitBreaker  `yaml:"circuit_breaker"` // Circuit breaker configuration.
-	Security       *SecurityConfig  `yaml:"security"`        // Security headers configuration.
-	CORS           *CORS            `yaml:"cors"`            // CORS (Cross-Origin Resource Sharing) configuration.
-	Compression    bool             `yaml:"compression"`     // Enables compression if true.
+	RateLimit      *RateLimit      `yaml:"rate_limit"`      // Rate limiting configuration.
+	CircuitBreaker *CircuitBreaker `yaml:"circuit_breaker"` // Circuit breaker configuration.
+	Security       *Security       `yaml:"security"`        // Security headers configuration.
+	CORS           *CORS           `yaml:"cors"`            // CORS (Cross-Origin Resource Sharing) configuration.
+	Compression    bool            `yaml:"compression"`     // Enables compression if true.
 }
 
 // Location defines the routing and backend configurations for a specific path within a service.
 // It includes path matching, URL rewriting, redirection targets, load balancing policies, and associated backends.
 type Location struct {
-	Path         string          `yaml:"path"`      // URL path that this location handles.
-	Rewrite      string          `yaml:"rewrite"`   // URL rewrite rule applied to incoming requests.
-	Redirect     string          `yaml:"redirect"`  // URL to redirect to, if applicable.
-	LoadBalancer string          `yaml:"lb_policy"` // Load balancing policy (e.g., "round-robin").
-	Backends     []BackendConfig `yaml:"backends"`  // List of backend configurations for this location.
+	Path         string    `yaml:"path"`      // URL path that this location handles.
+	Rewrite      string    `yaml:"rewrite"`   // URL rewrite rule applied to incoming requests.
+	Redirect     string    `yaml:"redirect"`  // URL to redirect to, if applicable.
+	LoadBalancer string    `yaml:"lb_policy"` // Load balancing policy (e.g., "round-robin").
+	Backends     []Backend `yaml:"backends"`  // List of backend configurations for this location.
 }
 
 // CircuitBreaker defines the configuration for a circuit breaker middleware.
@@ -221,9 +217,9 @@ type CircuitBreaker struct {
 	ResetTimeout     time.Duration `yaml:"reset_timeout"`     // Duration to wait before attempting to reset the circuit after it has been tripped.
 }
 
-// SecurityConfig holds configuration settings for security-related HTTP headers.
+// Security holds configuration settings for security-related HTTP headers.
 // It defines how various security headers should be set to enhance the security posture of the server.
-type SecurityConfig struct {
+type Security struct {
 	HSTS                  bool   `yaml:"hsts"`                    // Enables HTTP Strict Transport Security (HSTS).
 	HSTSMaxAge            int    `yaml:"hsts_max_age"`            // Duration (in seconds) for the HSTS policy.
 	HSTSIncludeSubDomains bool   `yaml:"hsts_include_subdomains"` // Applies HSTS policy to all subdomains if true.
@@ -244,16 +240,16 @@ type CORS struct {
 	MaxAge           int      `yaml:"max_age"`           // Duration (in seconds) for which the results of a preflight request can be cached.
 }
 
-// CertManagerConfig holds configuration settings for the certificate manager.
-type CertManagerConfig struct {
-	CertDir          string         `json:"cert_dir"`
-	Alerting         AlertingConfig `json:"alerting"`
-	CheckInterval    time.Duration  `yaml:"check_interval"`
-	ExpirationThresh time.Duration  `yaml:"expiration_threshold"`
+// CertManager holds configuration settings for the certificate manager.
+type CertManager struct {
+	CertDir          string        `json:"cert_dir"`
+	Alerting         Alerting      `json:"alerting"`
+	CheckInterval    time.Duration `yaml:"check_interval"`
+	ExpirationThresh time.Duration `yaml:"expiration_threshold"`
 }
 
-// AlertingConfig holds SMTP settings for alerting.
-type AlertingConfig struct {
+// Alerting holds SMTP settings for alerting.
+type Alerting struct {
 	Enabled   bool     `json:"enabled"`
 	SMTPHost  string   `json:"smtp_host"`
 	SMTPPort  int      `json:"smtp_port"`
@@ -264,7 +260,7 @@ type AlertingConfig struct {
 
 // DefaultHealthCheck provides a default configuration for health checks.
 // It is used when no global or backend-specific health check configuration is provided.
-var DefaultHealthCheck = HealthCheckConfig{
+var DefaultHealthCheck = HealthCheck{
 	Type:     "http",
 	Path:     "/health",
 	Interval: 10 * time.Second,
@@ -275,13 +271,13 @@ var DefaultHealthCheck = HealthCheckConfig{
 	},
 }
 
-func Load(path string) (*Config, error) {
+func Load(path string) (*Terraster, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var config Config
+	var config Terraster
 	if err := yaml.UnmarshalStrict(data, &config); err != nil {
 		return nil, err
 	}
@@ -289,9 +285,9 @@ func Load(path string) (*Config, error) {
 	return &config, nil
 }
 
-// @TODO: Implement the Validate method for the Config struct
+// @TODO: Implement the Validate method for the Terraster config struct
 // and add more validation
-func (cfg *Config) Validate(logger *zap.Logger) error {
+func (cfg *Terraster) Validate(logger *zap.Logger) error {
 	// Apply default global health check if not set
 	if cfg.HealthCheck == nil {
 		logger.Warn("Global health_check not defined. Applying default health check configuration.")
@@ -315,7 +311,7 @@ func (cfg *Config) Validate(logger *zap.Logger) error {
 	return nil
 }
 
-func (hc *HealthCheckConfig) Copy() *HealthCheckConfig {
+func (hc *HealthCheck) Copy() *HealthCheck {
 	if hc == nil {
 		return nil
 	}

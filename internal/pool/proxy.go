@@ -32,8 +32,8 @@ const (
 	DefaultProxyLabel = "terraster"
 )
 
-// RouteConfig holds configuration settings for routing requests through the proxy.
-type RouteConfig struct {
+// Route holds configuration settings for routing requests through the proxy.
+type Route struct {
 	Path          string // Path is the proxy path (upstream) used to match incoming requests (optional).
 	RewriteURL    string // RewriteURL is the URL to rewrite the incoming request to (downstream) (optional).
 	Redirect      string // Redirect is the URL to redirect the request to (optional).
@@ -49,7 +49,7 @@ type URLRewriteProxy struct {
 	path          string                 // path is the URL path prefix that this proxy handles.
 	rewriteURL    string                 // rewriteURL specifies the URL to which incoming requests should be rewritten.
 	urlRewriter   *URLRewriter           // urlRewriter handles the logic for rewriting request URLs and managing redirects.
-	rConfig       RewriteConfig          // rConfig holds the rewrite and redirect configurations.
+	rConfig       Rewrite                // rConfig holds the rewrite and redirect configurations.
 	logger        *zap.Logger            // logger is used for logging proxy-related activities.
 	headerHandler *HeaderHandler         // headerHandler is used to modify request/response headers
 	routeSNI      string                 // serverName is the backend virtual host name (SNI) separate from proxy server name
@@ -65,12 +65,12 @@ type ProxyOption func(*URLRewriteProxy)
 // The function also configures the reverse proxy's Director, ModifyResponse, Transport, ErrorHandler, and BufferPool.
 func NewReverseProxy(
 	target *url.URL,
-	config RouteConfig,
+	config Route,
 	px *httputil.ReverseProxy,
 	logger *zap.Logger,
 	opts ...ProxyOption,
 ) *URLRewriteProxy {
-	rewriteConfig := RewriteConfig{
+	rewriteConfig := Rewrite{
 		ProxyPath:  config.Path,
 		RewriteURL: config.RewriteURL,
 		Redirect:   config.Redirect,

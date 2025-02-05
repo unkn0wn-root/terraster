@@ -18,7 +18,7 @@ type CORS struct {
 }
 
 // Initializes and returns a new CORS instance based on the provided configuration.
-func NewCORSMiddleware(cfg *config.Config) *CORS {
+func NewCORSMiddleware(cfg *config.Terraster) *CORS {
 	var config *config.CORS
 	for _, mw := range cfg.Middleware {
 		if mw.CORS != nil {

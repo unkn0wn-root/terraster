@@ -74,7 +74,7 @@ func syncLoggers(logManager *logger.LoggerManager) {
 }
 
 // Load and merge all configuration files
-func loadConfigs(configPath, servicesDir, apiConfigPath *string, logger *zap.Logger) (*config.Config, *config.APIConfig) {
+func loadConfigs(configPath, servicesDir, apiConfigPath *string, logger *zap.Logger) (*config.Terraster, *config.APIConfig) {
 	cfg, err := config.MergeConfigs(*configPath, *servicesDir, logger)
 	if err != nil {
 		logger.Fatal("Failed to load and merge configs", zap.Error(err))

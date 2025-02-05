@@ -46,7 +46,7 @@ const (
 // Server encapsulates all the components and configurations required to run the Terraster server.
 // Manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
 type Server struct {
-	config          *config.Config              // Configuration settings for the server
+	config          *config.Terraster           // Configuration settings for the server
 	apiConfig       *config.APIConfig           // API configuration settings
 	healthChecker   *health.Checker             // Global health checker (if any)
 	adminAPI        *admin.AdminAPI             // Admin API handler
@@ -76,7 +76,7 @@ type Server struct {
 func NewServer(
 	srvCtx context.Context,
 	errChan chan<- error,
-	cfg *config.Config,
+	cfg *config.Terraster,
 	apiCfg *config.APIConfig,
 	authSrvc *auth_service.AuthService,
 	zLog *zap.Logger,
@@ -192,7 +192,7 @@ func NewServer(
 		// setup helt checkers for each service
 		// this will run in own goroutine
 		hcCfg := svc.HealthCheck
-		if (&config.HealthCheckConfig{}) == hcCfg {
+		if (&config.HealthCheck{}) == hcCfg {
 			hcCfg = cfg.HealthCheck
 		}
 

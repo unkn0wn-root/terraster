@@ -137,7 +137,7 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Map AddBackendRequest to config.BackendConfig
-		backendCfg := config.BackendConfig{
+		backendCfg := config.Backend{
 			URL:            req.URL,
 			Weight:         req.Weight,
 			MaxConnections: req.MaxConnections,
@@ -146,14 +146,14 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// @TODO: Add Redirect from location
-		rc := pool.RouteConfig{
+		rc := pool.Route{
 			Path:       location.Path,
 			RewriteURL: location.Rewrite,
 		}
 
-		// Determine the HealthCheckConfig to pass:
+		// Determine the HealthCheck config to pass:
 		// Priority: Backend-specific > Service-specific > Global default
-		var hcCfg *config.HealthCheckConfig
+		var hcCfg *config.HealthCheck
 		if backendCfg.HealthCheck != nil {
 			hcCfg = backendCfg.HealthCheck
 		} else if srvc.HealthCheck != nil {

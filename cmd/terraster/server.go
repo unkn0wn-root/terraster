@@ -14,14 +14,14 @@ import (
 )
 
 type ServerBuilder struct {
-	config     *config.Config
+	config     *config.Terraster
 	apiConfig  *config.APIConfig
 	logger     *zap.Logger
 	logManager *logger.LoggerManager
 }
 
 func NewServerBuilder(
-	cfg *config.Config,
+	cfg *config.Terraster,
 	apiCfg *config.APIConfig,
 	logger *zap.Logger,
 	logManager *logger.LoggerManager,
@@ -72,7 +72,7 @@ func (sb *ServerBuilder) BuildServer(ctx context.Context, errChan chan<- error) 
 
 func initializeServer(
 	ctx context.Context,
-	cfg *config.Config,
+	cfg *config.Terraster,
 	apiConfig *config.APIConfig,
 	errChan chan error,
 	logger *zap.Logger,

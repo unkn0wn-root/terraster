@@ -19,8 +19,8 @@ type ServerSecurity struct {
 
 // NewSecurityMiddleware initializes and returns a new ServerSecurity instance based on the provided configuration.
 // Reads security-related settings from the configuration and sets up the corresponding fields.
-func NewSecurityMiddleware(cfg *config.Config) *ServerSecurity {
-	var config *config.SecurityConfig
+func NewSecurityMiddleware(cfg *config.Terraster) *ServerSecurity {
+	var config *config.Security
 	for _, mw := range cfg.Middleware {
 		if mw.Security != nil {
 			config = mw.Security

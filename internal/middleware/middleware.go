@@ -123,14 +123,13 @@ func (c *MiddlewareChain) Then(final http.Handler) http.Handler {
 	for i := len(c.middlewares) - 1; i >= 0; i-- {
 		final = c.middlewares[i].Middleware(final)
 	}
-
 	return final
 }
 
 // AddConfiguredMiddlewars adds middleware to the chain based on the provided configuration.
 // It checks the configuration for enabled middleware features like Circuit Breaker, Rate Limiting, and Security,
 // and adds the corresponding middleware to the chain.
-func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Config, logger *zap.Logger) {
+func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Terraster, logger *zap.Logger) {
 	for _, mw := range config.Middleware {
 		switch {
 		// Circuit Breaker Middleware
@@ -148,7 +147,6 @@ func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Config, logger
 
 			cb := NewCircuitBreaker(threshold, resetTimeout)
 			c.Use(cb)
-
 			logger.Info("Global Circuit Breaker middleware configured",
 				zap.Int("failure_threshold", threshold),
 				zap.Duration("reset_timeout", resetTimeout))
@@ -157,7 +155,6 @@ func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Config, logger
 			rml := mw.RateLimit
 			rl := NewRateLimiterMiddleware(rml.RequestsPerSecond, rml.Burst)
 			c.Use(rl)
-
 			logger.Info("Global Rate Limiter middleware configured",
 				zap.Float64("requests_per_second", rml.RequestsPerSecond),
 				zap.Int("burst", rml.Burst))
@@ -165,7 +162,6 @@ func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Config, logger
 		case mw.Security != nil:
 			sec := NewSecurityMiddleware(config)
 			c.Use(sec)
-
 			logger.Info("Global Security middleware configured")
 		// CORS Middleware (Cross-Origin Resource Sharing)
 		case mw.CORS != nil:

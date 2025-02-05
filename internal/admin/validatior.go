@@ -22,11 +22,11 @@ type Validator interface {
 }
 
 type BackendRequest struct {
-	URL            string                    `json:"url"`
-	Weight         int                       `json:"weight"`
-	MaxConnections int32                     `json:"maxConnections"`
-	SkipTLSVerify  bool                      `json:"skipTLSVerify"`
-	HealthCheck    *config.HealthCheckConfig `json:"healthCheck"`
+	URL            string              `json:"url"`
+	Weight         int                 `json:"weight"`
+	MaxConnections int32               `json:"maxConnections"`
+	SkipTLSVerify  bool                `json:"skipTLSVerify"`
+	HealthCheck    *config.HealthCheck `json:"healthCheck"`
 }
 
 func (r BackendRequest) Validate() []ValidationError {
@@ -51,7 +51,7 @@ func (r BackendRequest) Validate() []ValidationError {
 	return errors
 }
 
-func validateHealthCheck(hc *config.HealthCheckConfig) []ValidationError {
+func validateHealthCheck(hc *config.HealthCheck) []ValidationError {
 	var errors []ValidationError
 
 	if hc.Type != "http" && hc.Type != "tcp" {

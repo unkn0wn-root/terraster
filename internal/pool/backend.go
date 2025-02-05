@@ -8,17 +8,17 @@ import (
 )
 
 type Backend struct {
-	URL             *url.URL                  // The URL of the backend server, including scheme, host, and port.
-	Host            string                    // The hostname extracted from the URL, used for logging and identification.
-	Alive           atomic.Bool               // Atomic flag indicating whether the backend is currently alive and reachable.
-	Weight          int                       // The weight assigned to the backend for load balancing purposes.
-	CurrentWeight   atomic.Int32              // The current weight used in certain load balancing algorithms (e.g., weighted round-robin).
-	Proxy           *URLRewriteProxy          // The proxy instance responsible for handling HTTP requests to this backend.
-	ConnectionCount int32                     // The current number of active connections to this backend.
-	MaxConnections  int32                     // The maximum number of concurrent connections allowed to this backend.
-	SuccessCount    int32                     // The total number of successful requests processed by this backend.
-	FailureCount    int32                     // The total number of failed requests processed by this backend.
-	HealthCheckCfg  *config.HealthCheckConfig // Configuration settings for health checks specific to this backend.
+	URL             *url.URL            // The URL of the backend server, including scheme, host, and port.
+	Host            string              // The hostname extracted from the URL, used for logging and identification.
+	Alive           atomic.Bool         // Atomic flag indicating whether the backend is currently alive and reachable.
+	Weight          int                 // The weight assigned to the backend for load balancing purposes.
+	CurrentWeight   atomic.Int32        // The current weight used in certain load balancing algorithms (e.g., weighted round-robin).
+	Proxy           *URLRewriteProxy    // The proxy instance responsible for handling HTTP requests to this backend.
+	ConnectionCount int32               // The current number of active connections to this backend.
+	MaxConnections  int32               // The maximum number of concurrent connections allowed to this backend.
+	SuccessCount    int32               // The total number of successful requests processed by this backend.
+	FailureCount    int32               // The total number of failed requests processed by this backend.
+	HealthCheckCfg  *config.HealthCheck // Configuration settings for health checks specific to this backend.
 }
 
 // GetURL returns the string representation of the backend's URL.

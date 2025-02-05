@@ -10,12 +10,12 @@ import (
 
 // HeaderHandler manages request and response header modifications
 type HeaderHandler struct {
-	headerConfig config.HeaderConfig
+	headerConfig config.Header
 	placeholders map[string]func(*http.Request) string
 }
 
 // NewHeaderHandler creates a new HeaderHandler
-func NewHeaderHandler(cfg config.HeaderConfig) *HeaderHandler {
+func NewHeaderHandler(cfg config.Header) *HeaderHandler {
 	return &HeaderHandler{
 		headerConfig: cfg,
 		placeholders: map[string]func(*http.Request) string{

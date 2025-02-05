@@ -39,7 +39,7 @@ type Checker struct {
 
 // creates a new health checker with the given interval and timeout.
 func NewChecker(
-	config *config.HealthCheckConfig,
+	config *config.HealthCheck,
 	logger *zap.Logger,
 	prefix string,
 ) *Checker {

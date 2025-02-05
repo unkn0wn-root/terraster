@@ -109,7 +109,7 @@ type CertManager struct {
 	certDir          string
 	certs            sync.Map // map[string]*tls.Certificate
 	logger           *zap.Logger
-	config           *config.Config
+	config           *config.Terraster
 	alerter          Alerter
 	checkInterval    time.Duration
 	expirationThresh time.Duration
@@ -130,7 +130,7 @@ func NewCertManager(
 	certDir string,
 	cache CertCache,
 	ctx context.Context,
-	cfg *config.Config,
+	cfg *config.Terraster,
 	alerting AlertingConfig,
 	logger *zap.Logger,
 ) (*CertManager, error) {
@@ -181,7 +181,7 @@ func NewCertManager(
 	return cm, nil
 }
 
-func NewAlertingConfig(cfg *config.Config) AlertingConfig {
+func NewAlertingConfig(cfg *config.Terraster) AlertingConfig {
 	return AlertingConfig{
 		Enabled:   cfg.CertManager.Alerting.Enabled,
 		SMTPHost:  cfg.CertManager.Alerting.SMTPHost,

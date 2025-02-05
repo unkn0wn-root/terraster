@@ -37,18 +37,18 @@ type Manager struct {
 
 // ServiceInfo contains comprehensive information about a service, including its routing and backend configurations.
 type ServiceInfo struct {
-	Name         string                    // The unique name of the service.
-	Host         string                    // The host address where the service is accessible.
-	Port         int                       // The port number on which the service listens.
-	TLS          *config.TLSConfig         // TLS configuration for the service, if HTTPS is enabled.
-	HTTPRedirect bool                      // Indicates whether HTTP requests should be redirected to HTTPS.
-	RedirectPort int                       // The port to which HTTP requests are redirected for HTTPS.
-	HealthCheck  *config.HealthCheckConfig // Health check configuration specific to the service.
-	Locations    []*LocationInfo           // A slice of LocationInfo representing different routing paths for the service.
-	Middleware   []config.Middleware       // Middleware configurations for the service.
-	LogName      string                    // LogName will be used to get service logger from config.
-	Logger       *zap.Logger               // Logger instance for logging service activities.
-	Headers      *config.HeaderConfig      // Request/Response custom headers
+	Name         string              // The unique name of the service.
+	Host         string              // The host address where the service is accessible.
+	Port         int                 // The port number on which the service listens.
+	TLS          *config.TLS         // TLS configuration for the service, if HTTPS is enabled.
+	HTTPRedirect bool                // Indicates whether HTTP requests should be redirected to HTTPS.
+	RedirectPort int                 // The port to which HTTP requests are redirected for HTTPS.
+	HealthCheck  *config.HealthCheck // Health check configuration specific to the service.
+	Locations    []*LocationInfo     // A slice of LocationInfo representing different routing paths for the service.
+	Middleware   []config.Middleware // Middleware configurations for the service.
+	LogName      string              // LogName will be used to get service logger from config.
+	Logger       *zap.Logger         // Logger instance for logging service activities.
+	Headers      *config.Header      // Request/Response custom headers
 }
 
 // ServiceType determines the protocol type of the service based on its TLS configuration.
@@ -72,7 +72,7 @@ type LocationInfo struct {
 // NewManager initializes and returns a new instance of Manager.
 // It sets up services based on the provided configuration and initializes their respective server pools.
 // If no services are defined in the configuration but backends are provided, it creates a default service.
-func NewManager(cfg *config.Config, logger *zap.Logger, pm *plugin.Manager) (*Manager, error) {
+func NewManager(cfg *config.Terraster, logger *zap.Logger, pm *plugin.Manager) (*Manager, error) {
 	m := &Manager{
 		services:      make(map[string]*ServiceInfo),
 		pluginManager: pm,
@@ -120,7 +120,7 @@ func NewManager(cfg *config.Config, logger *zap.Logger, pm *plugin.Manager) (*Ma
 
 // AddService adds a new service to the Manager with the provided configuration and health check settings.
 // Processes each location within the service, creates corresponding server pools, and ensures no duplicate services or locations exist.
-func (m *Manager) AddService(service config.Service, globalHealthCheck *config.HealthCheckConfig) error {
+func (m *Manager) AddService(service config.Service, globalHealthCheck *config.HealthCheck) error {
 	locations := make([]*LocationInfo, 0, len(service.Locations))
 	locationPaths := make(map[string]bool)
 	for _, location := range service.Locations {
@@ -276,7 +276,7 @@ func (m *Manager) AssignLogger(serviceName string, logger *zap.Logger) {
 func (m *Manager) createServerPool(
 	svc config.Service,
 	lc config.Location,
-	serviceHealthCheck *config.HealthCheckConfig,
+	serviceHealthCheck *config.HealthCheck,
 ) (*pool.ServerPool, error) {
 	pm := m.pluginManager
 	if pm != nil && svc.DisablePluginLoad {
@@ -288,7 +288,7 @@ func (m *Manager) createServerPool(
 	})
 
 	for _, backend := range lc.Backends {
-		rc := pool.RouteConfig{
+		rc := pool.Route{
 			Path:          lc.Path,               // The path associated with the backend.
 			RewriteURL:    lc.Rewrite,            // URL rewrite rules for the backend.
 			Redirect:      lc.Redirect,           // Redirect settings if applicable.

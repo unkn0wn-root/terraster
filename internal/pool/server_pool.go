@@ -38,12 +38,12 @@ type PoolAlgorithm struct {
 
 // ServerPool manages a pool of backend servers, handling load balancing and connection management.
 type ServerPool struct {
-	backends       atomic.Value         // Atomic value storing the current BackendSnapshot.
-	current        uint64               // Atomic counter used for round-robin load balancing.
-	algorithm      atomic.Value         // Atomic value storing the current load balancing algorithm.
-	maxConnections atomic.Int32         // Atomic integer representing the maximum allowed connections per backend.
-	log            *zap.Logger          // Logger instance for logging pool activities.
-	serviceHeaders *config.HeaderConfig // Service request and response custom headers
+	backends       atomic.Value   // Atomic value storing the current BackendSnapshot.
+	current        uint64         // Atomic counter used for round-robin load balancing.
+	algorithm      atomic.Value   // Atomic value storing the current load balancing algorithm.
+	maxConnections atomic.Int32   // Atomic integer representing the maximum allowed connections per backend.
+	log            *zap.Logger    // Logger instance for logging pool activities.
+	serviceHeaders *config.Header // Service request and response custom headers
 	pluginManager  *plugin.Manager
 }
 
@@ -75,7 +75,7 @@ func NewServerPool(svc *config.Service, pm *plugin.Manager, logger *zap.Logger) 
 // route settings, and health check configuration.
 // Parses the backend URL, creates a reverse proxy,
 // initializes the backend, and updates the BackendSnapshot atomically.
-func (s *ServerPool) AddBackend(cfg config.BackendConfig, rc RouteConfig, hcCfg *config.HealthCheckConfig) error {
+func (s *ServerPool) AddBackend(cfg config.Backend, rc Route, hcCfg *config.HealthCheck) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
 		return err
@@ -235,7 +235,7 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 // UpdateBackends completely replaces the existing list of backends with a new set based on the provided configurations.
 // It updates the load balancing algorithm and health check settings for each backend.
 // Returns an error if any backend configuration is invalid.
-func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealthCheck *config.HealthCheckConfig) error {
+func (s *ServerPool) UpdateBackends(configs []config.Backend, serviceHealthCheck *config.HealthCheck) error {
 	newBackends := make([]*Backend, 0, len(configs))
 	newBackendCache := make(map[string]*Backend, len(configs))
 
@@ -267,7 +267,7 @@ func (s *ServerPool) UpdateBackends(configs []config.BackendConfig, serviceHealt
 			proxy := &httputil.ReverseProxy{}
 			rp := NewReverseProxy(
 				url,
-				RouteConfig{},
+				Route{},
 				proxy,
 				s.log,
 			)
