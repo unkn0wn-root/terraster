@@ -110,7 +110,7 @@ func NewServer(
 	}
 
 	var adminAPI *admin.AdminAPI
-	if apiCfg.AdminAPI.Enabled {
+	if apiCfg.API.Enabled {
 		adminAPI = admin.NewAdminAPI(serviceManager, apiCfg, authSrvc, zLog)
 	}
 
@@ -297,20 +297,20 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 func (s *Server) startAdminServer() error {
 	// try to load api certificate
 	var cert *tls.Certificate
-	if s.apiConfig.AdminAPI.TLS != nil {
-		c, err := tls.LoadX509KeyPair(s.apiConfig.AdminAPI.TLS.CertFile, s.apiConfig.AdminAPI.TLS.KeyFile)
+	if s.apiConfig.API.TLS != nil {
+		c, err := tls.LoadX509KeyPair(s.apiConfig.API.TLS.CertFile, s.apiConfig.API.TLS.KeyFile)
 		if err != nil {
 			s.logger.Error("Failed to load certificate for admin server", zap.Error(err))
 		} else {
 			cert = &c
 		}
-	} else if !s.apiConfig.AdminAPI.Insecure {
+	} else if !s.apiConfig.API.Insecure {
 		return errors.New(
 			"TLS not configured and Insecure mode is disabled. If you want to run api on HTTP, set 'insecure' to true",
 		)
 	}
 
-	adminAddr := fmt.Sprintf(":%d", s.servicePort(s.apiConfig.AdminAPI.Port))
+	adminAddr := fmt.Sprintf(":%d", s.servicePort(s.apiConfig.API.Port))
 	s.adminServer = &http.Server{
 		Addr:         adminAddr,
 		Handler:      s.adminAPI.Handler(),

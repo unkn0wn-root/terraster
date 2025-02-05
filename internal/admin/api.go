@@ -33,7 +33,7 @@ func NewAdminAPI(
 	logger *zap.Logger,
 ) *AdminAPI {
 	api := &AdminAPI{
-		enabled:        cfg.AdminAPI.Enabled,
+		enabled:        cfg.API.Enabled,
 		serviceManager: manager,
 		mux:            http.NewServeMux(),
 		config:         cfg,
@@ -59,14 +59,16 @@ func (a *AdminAPI) registerRoutes() {
 	a.mux.Handle("/api/backends", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(a.handleBackends)))
 	a.mux.Handle("/api/config", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(a.handleConfig)))
 
-	// Admin-only debug route
-	a.mux.Handle("/debug/pprof/", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Index)))
-	a.mux.Handle("/debug/pprof/cmdline", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Cmdline)))
-	a.mux.Handle("/debug/pprof/profile", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Profile)))
-	a.mux.Handle("/debug/pprof/symbol", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Symbol)))
-	a.mux.Handle("/debug/pprof/trace", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Trace)))
-	a.mux.Handle("/debug/pprof/heap", a.registerMiddleware(models.RoleAdmin, pprof.Handler("heap")))
-	a.mux.Handle("/debug/pprof/goroutine", a.registerMiddleware(models.RoleAdmin, pprof.Handler("goroutine")))
+	// Admin-only debug route if enabled in config
+	if a.config.API.Debug {
+		a.mux.Handle("/debug/pprof/", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Index)))
+		a.mux.Handle("/debug/pprof/cmdline", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Cmdline)))
+		a.mux.Handle("/debug/pprof/profile", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Profile)))
+		a.mux.Handle("/debug/pprof/symbol", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Symbol)))
+		a.mux.Handle("/debug/pprof/trace", a.registerMiddleware(models.RoleAdmin, http.HandlerFunc(pprof.Trace)))
+		a.mux.Handle("/debug/pprof/heap", a.registerMiddleware(models.RoleAdmin, pprof.Handler("heap")))
+		a.mux.Handle("/debug/pprof/goroutine", a.registerMiddleware(models.RoleAdmin, pprof.Handler("goroutine")))
+	}
 
 	// Reader routes
 	a.mux.Handle("/api/services", a.registerMiddleware(models.RoleReader, http.HandlerFunc(a.handleServices)))

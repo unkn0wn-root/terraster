@@ -25,7 +25,7 @@ func (cm *ConfigManager) LoadAPIConfig(path string) *config.APIConfig {
 			zap.String("path", path))
 
 		return &config.APIConfig{
-			AdminAPI: config.API{
+			API: config.API{
 				Enabled: false,
 			},
 		}

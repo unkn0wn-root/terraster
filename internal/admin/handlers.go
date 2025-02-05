@@ -37,7 +37,7 @@ func (a *AdminAPI) Handler() http.Handler {
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
 
-	adminApiHost := a.config.AdminAPI.Host
+	adminApiHost := a.config.API.Host
 	if adminApiHost == "" {
 		adminApiHost = "localhost"
 	}
@@ -47,7 +47,7 @@ func (a *AdminAPI) Handler() http.Handler {
 		logger,
 		admin.NewAccessLogMiddleware(a.logger),
 		admin.NewHostnameMiddleware(adminApiHost, a.logger),
-		admin.NewIPRestrictionMiddleware(a.config.AdminAPI.AllowedIPs, a.logger),
+		admin.NewIPRestrictionMiddleware(a.config.API.AllowedIPs, a.logger),
 	)
 
 	chain := middleware.NewMiddlewareChain(middlewares...)

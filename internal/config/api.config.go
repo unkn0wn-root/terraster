@@ -9,7 +9,7 @@ import (
 // APIAuthConfig defines the authentication configuration for the API.
 // It includes JWT secrets, database paths, token management settings, and password policies.
 type APIConfig struct {
-	AdminAPI      API      `yaml:"api"`
+	API           API      `yaml:"api"`
 	AdminDatabase Database `yaml:"database"`
 	AdminAuth     Auth     `yaml:"auth"`
 }
@@ -21,6 +21,7 @@ type API struct {
 	TLS        *TLS     `yaml:"tls"`
 	Insecure   bool     `yaml:"insecure"`
 	AllowedIPs []string `yaml:"allowed_ips"`
+	Debug      bool     `yaml:"debug"`
 }
 
 type Database struct {

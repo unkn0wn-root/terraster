@@ -39,7 +39,7 @@ func (sb *ServerBuilder) BuildServer(ctx context.Context, errChan chan<- error) 
 	var db *database.SQLiteDB
 	var authService *service.AuthService
 
-	if sb.apiConfig.AdminAPI.Enabled {
+	if sb.apiConfig.API.Enabled {
 		var err error
 		db, err = database.NewSQLiteDB(sb.apiConfig.AdminDatabase.Path)
 		if err != nil {
