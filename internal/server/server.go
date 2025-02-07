@@ -68,6 +68,7 @@ type Server struct {
 	errorChan       chan<- error                // Channel to report server errors
 	shutdownManager *shutdown.Manager           // Server shutdown manager
 	pluginManager   *plugin.Manager             // Global plugin manager instance
+	virtualHandlers map[int]*VirtualServiceHandler
 }
 
 // NewServer is a entrypoint for load balancer setup.
@@ -159,6 +160,7 @@ func NewServer(
 		logger:          zLog,
 		logManager:      logManager,
 		shutdownManager: shutdown.NewManager(),
+		virtualHandlers: make(map[int]*VirtualServiceHandler),
 	}
 
 	// setup default logger for services in case of if log_name is not defined on service
@@ -249,6 +251,14 @@ func (s *Server) Start() error {
 func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	port := s.servicePort(svc.Port)
 	protocol := svc.ServiceType()
+
+	// Initialize multi-handler for this port if it doesn't exist
+	if s.virtualHandlers[port] == nil {
+		s.virtualHandlers[port] = NewVirtualServiceHandler()
+	}
+	// Add service to the multi-handler
+	s.virtualHandlers[port].AddService(s, svc)
+
 	// Check if a server is already running on the desired port.
 	if server := s.portServers[port]; server != nil {
 		// Prevent mixing HTTP and HTTPS protocols on the same port.
@@ -266,16 +276,17 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 		return nil
 	}
 
-	svcType := svc.ServiceType()
-	server, err := s.createServer(svc, svcType)
+	server, err := s.createServer(svc, protocol)
 	if err != nil {
 		return fmt.Errorf("failed to create server for port %d: %w", port, err)
 	}
+
+	server.Handler = s.virtualHandlers[port]
 	s.portServers[port] = server
 	s.servers = append(s.servers, server)
 
 	s.wg.Add(1)
-	go s.runServer(server, s.errorChan, svc.Name, svcType)
+	go s.runServer(server, s.errorChan, svc.Name, protocol)
 	s.logger.Info("Service registered",
 		zap.String("service", svc.Name),
 		zap.String("host", svc.Host),
@@ -340,7 +351,6 @@ func (s *Server) createServer(
 		ReadTimeout:  ReadTimeout,
 		WriteTimeout: WriteTimeout,
 		IdleTimeout:  IdleTimeout,
-		Handler:      s.createServiceMiddleware(svc),
 	}
 
 	if protocol == service.HTTP {
