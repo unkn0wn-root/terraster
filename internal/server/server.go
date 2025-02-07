@@ -358,7 +358,9 @@ func (s *Server) createServer(
 	}
 
 	// check if http2 is enabled
-	// we want to be able to use http2 if `http2` is not explicitly set in config
+	// if http2 is explictly set to false, this disables http2 support
+	// this is rather opt-out then opt-in
+	// Go automatically enables HTTP/2 support for HTTPS connections
 	if svc.TLS.HTTP2Enabled != nil && !*svc.TLS.HTTP2Enabled {
 		server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 		server.TLSConfig.NextProtos = []string{"http/1.1"}
@@ -369,13 +371,13 @@ func (s *Server) createServer(
 		server.TLSConfig.CipherSuites = svc.TLS.CipherSuites
 		s.logger.Info("Setting custom cipher suites", zap.Uint16s("cipher_suites", svc.TLS.CipherSuites))
 	} else {
-		// default cipher suites
+		// default terraster cipher suites
 		server.TLSConfig.CipherSuites = certmanager.TerrasterCiphers
 	}
 
 	if svc.TLS.SessionTicketsDisabled {
 		server.TLSConfig.SessionTicketsDisabled = true // disable session tickets - false by default
-		s.logger.Info("Session tickets disabled")
+		s.logger.Warn("Session tickets disabled")
 	}
 
 	if svc.TLS.NextProtos != nil {
@@ -396,6 +398,7 @@ func (s *Server) runServer(
 	serviceType service.ServiceType,
 ) {
 	defer s.wg.Done()
+
 	n := strings.ToUpper(name)
 	s.logger.Info("Server started", zap.String("service_name", n), zap.String("listen_on", server.Addr))
 
