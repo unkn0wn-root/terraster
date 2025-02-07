@@ -26,16 +26,20 @@ func WithLogLevel(level zapcore.Level) LoggingOption {
 }
 
 // enables logging of request headers.
-func WithHeaders() LoggingOption {
+func WithHeaders(enabled bool) LoggingOption {
 	return func(l *LoggingMiddleware) {
-		l.includeHeaders = true
+		if enabled {
+			l.includeHeaders = true
+		}
 	}
 }
 
 // enables logging of query parameters.
-func WithQueryParams() LoggingOption {
+func WithQueryParams(enabled bool) LoggingOption {
 	return func(l *LoggingMiddleware) {
-		l.includeQuery = true
+		if enabled {
+			l.includeQuery = true
+		}
 	}
 }
 

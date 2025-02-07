@@ -47,6 +47,7 @@ type ServiceInfo struct {
 	Locations    []*LocationInfo     // A slice of LocationInfo representing different routing paths for the service.
 	Middleware   []config.Middleware // Middleware configurations for the service.
 	LogName      string              // LogName will be used to get service logger from config.
+	LogOptions   *config.LogOptions  // LogOptions define diffrent logger options such as headers or query params logging
 	Logger       *zap.Logger         // Logger instance for logging service activities.
 	Headers      *config.Header      // Request/Response custom headers
 }
@@ -127,25 +128,20 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		if location.Path == "" {
 			location.Path = "/"
 		}
-
 		// Check for duplicate location paths within the service.
 		if _, exist := locationPaths[location.Path]; exist {
 			return ErrDuplicateLocation
 		}
-
 		// Ensure that each location has at least one backend defined.
 		if len(location.Backends) == 0 {
 			return fmt.Errorf("service %s, location %s: no backends defined",
 				service.Name, location.Path)
 		}
-
 		locationPaths[location.Path] = true
-
 		serverPool, err := m.createServerPool(service, location, globalHealthCheck)
 		if err != nil {
 			return err
 		}
-
 		locations = append(locations, &LocationInfo{
 			Path:       location.Path,
 			Algorithm:  algorithm.CreateAlgorithm(location.LoadBalancer),
@@ -159,11 +155,9 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 	if k == "" {
 		k = service.Host
 	}
-
 	if k == "" {
 		return ErrNotDefined
 	}
-
 	if _, exist := m.services[k]; exist {
 		return ErrServiceAlreadyExists
 	}
@@ -187,10 +181,10 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		Locations:    locations, // Associated locations with their backends.
 		Middleware:   service.Middleware,
 		LogName:      service.LogName,
+		LogOptions:   service.LogOptions,
 		Headers:      service.Headers,
 	}
 	m.mu.Unlock()
-
 	return nil
 }
 
@@ -214,7 +208,6 @@ func (m *Manager) GetService(
 			break
 		}
 	}
-
 	if matchedService == nil {
 		return nil, nil, fmt.Errorf("service not found for host %s", host)
 	}
@@ -227,11 +220,9 @@ func (m *Manager) GetService(
 			matchedLen = len(location.Path)
 		}
 	}
-
 	if matchedLocation == nil {
 		return nil, nil, fmt.Errorf("location not found for path %s", path)
 	}
-
 	return matchedService, matchedLocation, nil
 }
 
@@ -245,7 +236,6 @@ func (m *Manager) GetServiceByName(name string) *ServiceInfo {
 			return service
 		}
 	}
-
 	return nil
 }
 
@@ -258,7 +248,6 @@ func (m *Manager) GetServices() []*ServiceInfo {
 	for _, service := range m.services {
 		services = append(services, service)
 	}
-
 	return services
 }
 
@@ -299,17 +288,14 @@ func (m *Manager) createServerPool(
 			// if is set then use config value
 			HTTP2: backend.HTTP2 == nil || *backend.HTTP2,
 		}
-
 		backendHealthCheck := serviceHealthCheck
 		if backend.HealthCheck != nil {
 			backendHealthCheck = backend.HealthCheck
 		}
-
 		if err := serverPool.AddBackend(backend, rc, backendHealthCheck); err != nil {
 			return nil, err
 		}
 	}
-
 	return serverPool, nil
 }
 
@@ -319,16 +305,13 @@ func matchHost(pattern, host string) bool {
 	if !strings.Contains(pattern, "*") {
 		return strings.EqualFold(pattern, host)
 	}
-
 	if pattern == "*" {
 		return true
 	}
-
 	// Patterns starting with "*." are treated as wildcard subdomains.
 	if strings.HasPrefix(pattern, "*.") {
 		suffix := pattern[1:] // Remove the asterisk.
 		return strings.HasSuffix(strings.ToLower(host), strings.ToLower(suffix))
 	}
-
 	return false
 }

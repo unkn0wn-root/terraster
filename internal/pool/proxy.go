@@ -226,7 +226,6 @@ func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
 				result.Release()
 			}
 		}()
-
 		if result.Action() == plugin.Stop {
 			for k, v := range result.Headers {
 				resp.Header[k] = v

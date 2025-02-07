@@ -21,12 +21,12 @@ func main() {
 	servicesDir := flag.String("services", "", "optional directory containing services configurations")
 	apiConfigPath := flag.String("api-config", "api.config.yaml", "path to API config file")
 	customLogConfigs := flag.String("log-config", "", "comma-separated paths to custom provided log config files")
-
 	flag.Parse()
 
+	// initilize logging manager
 	logManager, logger := initializeLogging(customLogConfigs)
 	defer syncLoggers(logManager)
-
+	// load configs
 	cfg, apiConfig := loadConfigs(configPath, servicesDir, apiConfigPath, logger)
 
 	errChan := make(chan error, 1)
@@ -35,7 +35,6 @@ func main() {
 
 	// build server and initialize components
 	srv := initializeServer(ctx, cfg, apiConfig, errChan, logger, logManager)
-
 	// run server
 	runServer(ctx, cancel, srv, errChan, logger)
 
@@ -62,7 +61,6 @@ func initializeLogging(customLogConfigs *string) (*logger.LoggerManager, *zap.Lo
 	if err != nil {
 		log.Fatalf("Failed to get logger: %v", err)
 	}
-
 	return logManager, logger
 }
 

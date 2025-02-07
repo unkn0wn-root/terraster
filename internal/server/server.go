@@ -70,9 +70,10 @@ type Server struct {
 	pluginManager   *plugin.Manager             // Global plugin manager instance
 }
 
-// Sets up health checkers for each service,
-// initializes the admin API,
+// NewServer is a entrypoint for load balancer setup.
+// It handles health checkers for each service, initializes the admin API,
 // setup service log (if any) and prepares the server for startup.
+// Will exit with error message if anything goes wrong
 func NewServer(
 	srvCtx context.Context,
 	errChan chan<- error,
@@ -127,7 +128,6 @@ func NewServer(
 	// get and put all certificates in cache
 	certCache := certmanager.NewInMemoryCertCache()
 	alerting := certmanager.NewAlertingConfig(cfg)
-
 	certManager, err := certmanager.NewCertManager(
 		domains,
 		cfg.CertManager.CertDir,
@@ -166,26 +166,26 @@ func NewServer(
 	// which will output to service_default.log file and stderr to service_default_error.log
 	defaultSrvcLog, err := logManager.GetLogger(DefaultLogName)
 	if err != nil {
-		// fallback to default logger in case of error
-		defaultSrvcLog = zLog
+		defaultSrvcLog = zLog // fallback to default logger in case of error
 	}
-
 	for _, svc := range serviceManager.GetServices() {
 		// if log_name is specified in config, we will try to get logger from logManager
 		// in case if this fails, we will fallback to default logger
 		var svcLogger *zap.Logger
-		if svc.LogName != "" {
-			svcLogger, err = logManager.GetLogger(svc.LogName)
-			if err != nil {
-				// fallback to default logger in case of error
-				svcLogger = defaultSrvcLog
-				zLog.Warn("Specified logger not found. Using default logger", zap.String("service_name", svc.Name), zap.Error(err))
-			}
-		} else {
-			// not defined - use default logger
+		slogn := svc.LogName
+		if slogn == "" { // not defined - use default logger
 			svcLogger = defaultSrvcLog
+		} else {
+			svcLogger, err = logManager.GetLogger(slogn)
+			if err != nil {
+				svcLogger = defaultSrvcLog // in case of error - fallback to default logger
+				zLog.Warn(
+					"Specified logger not found. Using default logger",
+					zap.String("service_name", svc.Name),
+					zap.String("log_name", slogn),
+					zap.Error(err))
+			}
 		}
-
 		// Assign logger to service
 		serviceManager.AssignLogger(svc.Name, svcLogger)
 
@@ -195,7 +195,6 @@ func NewServer(
 		if (&config.HealthCheck{}) == hcCfg {
 			hcCfg = cfg.HealthCheck
 		}
-
 		prefix := "[HealthChecker-" + svc.Name + "]"
 		hc := health.NewChecker(hcCfg, svcLogger, prefix)
 		s.healthCheckers[svc.Name] = hc
@@ -241,7 +240,6 @@ func (s *Server) Start() error {
 		s.cancel()
 		return err
 	}
-
 	return nil
 }
 
@@ -251,7 +249,6 @@ func (s *Server) Start() error {
 func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	port := s.servicePort(svc.Port)
 	protocol := svc.ServiceType()
-
 	// Check if a server is already running on the desired port.
 	if server := s.portServers[port]; server != nil {
 		// Prevent mixing HTTP and HTTPS protocols on the same port.
@@ -274,18 +271,15 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to create server for port %d: %w", port, err)
 	}
-
 	s.portServers[port] = server
 	s.servers = append(s.servers, server)
 
 	s.wg.Add(1)
 	go s.runServer(server, s.errorChan, svc.Name, svcType)
-
 	s.logger.Info("Service registered",
 		zap.String("service", svc.Name),
 		zap.String("host", svc.Host),
 		zap.Int("port", port))
-
 	return nil
 }
 
@@ -331,7 +325,6 @@ func (s *Server) startAdminServer() error {
 
 	s.wg.Add(1)
 	go s.runServer(s.adminServer, s.errorChan, "admin", svcType)
-
 	return nil
 }
 
@@ -355,7 +348,6 @@ func (s *Server) createServer(
 			server.Handler = s.createRedirectHandler(svc)
 			return server, nil
 		}
-
 		// If the service is HTTP, return the server. No need to configure TLS.
 		return server, nil
 	}
@@ -390,7 +382,6 @@ func (s *Server) createServer(
 		server.TLSConfig.NextProtos = svc.TLS.NextProtos
 		s.logger.Info("Setting custom next protocols", zap.Strings("next_protos", svc.TLS.NextProtos))
 	}
-
 	return server, nil
 }
 
@@ -421,7 +412,6 @@ func (s *Server) runServer(
 		errorChan <- err
 		return
 	}
-
 	s.logger.Info("Server stopped gracefully", zap.String("server_name", n))
 }
 
@@ -442,7 +432,6 @@ func (s *Server) createRedirectHandler(svc *service.ServiceInfo) http.Handler {
 			RawQuery: r.URL.RawQuery,
 			Fragment: r.URL.Fragment,
 		}
-
 		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 	})
 }
@@ -454,7 +443,9 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRequest processes incoming HTTP requests by determining the appropriate backend service.
-// Handles service discovery, load balancing, and proxying requests to backend servers.
+// This is the first hot path since we are always hiting this function for each incomming request.
+// It handles service discovery, load balancing, and proxying requests to backend servers
+// so this method should be kept optimized and kept minimal as possible
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	host, port, err := parseHostPort(r.Host, r.TLS)
 	if err != nil {
@@ -463,10 +454,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	protocol := getProtocol(r)
-
 	// Construct a unique service key for caching services
 	key := getServiceKey(host, port, protocol)
-
 	srvc, err := s.getServiceFromCache(key)
 	if err != nil {
 		// If not cache hit - retrieve it from the service manager.
@@ -475,7 +464,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Service not found", http.StatusNotFound)
 			return
 		}
-
 		s.cacheService(key, srvc)
 	}
 
@@ -498,7 +486,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())),
 	)
 	duration := time.Since(start)
-
 	// Record the response time for performance-based load balancing algorithms.
 	s.recordResponseTime(srvc, backend.URL.String(), duration)
 }
@@ -560,7 +547,6 @@ func (s *Server) getBackend(
 	if backend == nil {
 		return nil, errors.New("No Peers are currently active")
 	}
-
 	return backend, nil
 }
 

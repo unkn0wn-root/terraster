@@ -31,7 +31,6 @@ func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Terr
 			if err != nil {
 				return nil, fmt.Errorf("failed to read services directory: %w", err)
 			}
-
 			// this loads and merge configs
 			for _, filePath := range serviceFiles {
 				services, err := loadServiceConfig(filePath)
@@ -53,7 +52,6 @@ func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Terr
 // findServiceFiles returns a list of yaml files in the specified dir.
 func findServiceFiles(dir string) ([]string, error) {
 	var files []string
-
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -65,7 +63,6 @@ func findServiceFiles(dir string) ([]string, error) {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +174,8 @@ type Service struct {
 	HealthCheck       *HealthCheck `yaml:"health_check,omitempty"` // Optional Per-Service Health Check
 	Middleware        []Middleware `yaml:"middleware"`             // Middleware configurations specific to the service.
 	Locations         []Location   `yaml:"locations"`              // Routing paths and backend configurations for the service.
-	LogName           string       `yaml:"log_name,omitempty"`     // Name of the logger to use for this service.
+	LogName           string       `yaml:"log_name,omitempty"`     // Name of the logger to use for the specified service.
+	LogOptions        *LogOptions  `yaml:"log_options,omitempty"`  // LogOptions maps to log configuration like headers and query params
 	Headers           *Header      `yaml:"headers,omitempty"`      // Custom headers configuration for request and response objects
 	DisablePluginLoad bool         `yaml:"plugin_disabled"`        // enabled or disable plugin load for specific service. False by default
 }
@@ -240,6 +238,11 @@ type CORS struct {
 	MaxAge           int      `yaml:"max_age"`           // Duration (in seconds) for which the results of a preflight request can be cached.
 }
 
+type LogOptions struct {
+	Headers     bool `yaml:"headers"`      // Headers define if request headers should be logged
+	QueryParams bool `yaml:"query_params"` // QueryParams define if request query params should be logged
+}
+
 // CertManager holds configuration settings for the certificate manager.
 type CertManager struct {
 	CertDir          string        `json:"cert_dir"`
@@ -281,7 +284,6 @@ func Load(path string) (*Terraster, error) {
 	if err := yaml.UnmarshalStrict(data, &config); err != nil {
 		return nil, err
 	}
-
 	return &config, nil
 }
 
@@ -315,7 +317,6 @@ func (hc *HealthCheck) Copy() *HealthCheck {
 	if hc == nil {
 		return nil
 	}
-
 	copyHC := *hc
 	return &copyHC
 }
