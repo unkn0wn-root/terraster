@@ -32,8 +32,8 @@ func (a *AdminAPI) Handler() http.Handler {
 	logger := middleware.NewLoggingMiddleware(
 		a.logger,
 		middleware.WithLogLevel(zap.InfoLevel),
-		middleware.WithHeaders(),
-		middleware.WithQueryParams(),
+		middleware.WithHeaders(true),     // explicitly enable headers logging for api. Should always be enabled
+		middleware.WithQueryParams(true), // explicitly enable query params logging for api. Should always be enabled
 		middleware.WithExcludePaths([]string{"/api/auth/login", "/api/auth/refresh"}),
 	)
 
