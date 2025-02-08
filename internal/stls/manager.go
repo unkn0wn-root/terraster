@@ -1,4 +1,4 @@
-package server
+package stls
 
 import (
 	"crypto/tls"

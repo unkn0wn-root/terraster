@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
+	"github.com/unkn0wn-root/terraster/internal/stls"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
 	"github.com/unkn0wn-root/terraster/pkg/logger"
 	"github.com/unkn0wn-root/terraster/pkg/plugin"
@@ -69,7 +70,7 @@ type Server struct {
 	shutdownManager *shutdown.Manager              // Server shutdown manager
 	pluginManager   *plugin.Manager                // Global plugin manager instance
 	virtualHandlers map[int]*VirtualServiceHandler // Holds all services handlers
-	tlsManager      *TLSManager                    // Manages TLS configuration for each service
+	tlsManager      *stls.TLSManager               // Manages TLS configuration for each service
 }
 
 // NewServer is a entrypoint for load balancer setup.
@@ -168,7 +169,7 @@ func NewServer(
 		logManager:      logManager,
 		shutdownManager: shutdown.NewManager(),
 		virtualHandlers: make(map[int]*VirtualServiceHandler),
-		tlsManager:      NewTLSManager(defaultTLSConfig),
+		tlsManager:      stls.NewTLSManager(defaultTLSConfig),
 	}
 
 	// setup default logger for services in case of if log_name is not defined on service
