@@ -123,7 +123,7 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 // ServeHTTP is the entry point for all requests.
 func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mh.mu.RLock()
-	hostname := stripHostPort(r.Host)
+	hostname := strings.ToLower(stripHostPort(r.Host)) //make hostname case insensitive
 	hostHandler, exists := mh.handlers[hostname]
 	mh.mu.RUnlock()
 

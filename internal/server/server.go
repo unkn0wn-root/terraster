@@ -371,7 +371,7 @@ func (s *Server) createServer(
 	if protocol == service.HTTPS {
 		server.TLSConfig = &tls.Config{
 			GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-				config := s.tlsManager.GetConfig(hello.ServerName)
+				config := s.tlsManager.GetConfig(strings.ToLower(hello.ServerName))
 				if config == nil {
 					return nil, fmt.Errorf("no TLS config found for host: %s", hello.ServerName)
 				}
