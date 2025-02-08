@@ -1,7 +1,6 @@
 package server
 
 import (
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -123,8 +122,7 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 // ServeHTTP is the entry point for all requests.
 func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mh.mu.RLock()
-	hostname := strings.ToLower(stripHostPort(r.Host)) //make hostname case insensitive
-	hostHandler, exists := mh.handlers[hostname]
+	hostHandler, exists := mh.handlers[mh.hostKey(r.Host)]
 	mh.mu.RUnlock()
 
 	if !exists {
@@ -135,9 +133,16 @@ func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	hostHandler.handler.ServeHTTP(w, r)
 }
 
-func stripHostPort(hostport string) string {
-	if host, _, err := net.SplitHostPort(hostport); err == nil {
-		return host
+// hostKey return host without port
+// This does not validate or return any error since we primarly use `r.Host` as input
+// which should always cotains valid hostname.
+func (mh *VirtualServiceHandler) hostKey(host string) string {
+	// Fast path: no port
+	i := strings.IndexByte(host, ':')
+	if i < 0 {
+		// If no port, just lowercase the whole string
+		return strings.ToLower(host)
 	}
-	return hostport
+	// If port exists, lowercase only up to port
+	return strings.ToLower(host[:i])
 }
