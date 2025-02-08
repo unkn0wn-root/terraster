@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/middleware"
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
+	"github.com/unkn0wn-root/terraster/internal/stls"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
 	"github.com/unkn0wn-root/terraster/pkg/logger"
 	"github.com/unkn0wn-root/terraster/pkg/plugin"
@@ -46,29 +47,30 @@ const (
 // Server encapsulates all the components and configurations required to run the Terraster server.
 // Manages HTTP/HTTPS servers, health checkers, admin APIs, TLS configurations, and service pools.
 type Server struct {
-	config          *config.Terraster           // Configuration settings for the server
-	apiConfig       *config.APIConfig           // API configuration settings
-	healthChecker   *health.Checker             // Global health checker (if any)
-	adminAPI        *admin.AdminAPI             // Admin API handler
-	adminServer     *http.Server                // HTTP server for admin API
-	healthCheckers  map[string]*health.Checker  // Individual health checkers per service
-	serviceManager  *service.Manager            // Manages the lifecycle and configuration of services
-	tlsConfigs      map[string]*tls.Certificate // Loaded TLS certificates
-	certManager     *certmanager.CertManager    // Manages TLS certificates
-	serverPool      *pool.ServerPool            // Pool of server instances
-	servers         []*http.Server              // Slice of all HTTP/HTTPS servers
-	serviceCache    *sync.Map                   // Concurrent map for caching service lookups
-	portServers     map[int]*http.Server        // Mapping of ports to their corresponding servers
-	logger          *zap.Logger                 // Logger instance for logging server activities
-	logManager      *logger.LoggerManager       // Manages different loggers
-	mu              sync.RWMutex                // Mutex for synchronizing access to shared resources
-	ctx             context.Context             // Context for managing server lifecycle
-	cancel          context.CancelFunc          // Function to cancel the server context
-	wg              sync.WaitGroup              // WaitGroup to wait for goroutines to finish
-	errorChan       chan<- error                // Channel to report server errors
-	shutdownManager *shutdown.Manager           // Server shutdown manager
-	pluginManager   *plugin.Manager             // Global plugin manager instance
-	virtualHandlers map[int]*VirtualServiceHandler
+	config          *config.Terraster              // Configuration settings for the server
+	apiConfig       *config.APIConfig              // API configuration settings
+	healthChecker   *health.Checker                // Global health checker (if any)
+	adminAPI        *admin.AdminAPI                // Admin API handler
+	adminServer     *http.Server                   // HTTP server for admin API
+	healthCheckers  map[string]*health.Checker     // Individual health checkers per service
+	serviceManager  *service.Manager               // Manages the lifecycle and configuration of services
+	tlsConfigs      map[string]*tls.Certificate    // Loaded TLS certificates
+	certManager     *certmanager.CertManager       // Manages TLS certificates
+	serverPool      *pool.ServerPool               // Pool of server instances
+	servers         []*http.Server                 // Slice of all HTTP/HTTPS servers
+	serviceCache    *sync.Map                      // Concurrent map for caching service lookups
+	portServers     map[int]*http.Server           // Mapping of ports to their corresponding servers
+	logger          *zap.Logger                    // Logger instance for logging server activities
+	logManager      *logger.LoggerManager          // Manages different loggers
+	mu              sync.RWMutex                   // Mutex for synchronizing access to shared resources
+	ctx             context.Context                // Context for managing server lifecycle
+	cancel          context.CancelFunc             // Function to cancel the server context
+	wg              sync.WaitGroup                 // WaitGroup to wait for goroutines to finish
+	errorChan       chan<- error                   // Channel to report server errors
+	shutdownManager *shutdown.Manager              // Server shutdown manager
+	pluginManager   *plugin.Manager                // Global plugin manager instance
+	virtualHandlers map[int]*VirtualServiceHandler // Holds all services handlers
+	tlsManager      *stls.TLSManager               // Manages TLS configuration for each service
 }
 
 // NewServer is a entrypoint for load balancer setup.
@@ -141,6 +143,12 @@ func NewServer(
 		return nil, err
 	}
 
+	// Initialize TLS manager with default config
+	defaultTLSConfig := &tls.Config{
+		MinVersion:   TLSMinVersion,
+		CipherSuites: certmanager.TerrasterCiphers,
+	}
+
 	ctx, cancel := context.WithCancel(srvCtx)
 
 	s := &Server{
@@ -161,6 +169,7 @@ func NewServer(
 		logManager:      logManager,
 		shutdownManager: shutdown.NewManager(),
 		virtualHandlers: make(map[int]*VirtualServiceHandler),
+		tlsManager:      stls.NewTLSManager(defaultTLSConfig),
 	}
 
 	// setup default logger for services in case of if log_name is not defined on service
@@ -256,12 +265,27 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	if s.virtualHandlers[port] == nil {
 		s.virtualHandlers[port] = NewVirtualServiceHandler()
 	}
-	// Add service to the multi-handler
-	s.virtualHandlers[port].AddService(s, svc)
 
-	// Check if a server is already running on the desired port.
-	if server := s.portServers[port]; server != nil {
-		// Prevent mixing HTTP and HTTPS protocols on the same port.
+	server := s.portServers[port]
+	if server == nil {
+		var err error
+		server, err = s.createServer(svc, protocol)
+		if err != nil {
+			return fmt.Errorf("failed to create server for port %d: %w", port, err)
+		}
+
+		server.Handler = s.virtualHandlers[port]
+		s.portServers[port] = server
+		s.servers = append(s.servers, server)
+
+		s.wg.Add(1)
+		go s.runServer(server, s.errorChan, svc.Name, protocol)
+
+		s.logger.Info("New server created",
+			zap.String("service", svc.Name),
+			zap.String("host", svc.Host),
+			zap.Int("port", port))
+	} else {
 		if (server.TLSConfig != nil) != (protocol == service.HTTPS) {
 			return fmt.Errorf(
 				"protocol mismatch: cannot mix HTTP and HTTPS on port %d for service %s",
@@ -269,28 +293,19 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 				svc.Name,
 			)
 		}
-		s.logger.Info("Service port already registered. Binding to the same socket",
+		s.logger.Info("Binding to existing service port",
 			zap.String("service", svc.Name),
 			zap.String("host", svc.Host),
 			zap.Int("port", port))
-		return nil
 	}
 
-	server, err := s.createServer(svc, protocol)
-	if err != nil {
-		return fmt.Errorf("failed to create server for port %d: %w", port, err)
+	if protocol == service.HTTPS {
+		tlsConfig := s.createServiceTLSConfig(svc)
+		s.tlsManager.AddConfig(svc.Host, tlsConfig)
 	}
 
-	server.Handler = s.virtualHandlers[port]
-	s.portServers[port] = server
-	s.servers = append(s.servers, server)
+	s.virtualHandlers[port].AddService(s, svc)
 
-	s.wg.Add(1)
-	go s.runServer(server, s.errorChan, svc.Name, protocol)
-	s.logger.Info("Service registered",
-		zap.String("service", svc.Name),
-		zap.String("host", svc.Host),
-		zap.Int("port", port))
 	return nil
 }
 
@@ -353,47 +368,18 @@ func (s *Server) createServer(
 		IdleTimeout:  IdleTimeout,
 	}
 
-	if protocol == service.HTTP {
-		if svc.HTTPRedirect {
-			server.Handler = s.createRedirectHandler(svc)
-			return server, nil
+	if protocol == service.HTTPS {
+		server.TLSConfig = &tls.Config{
+			GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+				config := s.tlsManager.GetConfig(hello.ServerName)
+				if config == nil {
+					return nil, fmt.Errorf("no TLS config found for host: %s", hello.ServerName)
+				}
+				return config, nil
+			},
 		}
-		// If the service is HTTP, return the server. No need to configure TLS.
-		return server, nil
 	}
 
-	server.TLSConfig = &tls.Config{
-		MinVersion:     TLSMinVersion,
-		GetCertificate: s.certManager.GetCertificate,
-	}
-
-	// check if http2 is enabled
-	// if http2 is explictly set to false, this disables http2 support
-	// this is rather opt-out then opt-in
-	// Go automatically enables HTTP/2 support for HTTPS connections
-	if svc.TLS.HTTP2Enabled != nil && !*svc.TLS.HTTP2Enabled {
-		server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
-		server.TLSConfig.NextProtos = []string{"http/1.1"}
-	}
-
-	// set cipher suites, session tickets and next protos if provided
-	if svc.TLS.CipherSuites != nil {
-		server.TLSConfig.CipherSuites = svc.TLS.CipherSuites
-		s.logger.Info("Setting custom cipher suites", zap.Uint16s("cipher_suites", svc.TLS.CipherSuites))
-	} else {
-		// default terraster cipher suites
-		server.TLSConfig.CipherSuites = certmanager.TerrasterCiphers
-	}
-
-	if svc.TLS.SessionTicketsDisabled {
-		server.TLSConfig.SessionTicketsDisabled = true // disable session tickets - false by default
-		s.logger.Warn("Session tickets disabled")
-	}
-
-	if svc.TLS.NextProtos != nil {
-		server.TLSConfig.NextProtos = svc.TLS.NextProtos
-		s.logger.Info("Setting custom next protocols", zap.Strings("next_protos", svc.TLS.NextProtos))
-	}
 	return server, nil
 }
 
@@ -414,7 +400,14 @@ func (s *Server) runServer(
 
 	var err error
 	if serviceType == service.HTTPS {
-		err = server.ListenAndServeTLS("", "")
+		// Create a TLS listener
+		ln, err := tls.Listen("tcp", server.Addr, server.TLSConfig)
+		if err != nil {
+			defer s.cancel()
+			errorChan <- err
+			return
+		}
+		err = server.Serve(ln)
 	} else {
 		err = server.ListenAndServe()
 	}
@@ -466,8 +459,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	protocol := getProtocol(r)
 	// Construct a unique service key for caching services
+	protocol := getProtocol(r)
 	key := getServiceKey(host, port, protocol)
 	srvc, err := s.getServiceFromCache(key)
 	if err != nil {
@@ -515,7 +508,7 @@ func getProtocol(r *http.Request) service.ServiceType {
 // getServiceKey constructs a unique key for a service based on its host, port, and protocol.
 func getServiceKey(host string, port int, protocol service.ServiceType) string {
 	return service.ServiceKey{
-		Host:     host,
+		Host:     strings.ToLower(host),
 		Port:     port,
 		Protocol: protocol,
 	}.String()
@@ -561,6 +554,42 @@ func (s *Server) getBackend(
 		return nil, errors.New("No Peers are currently active")
 	}
 	return backend, nil
+}
+
+// Add createServiceTLSConfig method
+func (s *Server) createServiceTLSConfig(svc *service.ServiceInfo) *tls.Config {
+	tlsConfig := &tls.Config{
+		MinVersion:     TLSMinVersion,
+		GetCertificate: s.certManager.GetCertificate,
+	}
+
+	if svc.TLS != nil {
+		if svc.TLS.CipherSuites != nil {
+			tlsConfig.CipherSuites = svc.TLS.CipherSuites
+			s.logger.Info("Setting custom cipher suites", zap.String("service", svc.Name))
+		} else {
+			tlsConfig.CipherSuites = certmanager.TerrasterCiphers
+		}
+
+		if svc.TLS.SessionTicketsDisabled {
+			tlsConfig.SessionTicketsDisabled = true
+			s.logger.Warn("Session tickets disabled", zap.String("service", svc.Name))
+		}
+
+		if svc.TLS.NextProtos != nil {
+			tlsConfig.NextProtos = svc.TLS.NextProtos
+			s.logger.Info("Setting custom next protocols",
+				zap.String("service", svc.Name),
+				zap.Strings("next_protos", svc.TLS.NextProtos))
+		}
+
+		if svc.TLS.HTTP2Enabled != nil && !*svc.TLS.HTTP2Enabled {
+			tlsConfig.NextProtos = []string{"http/1.1"}
+			s.logger.Info("HTTP/2 disabled", zap.String("service", svc.Name))
+		}
+	}
+
+	return tlsConfig
 }
 
 // recordResponseTime logs the response time for a given backend service.

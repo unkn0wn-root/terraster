@@ -1,7 +1,9 @@
 package server
 
 import (
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/unkn0wn-root/terraster/internal/config"
@@ -43,6 +45,17 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 	// not during request processing
 	mh.mu.Lock()
 	defer mh.mu.Unlock()
+
+	// Store using lowercase hostname
+	hostname := strings.ToLower(svc.Host)
+	// Handle HTTP redirect at the virtual handler level
+	if svc.ServiceType() == service.HTTP && svc.HTTPRedirect {
+		mh.handlers[hostname] = &HostHandler{
+			logger:  svc.Logger,
+			handler: s.createRedirectHandler(svc),
+		}
+		return
+	}
 
 	// Create base handler with logger
 	baseHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +114,7 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 	)
 	chain.Use(logger)
 
-	mh.handlers[svc.Host] = &HostHandler{
+	mh.handlers[hostname] = &HostHandler{
 		logger:  svc.Logger,
 		handler: chain.Then(baseHandler),
 	}
@@ -110,7 +123,8 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 // ServeHTTP is the entry point for all requests.
 func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mh.mu.RLock()
-	hostHandler, exists := mh.handlers[r.Host]
+	hostname := stripHostPort(r.Host)
+	hostHandler, exists := mh.handlers[hostname]
 	mh.mu.RUnlock()
 
 	if !exists {
@@ -119,4 +133,11 @@ func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	// Direct dispatch to pre-configured handler
 	hostHandler.handler.ServeHTTP(w, r)
+}
+
+func stripHostPort(hostport string) string {
+	if host, _, err := net.SplitHostPort(hostport); err == nil {
+		return host
+	}
+	return hostport
 }
