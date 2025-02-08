@@ -40,14 +40,11 @@ func NewVirtualServiceHandler() *VirtualServiceHandler {
 // The key performance aspect is that this build the entire middleware chain
 // once during initialization, rather than per-request.
 func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo) {
-	// Lock only during service addition - this happens during initialization,
-	// not during request processing
 	mh.mu.Lock()
 	defer mh.mu.Unlock()
 
-	// Store using lowercase hostname
+	// Handle HTTP redirect
 	hostname := strings.ToLower(svc.Host)
-	// Handle HTTP redirect at the virtual handler level
 	if svc.ServiceType() == service.HTTP && svc.HTTPRedirect {
 		mh.handlers[hostname] = &HostHandler{
 			logger:  svc.Logger,
@@ -56,14 +53,12 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 		return
 	}
 
-	// Create base handler with logger
 	baseHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.handleRequest(w, r)
 	})
 
 	// Build middleware chain
 	chain := middleware.NewMiddlewareChain()
-	// Add configured global middlewares
 	chain.AddConfiguredMiddlewares(s.config, svc.Logger)
 
 	// Add service-specific middleware
@@ -95,7 +90,6 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 		}
 	}
 
-	// Add logging middleware with service config
 	logOpts := &config.LogOptions{
 		Headers:     false,
 		QueryParams: false,
@@ -133,16 +127,14 @@ func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	hostHandler.handler.ServeHTTP(w, r)
 }
 
-// hostKey return host without port
-// This does not validate or return any error since we primarly use `r.Host` as input
-// which should always cotains valid hostname.
+// hostKey return host without port. This does not validate or return any error.
+// Takes `r.Host` as input which should always cotains valid hostname.
 func (mh *VirtualServiceHandler) hostKey(host string) string {
-	// Fast path: no port
+	// fast path: no port
 	i := strings.IndexByte(host, ':')
 	if i < 0 {
-		// If no port, just lowercase the whole string
 		return strings.ToLower(host)
 	}
-	// If port exists, lowercase only up to port
+	// if port exists, lowercase only up to port
 	return strings.ToLower(host[:i])
 }
