@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -68,7 +67,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		case apierr.ErrPasswordExpired:
 			http.Error(w, "Password has expired", http.StatusUnauthorized)
 		default:
-			fmt.Println(err)
 			http.Error(w, "Authentication failed", http.StatusInternalServerError)
 		}
 		return

@@ -81,8 +81,6 @@ func (s *AuthService) Close() {
 // IsPasswordExpired checks whether a user's password has expired based on the PasswordChangedAt timestamp.
 // Returns true if the password is older than the configured passwordExpiry duration.
 func (s *AuthService) IsPasswordExpired(user *models.User) bool {
-	fmt.Println("Password Changed At: ", user.PasswordChangedAt)
-	fmt.Println("Password Expiry: ", s.passwordExpiry)
 	return time.Since(user.PasswordChangedAt) > s.passwordExpiry
 }
 
