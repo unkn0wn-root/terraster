@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"net/http"
 	"time"
+
+	pxErr "github.com/unkn0wn-root/terraster/internal/cerr"
 )
 
 const (
@@ -60,7 +62,7 @@ func (t *Transport) ConfigureTransport(serverName string, skipTLSVerify bool, h2
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	r, err := t.transport.RoundTrip(req)
 	if err != nil {
-		return nil, NewProxyError("round_trip", err)
+		return nil, pxErr.NewProxyError("round_trip", err)
 	}
 
 	return r, nil

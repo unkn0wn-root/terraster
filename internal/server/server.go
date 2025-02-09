@@ -22,6 +22,7 @@ import (
 	"github.com/unkn0wn-root/terraster/internal/pool"
 	"github.com/unkn0wn-root/terraster/internal/service"
 	"github.com/unkn0wn-root/terraster/internal/stls"
+	"github.com/unkn0wn-root/terraster/internal/svcache"
 	"github.com/unkn0wn-root/terraster/pkg/algorithm"
 	"github.com/unkn0wn-root/terraster/pkg/logger"
 	"github.com/unkn0wn-root/terraster/pkg/plugin"
@@ -401,14 +402,13 @@ func (s *Server) runServer(
 	var err error
 	if serviceType == service.HTTPS {
 		// Create a TLS listener
-		ln, err := tls.Listen("tcp", server.Addr, server.TLSConfig)
-		if err != nil {
-			defer s.cancel()
-			errorChan <- err
-			return
+		var ln net.Listener
+		ln, err = tls.Listen("tcp", server.Addr, server.TLSConfig)
+		if err == nil {
+			err = server.Serve(ln)
 		}
-		err = server.Serve(ln)
 	} else {
+		// Serve HTTP listener
 		err = server.ListenAndServe()
 	}
 
@@ -507,7 +507,7 @@ func getProtocol(r *http.Request) service.ServiceType {
 
 // getServiceKey constructs a unique key for a service based on its host, port, and protocol.
 func getServiceKey(host string, port int, protocol service.ServiceType) string {
-	return service.ServiceKey{
+	return svcache.ServiceKey{
 		Host:     strings.ToLower(host),
 		Port:     port,
 		Protocol: protocol,

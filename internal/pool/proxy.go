@@ -7,6 +7,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	pxErr "github.com/unkn0wn-root/terraster/internal/cerr"
 	"github.com/unkn0wn-root/terraster/pkg/plugin"
 	"go.uber.org/zap"
 )
@@ -199,7 +200,7 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 	location := resp.Header.Get(HeaderLocation)
 	locURL, err := url.Parse(location)
 	if err != nil {
-		return NewProxyError("handle_redirect", fmt.Errorf("invalid redirect URL: %w", err))
+		return pxErr.NewProxyError("handle_redirect", fmt.Errorf("invalid redirect URL: %w", err))
 	}
 
 	// Ensure that redirects to external hosts are not rewritten.
@@ -290,9 +291,9 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 	// so as for Go 1.23 this is still an issue and we have to live with it
 	// We don't want to overflow logs with this error as this can happen quite often
 	// so we just ignore it for now until Go team provide a better solution
-	var proxyErr *ProxyError
+	var proxyErr *pxErr.ProxyError
 	if errors.As(err, &proxyErr) {
-		if proxyErr.Code == ErrCodeClientDisconnect {
+		if proxyErr.Code == pxErr.ErrCodeClientDisconnect {
 			return
 		}
 	}
@@ -305,5 +306,5 @@ func (p *URLRewriteProxy) errorHandler(w http.ResponseWriter, r *http.Request, e
 		zap.String("path", r.URL.Path),
 	)
 
-	WriteErrorResponse(w, err)
+	pxErr.WriteErrorResponse(w, err)
 }

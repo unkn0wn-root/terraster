@@ -1,14 +1,18 @@
-package service
+package svcache
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/unkn0wn-root/terraster/internal/service"
+)
 
 // ServiceKey uniquely identifies a service within the Terraster application.
 // It is composed of the service's host, port, and protocol, ensuring that each service
 // can be distinctly referenced and managed within the system.
 type ServiceKey struct {
-	Host     string      // The hostname where the service is accessible, e.g., "api.example.com".
-	Port     int         // The port number on which the service listens, e.g., 80 for HTTP or 443 for HTTPS.
-	Protocol ServiceType // The protocol used by the service, either HTTP or HTTPS, determining how requests are handled.
+	Host     string              // The hostname where the service is accessible, e.g., "api.example.com".
+	Port     int                 // The port number on which the service listens, e.g., 80 for HTTP or 443 for HTTPS.
+	Protocol service.ServiceType // The protocol used by the service, either HTTP or HTTPS, determining how requests are handled.
 }
 
 // String generates a standardized string representation of the ServiceKey.
