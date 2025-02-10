@@ -127,14 +127,45 @@ func (mh *VirtualServiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	hostHandler.handler.ServeHTTP(w, r)
 }
 
-// hostKey return host without port. This does not validate or return any error.
+// hostKey return host without port.
+// Supports both IPv4 and IPv6
 // Takes `r.Host` as input which should always cotains valid hostname.
+// Does NOT return any error since all invalid hosts should not match any service
 func (mh *VirtualServiceHandler) hostKey(host string) string {
-	// fast path: no port
-	i := strings.IndexByte(host, ':')
-	if i < 0 {
+	// IPv6 with port - [2001:db8::1]:80
+	if host[0] == '[' {
+		end := last(host, ']')
+		if end > 0 {
+			// If port exists after IPv6 address
+			if len(host) > end+1 && host[end+1] == ':' {
+				return strings.ToLower(host[:end+1])
+			}
+			return strings.ToLower(host)
+		}
+	}
+
+	// No colons at all - bare hostname
+	firstColon := strings.IndexByte(host, ':')
+	if firstColon < 0 {
 		return strings.ToLower(host)
 	}
-	// if port exists, lowercase only up to port
-	return strings.ToLower(host[:i])
+
+	// Look for second colon - if found, it's bare IPv6
+	// Only scan after first colon
+	if strings.IndexByte(host[firstColon+1:], ':') >= 0 {
+		return strings.ToLower(host)
+	}
+
+	// hostname:port or IPv4:port
+	return strings.ToLower(host[:firstColon])
+}
+
+// Last byte finder
+func last(s string, b byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
 }
