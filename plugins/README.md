@@ -2,6 +2,24 @@
 
 This guide explains how to develop custom plugins for the Terraster. Plugins allow you to extend the load balancer's functionality by intercepting and modifying requests and responses.
 
+## CGO Requirements
+
+### Important: CGO is Required
+
+Terraster and all plugins must be compiled with CGO enabled to function properly. This is because the plugin system relies on Go's plugin package, which requires CGO support.
+
+To compile Terraster with CGO:
+```go
+CGO_ENABLED=1 go build
+```
+
+To compile your plugins with CGO:
+```go
+CGO_ENABLED=1 go build -buildmode=plugin -o your_plugin.so your_plugin.go
+```
+
+Note: If CGO is not enabled during compilation, plugins will fail to load and Terraster will not function correctly.
+
 ## Plugin Interface
 
 To create a plugin, you need to implement the `Handler` interface:
@@ -162,12 +180,17 @@ To integrate your plugin with the Terraster, you have two options:
 
 ### 1. Default Plugins Directory
 
-Place your plugin file in the `plugins` directory in the Terraster root:
+Place your compiled plugin (.so file) in the `plugins` directory in the Terraster root:
 
 ```
 terraster/
 ├── plugins/
-│   └── your_plugin.go
+│   └── your_plugin.so
+```
+
+Remember to compile your plugin with CGO enabled:
+```go
+CGO_ENABLED=1 go build -buildmode=plugin -o plugins/your_plugin.so your_plugin.go
 ```
 
 ### 2. Custom Plugin Directory
@@ -178,7 +201,11 @@ Specify a custom plugin directory in your Terraster configuration:
 plugin_directory: "/path/to/plugins" # Will default to `./plugins` if not specified
 ```
 
-The load balancer will automatically discover and load plugins from the configured directory during startup. Make sure your plugin implements the required Handler interface and is properly structured as a Go package.
+The load balancer will automatically discover and load plugins from the configured directory during startup. Make sure:
+1. Your plugin implements the required Handler interface
+2. The plugin is compiled with CGO enabled
+3. The plugin file has a .so extension
+4. The plugin is properly structured as a Go package
 
 ## Testing
 
