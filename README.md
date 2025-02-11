@@ -32,7 +32,7 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Adaptive Load Balancing
 - ✅ Sticky session
 
-### Advanced Features
+### Features
 - ✅ SSL/TLS Support
 - ✅ Dynamic Middleware Plug-in
 - ✅ Server Name Indication (SNI)
@@ -43,11 +43,8 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 - ✅ Configurable Request Logging
 - ✅ Restrict access to API via IPs whitelist
 - ✅ Custom Request/Response Headers
-
-### Core Features
 - ✅ Health Checking
 - ✅ Dynamic Configuration via Admin API
-- ✅ Graceful Shutdown
 
 ## WIP
 - ⏳ WebSocket Support (WIP)
