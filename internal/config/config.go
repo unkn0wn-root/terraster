@@ -11,78 +11,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// SerciceConfig represents a partial configuration containing only sercices
-type ServiceConfig struct {
-	Services []Service `yaml:"services"`
-}
-
-// MergeConfigs merges multiple configuration files into a single Config
-func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Terraster, error) {
-	// load main config first
-	mainConfig, err := Load(mainConfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load main configuration file %w", err)
-	}
-
-	// if provided and exist - merge additional service configurations
-	if servicesDir != "" {
-		if _, err := os.Stat(servicesDir); err == nil {
-			serviceFiles, err := findServiceFiles(servicesDir)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read services directory: %w", err)
-			}
-			// this loads and merge configs
-			for _, filePath := range serviceFiles {
-				services, err := loadServiceConfig(filePath)
-				if err != nil {
-					return nil, fmt.Errorf("failed to load service config from %s: %w", filePath, err)
-				}
-				mainConfig.Services = append(mainConfig.Services, services.Services...)
-			}
-		}
-	}
-
-	// @todo (!!!) - this should validate more then healthchecker...
-	if err := mainConfig.Validate(logger); err != nil {
-		return nil, fmt.Errorf("invalid merged configuration: %w", err)
-	}
-	return mainConfig, nil
-}
-
-// findServiceFiles returns a list of yaml files in the specified dir.
-func findServiceFiles(dir string) ([]string, error) {
-	var files []string
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// must be .yaml or .yml file
-		if !info.IsDir() && (strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
-// loadSerciceConfig loads a service configuration from a file.
-func loadServiceConfig(path string) (*ServiceConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var config ServiceConfig
-	if err := yaml.UnmarshalStrict(data, &config); err != nil {
-		return nil, fmt.Errorf("invalid service config in %s: %w", path, err)
-	}
-	return &config, nil
-}
-
 // Terraster represents the main configuration structure for the Terraster application.
 // It aggregates various configuration sections such as server ports, TLS settings,
 // load balancing algorithms, connection pooling, backends, authentication, administrative APIs,
@@ -272,6 +200,78 @@ var DefaultHealthCheck = HealthCheck{
 		Healthy:   2,
 		Unhealthy: 4,
 	},
+}
+
+// SerciceConfig represents a partial configuration containing only sercices
+type ServiceConfig struct {
+	Services []Service `yaml:"services"`
+}
+
+// MergeConfigs merges multiple configuration files into a single Config
+func MergeConfigs(mainConfigPath, servicesDir string, logger *zap.Logger) (*Terraster, error) {
+	// load main config first
+	mainConfig, err := Load(mainConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load main configuration file %w", err)
+	}
+
+	// if provided and exist - merge additional service configurations
+	if servicesDir != "" {
+		if _, err := os.Stat(servicesDir); err == nil {
+			serviceFiles, err := findServiceFiles(servicesDir)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read services directory: %w", err)
+			}
+			// this loads and merge configs
+			for _, filePath := range serviceFiles {
+				services, err := loadServiceConfig(filePath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load service config from %s: %w", filePath, err)
+				}
+				mainConfig.Services = append(mainConfig.Services, services.Services...)
+			}
+		}
+	}
+
+	// @todo (!!!) - this should validate more then healthchecker...
+	if err := mainConfig.Validate(logger); err != nil {
+		return nil, fmt.Errorf("invalid merged configuration: %w", err)
+	}
+	return mainConfig, nil
+}
+
+// findServiceFiles returns a list of yaml files in the specified dir.
+func findServiceFiles(dir string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// must be .yaml or .yml file
+		if !info.IsDir() && (strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// loadSerciceConfig loads a service configuration from a file.
+func loadServiceConfig(path string) (*ServiceConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var config ServiceConfig
+	if err := yaml.UnmarshalStrict(data, &config); err != nil {
+		return nil, fmt.Errorf("invalid service config in %s: %w", path, err)
+	}
+	return &config, nil
 }
 
 func Load(path string) (*Terraster, error) {
