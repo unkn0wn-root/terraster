@@ -129,7 +129,6 @@ func NewServer(
 		}
 	}
 
-	// get and put all certificates in cache
 	certCache := certmanager.NewInMemoryCertCache()
 	alerting := certmanager.NewAlertingConfig(cfg)
 	certManager, err := certmanager.NewCertManager(
@@ -144,7 +143,6 @@ func NewServer(
 		return nil, err
 	}
 
-	// Initialize TLS manager with default config
 	defaultTLSConfig := &tls.Config{
 		MinVersion:   TLSMinVersion,
 		CipherSuites: certmanager.TerrasterCiphers,
@@ -198,11 +196,8 @@ func NewServer(
 					zap.Error(err))
 			}
 		}
-		// Assign logger to service
 		serviceManager.AssignLogger(svc.Name, svcLogger)
 
-		// setup helt checkers for each service
-		// this will run in own goroutine
 		hcCfg := svc.HealthCheck
 		if (&config.HealthCheck{}) == hcCfg {
 			hcCfg = cfg.HealthCheck
@@ -240,7 +235,6 @@ func (s *Server) Start() error {
 		}
 	}
 
-	// Register shutdown handlers
 	s.registerShutdownHandlers()
 
 	if s.adminAPI == nil {
@@ -316,7 +310,6 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 // We could use cert manager to get certificates for admin server as well
 // but it's better to guard api via load balancer so use LB if you want more advanced config
 func (s *Server) startAdminServer() error {
-	// try to load api certificate
 	var cert *tls.Certificate
 	if s.apiConfig.API.TLS != nil {
 		c, err := tls.LoadX509KeyPair(s.apiConfig.API.TLS.CertFile, s.apiConfig.API.TLS.KeyFile)
@@ -346,7 +339,6 @@ func (s *Server) startAdminServer() error {
 			MinVersion:   TLSMinVersion,
 			Certificates: []tls.Certificate{*cert},
 		}
-		// set type to https if tls is enabled
 		svcType = service.HTTPS
 	}
 
@@ -401,14 +393,12 @@ func (s *Server) runServer(
 
 	var err error
 	if serviceType == service.HTTPS {
-		// Create a TLS listener
 		var ln net.Listener
 		ln, err = tls.Listen("tcp", server.Addr, server.TLSConfig)
 		if err == nil {
 			err = server.Serve(ln)
 		}
 	} else {
-		// Serve HTTP listener
 		err = server.ListenAndServe()
 	}
 
@@ -459,7 +449,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Construct a unique service key for caching services
 	protocol := getProtocol(r)
 	key := getServiceKey(host, port, protocol)
 	srvc, err := s.getServiceFromCache(key)
@@ -473,14 +462,12 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		s.cacheService(key, srvc)
 	}
 
-	// Select an appropriate backend based on the configured load balancing algorithm.
 	backend, err := s.getBackend(srvc, r, w)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
-	// Increment the connection count for the selected backend.
 	if !backend.IncrementConnections() {
 		http.Error(w, "Server at max capacity", http.StatusServiceUnavailable)
 		return
@@ -492,7 +479,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		context.WithValue(r.Context(), middleware.BackendKey, backend.URL.String())),
 	)
 	duration := time.Since(start)
-	// Record the response time for performance-based load balancing algorithms.
 	s.recordResponseTime(srvc, backend.URL.String(), duration)
 }
 
@@ -600,23 +586,19 @@ func (s *Server) recordResponseTime(srvc *service.LocationInfo, url string, dura
 }
 
 func (s *Server) registerShutdownHandlers() {
-	// Register admin server
 	if s.adminServer != nil {
 		s.shutdownManager.RegisterShutdown("Admin server", s.adminServer.Shutdown)
 	}
 
-	// Register service servers
 	for i, srv := range s.servers {
 		name := fmt.Sprintf("Server %d", i+1)
 		s.shutdownManager.RegisterShutdown(name, srv.Shutdown)
 	}
 
-	// Register plugin manager
 	if s.pluginManager != nil {
 		s.shutdownManager.RegisterShutdown("Plugin manager", s.pluginManager.Shutdown)
 	}
 
-	// Register health checkers (they have a different shutdown pattern)
 	for svcName, hc := range s.healthCheckers {
 		s.shutdownManager.AddHandler(func(ctx context.Context) error {
 			hc.Stop()

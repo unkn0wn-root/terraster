@@ -43,7 +43,6 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 	mh.mu.Lock()
 	defer mh.mu.Unlock()
 
-	// Handle HTTP redirect
 	hostname := strings.ToLower(svc.Host)
 	if svc.ServiceType() == service.HTTP && svc.HTTPRedirect {
 		mh.handlers[hostname] = &HostHandler{
@@ -57,11 +56,9 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 		s.handleRequest(w, r)
 	})
 
-	// Build middleware chain
 	chain := middleware.NewMiddlewareChain()
 	chain.AddConfiguredMiddlewares(s.config, svc.Logger)
 
-	// Add service-specific middleware
 	if svc.Middleware != nil {
 		for _, mw := range svc.Middleware {
 			switch {
@@ -97,7 +94,6 @@ func (mh *VirtualServiceHandler) AddService(s *Server, svc *service.ServiceInfo)
 	if slop := svc.LogOptions; slop != nil {
 		logOpts = slop
 	}
-
 	logger := middleware.NewLoggingMiddleware(
 		svc.Logger,
 		middleware.WithLogLevel(zap.InfoLevel),

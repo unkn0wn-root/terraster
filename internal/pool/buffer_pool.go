@@ -26,7 +26,6 @@ func (b *BufferPool) Get() []byte {
 }
 
 // Put returns a byte slice back to the BufferPool for reuse.
-// By recycling buffers, the application can significantly reduce memory fragmentation and garbage collection pressure.
 func (b *BufferPool) Put(buf []byte) {
 	b.Pool.Put(buf)
 }

@@ -80,7 +80,6 @@ func NewManager(cfg *config.Terraster, logger *zap.Logger, pm *plugin.Manager) (
 		logger:        logger,
 	}
 
-	// If no services are defined in the config but backends are provided, create a default service.
 	if len(cfg.Services) == 0 && len(cfg.Backends) > 0 {
 		host := cfg.Host
 		if host == "" {
@@ -105,7 +104,6 @@ func NewManager(cfg *config.Terraster, logger *zap.Logger, pm *plugin.Manager) (
 		}
 	} else {
 		for _, svc := range cfg.Services {
-			// Use the global health check configuration if the service does not have a specific one.
 			hcCfg := svc.HealthCheck
 			if hcCfg == nil {
 				hcCfg = cfg.HealthCheck
@@ -128,11 +126,9 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		if location.Path == "" {
 			location.Path = "/"
 		}
-		// Check for duplicate location paths within the service.
 		if _, exist := locationPaths[location.Path]; exist {
 			return ErrDuplicateLocation
 		}
-		// Ensure that each location has at least one backend defined.
 		if len(location.Backends) == 0 {
 			return fmt.Errorf("service %s, location %s: no backends defined",
 				service.Name, location.Path)
@@ -150,7 +146,6 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		})
 	}
 
-	// Determine the key for the service map. Use the service name if available; otherwise, use the host.
 	k := service.Name
 	if k == "" {
 		k = service.Host
