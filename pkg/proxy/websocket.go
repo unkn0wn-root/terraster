@@ -20,7 +20,7 @@ func NewWebSocketProxy(backend *url.URL) *WebSocketProxy {
 		backend: backend,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				return true // Override this in production
+				return true
 			},
 		},
 	}
@@ -55,7 +55,6 @@ func (wp *WebSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go wp.proxy(clientConn, backendConn, errChan)
 	go wp.proxy(backendConn, clientConn, errChan)
 
-	// Wait for error or completion
 	<-errChan
 }
 

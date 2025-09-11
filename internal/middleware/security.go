@@ -27,7 +27,6 @@ func NewSecurityMiddleware(cfg *config.Terraster) *ServerSecurity {
 			break
 		}
 	}
-
 	return &ServerSecurity{
 		HSTS:                  config.HSTS,
 		HSTSMaxAge:            config.HSTSMaxAge,
@@ -58,15 +57,12 @@ func (s *ServerSecurity) Middleware(next http.Handler) http.Handler {
 		if s.FrameOptions != "" {
 			w.Header().Set("X-Frame-Options", s.FrameOptions)
 		}
-
 		if s.ContentTypeOptions {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 		}
-
 		if s.XSSProtection {
 			w.Header().Set("X-XSS-Protection", "1; mode=block")
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }

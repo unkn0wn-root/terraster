@@ -22,9 +22,9 @@ type Middleware interface {
 // statusWriter is a custom ResponseWriter that captures the HTTP status code and the length of the response.
 // Embeds the standard http.ResponseWriter and adds fields to store status and length.
 type statusWriter struct {
-	http.ResponseWriter     // Embeds the standard ResponseWriter to delegate standard methods.
-	status              int // Stores the HTTP status code of the response.
-	length              int // Stores the length of the response body in bytes.
+	http.ResponseWriter
+	status int
+	length int
 }
 
 // newStatusWriter initializes and returns a new instance of statusWriter.
@@ -116,7 +116,7 @@ func (c *MiddlewareChain) Replace(middleware Middleware) {
 // is the first to process the request.
 func (c *MiddlewareChain) Then(final http.Handler) http.Handler {
 	if final == nil {
-		final = http.DefaultServeMux // Defaults to the default ServeMux if no final handler is provided.
+		final = http.DefaultServeMux
 	}
 
 	// Wrap the final handler with each middleware, starting from the last added.
@@ -132,7 +132,6 @@ func (c *MiddlewareChain) Then(final http.Handler) http.Handler {
 func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Terraster, logger *zap.Logger) {
 	for _, mw := range config.Middleware {
 		switch {
-		// Circuit Breaker Middleware
 		case mw.CircuitBreaker != nil:
 			cir := mw.CircuitBreaker
 			threshold := cir.FailureThreshold
@@ -150,7 +149,7 @@ func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Terraster, log
 			logger.Info("Global Circuit Breaker middleware configured",
 				zap.Int("failure_threshold", threshold),
 				zap.Duration("reset_timeout", resetTimeout))
-		// Rate Limiting Middleware
+
 		case mw.RateLimit != nil:
 			rml := mw.RateLimit
 			rl := NewRateLimiterMiddleware(rml.RequestsPerSecond, rml.Burst)
@@ -158,12 +157,12 @@ func (c *MiddlewareChain) AddConfiguredMiddlewares(config *config.Terraster, log
 			logger.Info("Global Rate Limiter middleware configured",
 				zap.Float64("requests_per_second", rml.RequestsPerSecond),
 				zap.Int("burst", rml.Burst))
-		// Security Middleware (HTTP Headers)
+
 		case mw.Security != nil:
 			sec := NewSecurityMiddleware(config)
 			c.Use(sec)
 			logger.Info("Global Security middleware configured")
-		// CORS Middleware (Cross-Origin Resource Sharing)
+
 		case mw.CORS != nil:
 			cors := NewCORSMiddleware(config)
 			c.Use(cors)

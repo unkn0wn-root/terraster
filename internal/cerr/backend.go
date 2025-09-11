@@ -66,22 +66,18 @@ func (e *ProxyError) Unwrap() error {
 
 // IsTemporaryError determines if an error is temporary and the request can be retried
 func IsTemporaryError(err error) bool {
-	// Check our custom error first
 	var proxyErr *ProxyError
 	if errors.As(err, &proxyErr) {
 		return proxyErr.Retryable
 	}
 
-	// Check for network operation timeouts
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
 
-	// Check for specific network errors
 	var opErr *net.OpError
 	if errors.As(err, &opErr) {
-		// Check for specific syscall errors
 		var syscallErr syscall.Errno
 		if errors.As(opErr.Err, &syscallErr) {
 			switch syscallErr {
@@ -98,7 +94,6 @@ func IsTemporaryError(err error) bool {
 			}
 		}
 
-		// Check for DNS temporary errors
 		var dnsErr *net.DNSError
 		if errors.As(opErr.Err, &dnsErr) {
 			return dnsErr.IsTemporary
@@ -138,12 +133,10 @@ func NewProxyError(op string, err error) *ProxyError {
 		pe.Retryable = true
 
 	default:
-		// Check for network errors
 		var opErr *net.OpError
 		if errors.As(err, &opErr) {
 			pe.Retryable = IsTemporaryError(err)
 
-			// Handle DNS errors specifically
 			var dnsErr *net.DNSError
 			if errors.As(opErr.Err, &dnsErr) {
 				pe.Code = ErrCodeBackendConnFailed
@@ -153,7 +146,6 @@ func NewProxyError(op string, err error) *ProxyError {
 				return pe
 			}
 
-			// Handle syscall errors
 			var syscallErr syscall.Errno
 			if errors.As(opErr.Err, &syscallErr) {
 				switch syscallErr {
@@ -173,7 +165,6 @@ func NewProxyError(op string, err error) *ProxyError {
 			}
 		}
 
-		// Handle standard net.Error timeouts
 		var netErr net.Error
 		if errors.As(err, &netErr) {
 			if netErr.Timeout() {
@@ -189,7 +180,6 @@ func NewProxyError(op string, err error) *ProxyError {
 			return pe
 		}
 
-		// Generic error handling
 		pe.Message = fmt.Sprintf("Unexpected error: %v", err)
 	}
 
@@ -208,7 +198,6 @@ func WriteErrorResponse(w http.ResponseWriter, err error) {
 		Message: pe.Message,
 	}
 
-	// tell the client to retry after some time if error is recoverable
 	if pe.Retryable {
 		response.RetryAfter = RetryAfterSec
 		w.Header().Set(RetryAfter, strconv.Itoa(RetryAfterSec))

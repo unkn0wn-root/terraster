@@ -64,7 +64,6 @@ func NewAuthService(db *database.SQLiteDB, config AuthConfig) *AuthService {
 		passwordHistory: config.PasswordHistoryLimit,
 	}
 
-	// Start token cleanup goroutine to periodically remove expired tokens.
 	go s.tokenCleanupRoutine()
 
 	return s
@@ -120,13 +119,11 @@ func (s *AuthService) tokenCleanupRoutine() {
 // ValidatePasswordHistory checks whether the new password has been used recently by the user.
 // Compare the new password against a list of previous password hashes to prevent reuse.
 func (s *AuthService) ValidatePasswordHistory(newPassword string, previousPasswords []string) error {
-	// Iterate through each previous password hash.
 	for _, prevHash := range previousPasswords {
 		if err := bcrypt.CompareHashAndPassword([]byte(prevHash), []byte(newPassword)); err == nil {
 			return errors.New("password has been used recently")
 		}
 	}
-
 	return nil
 }
 
@@ -149,29 +146,24 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 		return fmt.Errorf("invalid new password: %w", err)
 	}
 
-	// Get password history
 	previousPasswords, err := s.db.GetPasswordHistory(userID, s.passwordHistory)
 	if err != nil {
 		return err
 	}
 
-	// Check password history
 	if err := s.ValidatePasswordHistory(newPassword, previousPasswords); err != nil {
 		return err
 	}
 
-	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	// Add current password to history before updating
 	if err := s.db.AddPasswordToHistory(userID, user.Password); err != nil {
 		return err
 	}
 
-	// Cleanup old passwords
 	if err := s.db.CleanupOldPasswords(userID, s.passwordHistory); err != nil {
 		return err
 	}
@@ -181,12 +173,9 @@ func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword stri
 	user.PasswordChangedAt = now
 	user.UpdatedAt = now
 
-	// Update user record with new password
 	if err := s.db.UpdateUserPassword(user); err != nil {
 		return err
 	}
-
-	// Revoke all existing tokens associated with the user to enforce the password change.
 	return s.db.RevokeAllUserTokens(userID)
 }
 
@@ -220,7 +209,6 @@ func (s *AuthService) CreateUser(username, password string, role models.Role) er
 		UpdatedAt:         time.Now(),
 		PasswordChangedAt: time.Now(),
 	}
-
 	return s.db.CreateUser(user)
 }
 
@@ -239,7 +227,6 @@ func (s *AuthService) AuthenticateUser(username, password string, r *http.Reques
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		user.FailedAttempts++
-		// Lock the account if the maximum number of failed attempts is reached.
 		if user.FailedAttempts >= s.config.MaxLoginAttempts {
 			lockUntil := time.Now().Add(s.config.LockDuration)
 			user.LockedUntil = &lockUntil
@@ -386,13 +373,11 @@ func (s *AuthService) ValidateToken(tokenString string) (*jwt.MapClaims, error) 
 		return nil, apierr.ErrInvalidToken
 	}
 
-	// Extract the claims from the token.
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return nil, apierr.ErrInvalidToken
 	}
 
-	// Retrieve the JWT ID (JTI) from the claims.
 	jti, ok := claims["jti"].(string)
 	if !ok {
 		return nil, apierr.ErrInvalidToken
@@ -461,7 +446,6 @@ func (s *AuthService) RevokeToken(tokenString string) error {
 
 	now := time.Now()
 	dbToken.RevokedAt = &now
-
 	return s.db.UpdateToken(dbToken)
 }
 

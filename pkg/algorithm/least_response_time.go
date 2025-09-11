@@ -55,7 +55,6 @@ func (lrt *LeastResponseTime) NextServer(
 
 		// Consider both response time and current connections
 		adjustedTime := responseTime * time.Duration(server.ConnectionCount+1)
-
 		if minTime == -1 || adjustedTime < minTime {
 			minTime = adjustedTime
 			selectedServer = server

@@ -16,7 +16,6 @@ import (
 type contextKey int
 
 const (
-	// RetryKey is used as a key to store and retrieve retry counts from the request context.
 	RetryKey contextKey = iota
 )
 
@@ -73,8 +72,6 @@ func NewServerPool(svc *config.Service, pm *plugin.Manager, logger *zap.Logger) 
 
 // AddBackend adds a new backend to the ServerPool with the specified configuration,
 // route settings, and health check configuration.
-// Parses the backend URL, creates a reverse proxy,
-// initializes the backend, and updates the BackendSnapshot atomically.
 func (s *ServerPool) AddBackend(cfg config.Backend, rc Route, hcCfg *config.HealthCheck) error {
 	url, err := url.Parse(cfg.URL)
 	if err != nil {
@@ -109,9 +106,9 @@ func (s *ServerPool) AddBackend(cfg config.Backend, rc Route, hcCfg *config.Heal
 		Proxy:          rp,
 		HealthCheckCfg: hcCfg,
 	}
-	backend.Alive.Store(true)                   // Mark the backend as initially alive.
-	atomic.StoreInt32(&backend.SuccessCount, 0) // Initialize success count.
-	atomic.StoreInt32(&backend.FailureCount, 0) // Initialize failure count.
+	backend.Alive.Store(true)
+	atomic.StoreInt32(&backend.SuccessCount, 0)
+	atomic.StoreInt32(&backend.FailureCount, 0)
 
 	currentSnapshot := s.backends.Load().(*BackendSnapshot)
 	newBackends := make([]*Backend, len(currentSnapshot.Backends)+1)
@@ -124,7 +121,6 @@ func (s *ServerPool) AddBackend(cfg config.Backend, rc Route, hcCfg *config.Heal
 	}
 	newBackendCache[url.String()] = backend
 
-	// Create a new BackendSnapshot and atomically replace the old one.
 	newSnapshot := &BackendSnapshot{
 		Backends:     newBackends,
 		BackendCache: newBackendCache,
@@ -138,7 +134,6 @@ func (s *ServerPool) AddBackend(cfg config.Backend, rc Route, hcCfg *config.Heal
 // It updates the BackendSnapshot atomically to exclude the specified backend.
 // Returns an error if the backend URL is invalid or if the backend does not exist in the pool.
 func (s *ServerPool) RemoveBackend(backendURL string) error {
-	// Parse the backend URL.
 	url, err := url.Parse(backendURL)
 	if err != nil {
 		return err
@@ -203,7 +198,6 @@ func (s *ServerPool) GetNextPeer() *Backend {
 }
 
 // MarkBackendStatus updates the alive status of a backend based on its URL.
-// It is used by health checkers to mark backends as alive or dead.
 func (s *ServerPool) MarkBackendStatus(backendUrl *url.URL, alive bool) {
 	currentSnapshot := s.backends.Load().(*BackendSnapshot)
 	backend, exists := currentSnapshot.BackendCache[backendUrl.String()]
@@ -234,7 +228,6 @@ func (s *ServerPool) GetBackends() []*algorithm.Server {
 
 // UpdateBackends completely replaces the existing list of backends with a new set based on the provided configurations.
 // It updates the load balancing algorithm and health check settings for each backend.
-// Returns an error if any backend configuration is invalid.
 func (s *ServerPool) UpdateBackends(configs []config.Backend, serviceHealthCheck *config.HealthCheck) error {
 	newBackends := make([]*Backend, 0, len(configs))
 	newBackendCache := make(map[string]*Backend, len(configs))
@@ -248,7 +241,6 @@ func (s *ServerPool) UpdateBackends(configs []config.Backend, serviceHealthCheck
 			return err
 		}
 
-		// Check if the backend already exists in the current backends.
 		var existing *Backend
 		if b, exists := currentBackendsMap[url.String()]; exists {
 			existing = b
@@ -263,7 +255,6 @@ func (s *ServerPool) UpdateBackends(configs []config.Backend, serviceHealthCheck
 			newBackends = append(newBackends, existing)
 			newBackendCache[url.String()] = existing
 		} else {
-			// Create a new backend as it does not exist in the current pool.
 			proxy := &httputil.ReverseProxy{}
 			rp := NewReverseProxy(
 				url,
@@ -274,7 +265,7 @@ func (s *ServerPool) UpdateBackends(configs []config.Backend, serviceHealthCheck
 
 			maxConns := cfg.MaxConnections
 			if maxConns == 0 {
-				maxConns = s.GetMaxConnections() // Use pool's default if not specified.
+				maxConns = s.GetMaxConnections()
 			}
 
 			backend := &Backend{
@@ -302,7 +293,6 @@ func (s *ServerPool) UpdateBackends(configs []config.Backend, serviceHealthCheck
 }
 
 // GetNextProxy retrieves the next available backend proxy based on the load balancing algorithm and increments its connection count.
-// Returns the selected URLRewriteProxy or nil if no suitable backend is available.
 func (s *ServerPool) GetNextProxy(r *http.Request) *URLRewriteProxy {
 	if backend := s.GetNextPeer(); backend != nil {
 		atomic.AddInt32(&backend.ConnectionCount, 1)
@@ -312,7 +302,6 @@ func (s *ServerPool) GetNextProxy(r *http.Request) *URLRewriteProxy {
 }
 
 // GetBackendByURL retrieves a backend from the pool based on its URL.
-// Returns the Backend if found, otherwise returns nil.
 func (s *ServerPool) GetBackendByURL(url string) *Backend {
 	// Load the current BackendSnapshot.
 	currentSnapshot := s.backends.Load().(*BackendSnapshot)
@@ -321,13 +310,11 @@ func (s *ServerPool) GetBackendByURL(url string) *Backend {
 
 // GetAllBackends returns a slice of all backends currently managed by the ServerPool.
 func (s *ServerPool) GetAllBackends() []*Backend {
-	// Load the current BackendSnapshot.
 	currentSnapshot := s.backends.Load().(*BackendSnapshot)
 	return currentSnapshot.Backends
 }
 
 // UpdateConfig updates the ServerPool's configuration based on the provided PoolConfig.
-// It allows changing the load balancing algorithm and the maximum number of connections dynamically.
 func (s *ServerPool) UpdateConfig(update PoolConfig) {
 	if update.MaxConns != 0 {
 		s.maxConnections.Store(update.MaxConns)
@@ -381,8 +368,6 @@ func (s *ServerPool) SetCurrentIndex(idx uint64) {
 }
 
 // GetRetryFromContext extracts the retry count from the request's context.
-// If no retry count is present, it returns 0.
-// This is used to track the number of retry attempts for a given request.
 func GetRetryFromContext(r *http.Request) int {
 	if retry, ok := r.Context().Value(RetryKey).(int); ok {
 		return retry

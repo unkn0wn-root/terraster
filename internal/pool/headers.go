@@ -70,7 +70,6 @@ func (h *HeaderHandler) processPlaceholders(value string, req *http.Request) str
 // TypeByURLPath checks if provided URL path (image123.jpg) is in whitelised extensions
 func TypeByURLPath(path string) string {
 	ext := filepath.Ext(path)
-	// Whitelist of allowed content types
 	switch ext {
 	case ".html", ".htm":
 		return "text/html; charset=utf-8"

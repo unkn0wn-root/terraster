@@ -47,7 +47,6 @@ func (lm *LoggerManager) AddLogger(name string, logger *zap.Logger) error {
 
 // Retrieves a logger by name. Returns error if logger doesn't exist.
 func (lm *LoggerManager) GetLogger(name string) (*zap.Logger, error) {
-	// First try read lock
 	lm.mu.RLock()
 	logger, exists := lm.loggers[name]
 	lm.mu.RUnlock()
@@ -90,7 +89,6 @@ func (lm *LoggerManager) Sync() error {
 }
 
 // Removes a logger from the manager.
-// Returns error if logger doesn't exist.
 func (lm *LoggerManager) RemoveLogger(name string) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()

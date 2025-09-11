@@ -147,17 +147,13 @@ func (l *LoggingMiddleware) Middleware(next http.Handler) http.Handler {
 
 // extracts the IP address from the request.
 func getIPAddress(r *http.Request) string {
-	// Attempt to get the IP from the X-Forwarded-For header
 	xff := r.Header.Get("X-Forwarded-For")
 	if xff != "" {
-		// X-Forwarded-For can contain multiple IPs, the first is the client
 		parts := strings.Split(xff, ",")
 		return strings.TrimSpace(parts[0])
 	}
 
-	// Fallback to the remote address
 	ip := r.RemoteAddr
-	// Remove the port if present
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		return ip[:colon]
 	}

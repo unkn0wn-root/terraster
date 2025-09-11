@@ -15,6 +15,12 @@ import (
 	"github.com/wneessen/go-mail"
 )
 
+type NoopAlerter struct{}
+
+func (n *NoopAlerter) Alert(domain string, expiry time.Time) error {
+	return nil
+}
+
 // Alerter defines the interface for certificate expiration alerting
 type Alerter interface {
 	Alert(domain string, expiry time.Time) error
@@ -45,13 +51,6 @@ func NewEmailAlerter(cfg AlertingConfig, logger *zap.Logger) (*EmailAlerter, err
 		toEmails:  cfg.ToEmails,
 		logger:    logger,
 	}, nil
-}
-
-// NoopAlerter implements Alerter but does nothing
-type NoopAlerter struct{}
-
-func (n *NoopAlerter) Alert(domain string, expiry time.Time) error {
-	return nil
 }
 
 type CertCache interface {

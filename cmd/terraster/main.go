@@ -23,19 +23,16 @@ func main() {
 	customLogConfigs := flag.String("log-config", "", "comma-separated paths to custom provided log config files")
 	flag.Parse()
 
-	// initilize logging manager
 	logManager, logger := initializeLogging(customLogConfigs)
 	defer syncLoggers(logManager)
-	// load configs
+
 	cfg, apiConfig := loadConfigs(configPath, servicesDir, apiConfigPath, logger)
 
 	errChan := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// build server and initialize components
 	srv := initializeServer(ctx, cfg, apiConfig, errChan, logger, logManager)
-	// run server
 	runServer(ctx, cancel, srv, errChan, logger)
 
 }
@@ -93,11 +90,10 @@ func runServer(
 ) {
 	go func() {
 		if err := srv.Start(); err != nil {
-			errChan <- err // Send any server start errors to the error channel.
+			errChan <- err
 		}
 	}()
 
-	// Set up a channel to listen for OS signals for graceful shutdown (e.g., SIGINT, SIGTERM).
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	select {

@@ -18,7 +18,7 @@ type URLRewriter struct {
 	redirect        string // The URL to which requests should be redirected, if redirection is configured.
 }
 
-// Rewrite holds configuration settings for URL rewriting and redirection.
+// RewriteConfig holds configuration settings for URL rewriting and redirection.
 // It defines how incoming request paths should be transformed before being forwarded
 // to the backend services.
 type Rewrite struct {
@@ -27,8 +27,7 @@ type Rewrite struct {
 	Redirect   string // The URL to redirect the request to, if redirection is enabled.
 }
 
-// NewURLRewriter initializes and returns a new instance of URLRewriter based on the provided configuration.
-// Determines whether the path prefix should be stripped and sets up the necessary rewrite and redirect rules.
+// NewURLRewriter determines whether the path prefix should be stripped and sets up the necessary rewrite and redirect rules.
 func NewURLRewriter(config Rewrite, backendURL *url.URL) *URLRewriter {
 	backendPath := backendURL.Path
 	if backendPath == "" {

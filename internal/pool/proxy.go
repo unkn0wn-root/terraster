@@ -63,7 +63,6 @@ type URLRewriteProxy struct {
 type ProxyOption func(*URLRewriteProxy)
 
 // This sets up the reverse proxy with the specified target, route configurations, and applies any additional proxy options.
-// The function also configures the reverse proxy's Director, ModifyResponse, Transport, ErrorHandler, and BufferPool.
 func NewReverseProxy(
 	target *url.URL,
 	config Route,
@@ -105,7 +104,6 @@ func NewReverseProxy(
 		prx.urlRewriter = NewURLRewriter(prx.rConfig, target)
 	}
 
-	// Clone the default transport to avoid modifying the global one
 	dt := http.DefaultTransport.(*http.Transport).Clone()
 	transporter := NewTransport(dt)
 	transporter.ConfigureTransport(config.SNI, config.SkipTLSVerify, prx.h2)
@@ -219,7 +217,6 @@ func (p *URLRewriteProxy) handleRedirect(resp *http.Response) error {
 // modifyResponse is a callback function that modifies the HTTP response received from the backend server.
 // Handle redirects and updates response headers to remove or set specific headers for security and consistency.
 func (p *URLRewriteProxy) modifyResponse(resp *http.Response) error {
-	// pass response object to the plugin
 	if p.pluginEnabled {
 		result := p.pluginManager.ProcessResponse(resp)
 		defer func() {

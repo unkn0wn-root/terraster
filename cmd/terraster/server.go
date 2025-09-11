@@ -60,7 +60,6 @@ func (sb *ServerBuilder) BuildServer(ctx context.Context, errChan chan<- error) 
 	)
 
 	if err != nil {
-		// If server creation fails, we need to clean up the auth service
 		if authService != nil {
 			authService.Close()
 		}

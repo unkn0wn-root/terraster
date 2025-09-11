@@ -51,7 +51,6 @@ func parseHostPort(hostPort string, tlsState *tls.ConnectionState) (host string,
 		return hostPort, DefaultHTTPPort, nil
 	}
 
-	// Slow path: parse the host and port from the hostPort string.
 	host, portStr, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		return "", 0, err

@@ -47,7 +47,6 @@ func NewChecker(
 		Timeout: config.Timeout,
 	}
 
-	// do not try to attempt to verify TLS SNI on the backend
 	if config.SkipTLSVerify {
 		hc.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -101,7 +100,6 @@ func (c *Checker) Start(ctx context.Context) {
 	}()
 }
 
-// gracefully stops the health checker.
 func (c *Checker) Stop() {
 	if c.running.Load() {
 		c.cancel()
@@ -192,7 +190,6 @@ func (c *Checker) performTCPHealthCheck(b *pool.Backend) {
 	healthAddress := b.URL.Host
 	host, port, err := net.SplitHostPort(healthAddress)
 	if err != nil {
-		// If port is missing, infer from scheme
 		host = healthAddress
 		if b.URL.Scheme == "https" {
 			port = "443"

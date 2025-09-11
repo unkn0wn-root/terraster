@@ -25,7 +25,6 @@ type AdminAPI struct {
 }
 
 // NewAdminAPI creates a new instance of AdminAPI with the provided service manager and configuration.
-// It initializes the HTTP mux and registers all API routes.
 func NewAdminAPI(
 	manager *service.Manager,
 	cfg *config.APIConfig,

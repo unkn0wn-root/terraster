@@ -94,7 +94,6 @@ func NewServer(
 	ctxPlugin, cancelPlugin := context.WithTimeout(srvCtx, PluginLoadTime)
 	defer cancelPlugin()
 
-	// check if plugins directory is defined in config or use default `./plugins`
 	var pluginDir string
 	if cfg.PluginDir == "" {
 		pluginDir = DefaultPluginPath
@@ -102,13 +101,11 @@ func NewServer(
 
 	// Initialize plugin manager which handles external (user provided) modules
 	// Assume is important since we must compile with `CGO` to enable plugins
-	// Return error and halt init if something goes wrong
 	pluginManager := plugin.NewManager(zLog)
 	if err := pluginManager.Initialize(ctxPlugin, pluginDir); err != nil {
 		return nil, fmt.Errorf("Failed to initialize plugin manager %w", err)
 	}
 
-	// Initialize service manager which handles all backends and locations
 	serviceManager, err := service.NewManager(cfg, zLog, pluginManager)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize service manager %w", err)
@@ -183,12 +180,12 @@ func NewServer(
 		// in case if this fails, we will fallback to default logger
 		var svcLogger *zap.Logger
 		slogn := svc.LogName
-		if slogn == "" { // not defined - use default logger
+		if slogn == "" {
 			svcLogger = defaultSrvcLog
 		} else {
 			svcLogger, err = logManager.GetLogger(slogn)
 			if err != nil {
-				svcLogger = defaultSrvcLog // in case of error - fallback to default logger
+				svcLogger = defaultSrvcLog
 				zLog.Warn(
 					"Specified logger not found. Using default logger",
 					zap.String("service_name", svc.Name),
@@ -217,7 +214,6 @@ func NewServer(
 // Start initializes and starts all configured HTTP/HTTPS servers along with the admin server.
 // It sets up TLS configurations, loads certificates, and begins listening for incoming requests.
 // Also starts all health checkers in separate goroutines.
-// Returns an error if any server fails to start.
 func (s *Server) Start() error {
 	for svcName, hc := range s.healthCheckers {
 		s.wg.Add(1)
@@ -256,7 +252,6 @@ func (s *Server) startServiceServer(svc *service.ServiceInfo) error {
 	port := s.servicePort(svc.Port)
 	protocol := svc.ServiceType()
 
-	// Initialize multi-handler for this port if it doesn't exist
 	if s.virtualHandlers[port] == nil {
 		s.virtualHandlers[port] = NewVirtualServiceHandler()
 	}
@@ -379,7 +374,6 @@ func (s *Server) createServer(
 // runServer starts the provided HTTP or HTTPS server and listens for incoming connections.
 // It handles server errors by logging them and sending them to the error channel.
 // Ensures graceful shutdown by monitoring the server's lifecycle.
-// Runs in a separate goroutine
 func (s *Server) runServer(
 	server *http.Server,
 	errorChan chan<- error,
@@ -542,7 +536,6 @@ func (s *Server) getBackend(
 	return backend, nil
 }
 
-// Add createServiceTLSConfig method
 func (s *Server) createServiceTLSConfig(svc *service.ServiceInfo) *tls.Config {
 	tlsConfig := &tls.Config{
 		MinVersion:     TLSMinVersion,
@@ -609,7 +602,6 @@ func (s *Server) registerShutdownHandlers() {
 }
 
 // Shutdown gracefully shuts down all running servers, including the admin server and all service servers.
-// Also stops all health checkers and waits for all goroutines to finish within the provided context's deadline.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.cancel()
 	return s.shutdownManager.Shutdown(ctx)

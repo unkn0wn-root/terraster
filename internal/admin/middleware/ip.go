@@ -41,14 +41,11 @@ func (m *IPRestrictionMiddleware) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// extract client IP from request
 		clientIP := extractIP(r)
 		if clientIP == "" {
 			http.Error(w, "Could not verify client IP", http.StatusInternalServerError)
 			return
 		}
-
-		// check if client IP is allowed
 		for _, allowedIP := range m.allowedIPs {
 			if clientIP == allowedIP {
 				next.ServeHTTP(w, r)
@@ -56,7 +53,6 @@ func (m *IPRestrictionMiddleware) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// if we get here, the IP is not allowed
 		m.logger.Warn("Access denied: IP not allowed",
 			zap.String("client_ip", clientIP),
 			zap.Strings("allowed_ips", m.allowedIPs),
@@ -76,16 +72,13 @@ func extractIP(r *http.Request) string {
 		}
 	}
 
-	// check X-Real-IP header if no X-Forwarded-For
 	realIP := r.Header.Get("X-Real-IP")
 	if realIP != "" {
 		return realIP
 	}
 
-	// fall back to RemoteAddr
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		// if SplitHostPort fails, try using RemoteAddr directly
 		return r.RemoteAddr
 	}
 	return ip
