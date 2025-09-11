@@ -3,7 +3,7 @@
 
 A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API.
 
-## Key Features
+## Overview
 
 * Multiple load balancing methods including Round Robin, Weighted Round Robin, and IP Hash
 * Support for external plugins (third-party modules) for middleware (request, response)
@@ -16,37 +16,33 @@ A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and us
 * HTTP/1.1 & HTTP/2 support
 
 
-## Feature Status
+## Features
 
 ### Load Balancing Algorithms
-- ✅ Round Robin
-- ✅ Weighted Round Robin
-- ✅ Least Connections
-- ✅ Weighted Least Connections
-- ✅ Response Time Based
-- ✅ IP Hash
-- ✅ Consistent Hashing
-- ✅ Adaptive Load Balancing
-- ✅ Sticky session
-
-### Features
-- ✅ SSL/TLS Support
-- ✅ Dynamic Middleware Plug-in
-- ✅ Server Name Indication (SNI)
-- ✅ Connection Pooling
-- ✅ Circuit Breaker
-- ✅ Rate Limiting
-- ✅ Compression
-- ✅ Configurable Request Logging
-- ✅ Restrict access to API via IPs whitelist
-- ✅ Custom Request/Response Headers
-- ✅ Health Checking
-- ✅ Dynamic Configuration via Admin API
+- Round Robin
+- Weighted Round Robin
+- Least Connections
+- Weighted Least Connections
+- Response Time Based
+- IP Hash
+- Consistent Hashing
+- Adaptive Load Balancing
+- Sticky session
+- SSL/TLS Support
+- Dynamic Middleware Plug-in
+- Server Name Indication (SNI)
+- Connection Pooling
+- Circuit Breaker
+- Rate Limiting
+- Compression
+- Configurable Request Logging
+- Restrict access to API via IPs whitelist
+- Custom Request/Response Headers
+- Health Checking
+- Dynamic Configuration via Admin API
 
 ## WIP
-- ⏳ WebSocket Support (WIP)
-- ⏳ Automatic Certificate Management (WIP)
-
+- WebSocket Support (WIP)
 
 ## Quick Start
 
