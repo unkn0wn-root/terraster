@@ -55,7 +55,6 @@ func (pm *Manager) Initialize(ctx context.Context, pluginDir string) error {
 		return fmt.Errorf("%w: %v", ErrFailedToRead, err)
 	}
 
-	// return if there are no plugins
 	if len(files) == 0 {
 		return nil
 	}
@@ -125,7 +124,6 @@ func (pm *Manager) loadPlugin(path string) (Handler, error) {
 
 // ProcessRequest executes plugins in priority order for HTTP requests.
 // Returns early on timeout or if a plugin returns Stop action.
-// Uses default timeout if request context has no deadline.
 func (pm *Manager) ProcessRequest(req *http.Request) *Result {
 	if !pm.enabled.Load() {
 		return ResultContinue
@@ -202,7 +200,6 @@ func (pm *Manager) getPluginsNoLock() []Handler {
 }
 
 // Shutdown cleans up all plugins and disables the manager.
-// Context can be used to cancel the shutdown process
 func (pm *Manager) Shutdown(ctx context.Context) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

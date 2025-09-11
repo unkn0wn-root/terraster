@@ -120,7 +120,6 @@ func Init(configPaths []string, manager *LoggerManager) error {
 }
 
 func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
-	// Apply default configuration if any field is missing
 	assignDefaultValues(cfg)
 
 	encoderConfig := zapcore.EncoderConfig{
@@ -137,7 +136,6 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 		EncodeCaller:   getZapCallerEncoder(cfg.Encoding.CallerEncoder),
 	}
 
-	// Console Encoder with colored levels
 	consoleEncoderConfig := encoderConfig
 	consoleEncoderConfig.EncodeLevel = coloredLevelEncoder
 	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
@@ -147,7 +145,6 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 
 	var allCores []zapcore.Core
 	if cfg.Development || cfg.LogToConsole {
-		// 1. Console Core - Synchronous
 		consoleWS := zapcore.Lock(os.Stdout)
 		consoleCore := zapcore.NewCore(consoleEncoder, consoleWS, atomicLevel)
 		allCores = append(allCores, consoleCore)
@@ -155,7 +152,6 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 
 	for _, path := range cfg.OutputPaths {
 		if path == "stdout" || path == "stderr" {
-			// Already handled by consoleCore
 			continue
 		}
 
@@ -178,7 +174,6 @@ func buildLogger(name string, cfg *Config) (*zap.Logger, error) {
 
 	combinedCore := zapcore.NewTee(allCores...)
 
-	// apply Sanitization if needed
 	if len(cfg.Sanitization.SensitiveFields) > 0 {
 		combinedCore = NewSanitizerCore(combinedCore, cfg.Sanitization.SensitiveFields, cfg.Sanitization.Mask)
 	}

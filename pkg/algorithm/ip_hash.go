@@ -18,10 +18,8 @@ func (ih *IPHash) NextServer(pool ServerPool, r *http.Request, w *http.ResponseW
 		return nil
 	}
 
-	// Get IP from request
 	ip := strings.Split(r.RemoteAddr, ":")[0]
 
-	// Generate hash
 	h := fnv.New32a()
 	h.Write([]byte(ip))
 	hash := h.Sum32()

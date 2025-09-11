@@ -25,27 +25,23 @@ func NewAuthMiddleware(authService *service.AuthService) *AuthMiddleware {
 
 func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Apply rate limiting
 		if !m.rateLimiter.Allow(r.RemoteAddr) {
 			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
 
-		// Get token from header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "No token provided", http.StatusUnauthorized)
 			return
 		}
 
-		// Validate token format
 		tokenParts := strings.Split(authHeader, " ")
 		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
 			http.Error(w, "Invalid authorization header", http.StatusUnauthorized)
 			return
 		}
 
-		// Validate token
 		claims, err := m.authService.ValidateToken(tokenParts[1])
 		if err != nil {
 			switch err {
@@ -59,10 +55,8 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		// Add claims to context
 		ctx := context.WithValue(r.Context(), "user_claims", claims)
 
-		// Set security headers
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")

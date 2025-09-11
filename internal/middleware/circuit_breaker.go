@@ -39,14 +39,11 @@ func (cb *CircuitBreaker) Middleware(next http.Handler) http.Handler {
 
 		bsIface, _ := cb.backends.LoadOrStore(backend, &BackendState{})
 		bs := bsIface.(*BackendState)
-
-		// Initialize the state to "closed" if not already set
 		if bs.state.Load() == nil {
 			bs.state.Store("closed")
 		}
 
 		currentState := bs.state.Load().(string)
-
 		if currentState == "open" {
 			lastFailure := bs.lastFailure
 			if time.Since(lastFailure) > cb.resetTimeout {
@@ -94,11 +91,9 @@ func (cb *CircuitBreaker) recordSuccess(backend string, bs *BackendState) {
 	currentState := bs.state.Load().(string)
 
 	if currentState == "half-open" {
-		// Successful request in half-open state closes the circuit
 		bs.state.Store("closed")
 		bs.failures = 0
 	} else if currentState == "closed" && bs.failures > 0 {
-		// Gradually reduce failure count on success in closed state
 		bs.failures--
 	}
 }

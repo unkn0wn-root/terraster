@@ -23,7 +23,7 @@ type AsyncCore struct {
 	bufferSize    int
 	batchSize     int
 	flushInterval time.Duration
-	droppedLogs   uint64 // Atomic counter for dropped logs
+	droppedLogs   uint64
 	batchPool     *sync.Pool
 }
 
@@ -120,7 +120,6 @@ func (ac *AsyncCore) processEntries() {
 func (ac *AsyncCore) writeBatch(batch []LogEntry) {
 	for _, logEntry := range batch {
 		if err := ac.core.Write(logEntry.Entry, logEntry.Fields); err != nil {
-			// should not happen but in case if we can't write to log - just print out to stdout
 			fmt.Printf("Failed to write log entry: %v\n", err)
 		}
 	}
@@ -185,7 +184,6 @@ func (ac *AsyncCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
 	case ac.entryChan <- logEntry:
 		return nil
 	default:
-		// Increment the counter for dropped logs
 		atomic.AddUint64(&ac.droppedLogs, 1)
 		return nil
 	}

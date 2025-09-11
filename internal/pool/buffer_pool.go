@@ -8,7 +8,6 @@ type BufferPool struct {
 }
 
 // NewBufferPool initializes and returns a new instance of BufferPool.
-// It sets up the underlying sync.Pool with a default byte slice size of 32KB.
 func NewBufferPool() *BufferPool {
 	return &BufferPool{
 		Pool: sync.Pool{
@@ -20,7 +19,6 @@ func NewBufferPool() *BufferPool {
 }
 
 // Get retrieves a byte slice from the BufferPool.
-// If the pool is empty, it allocates a new byte slice using the New function defined in NewBufferPool.
 func (b *BufferPool) Get() []byte {
 	return b.Pool.Get().([]byte)
 }

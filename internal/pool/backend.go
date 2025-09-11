@@ -48,7 +48,6 @@ func (b *Backend) GetConnectionCount() int {
 }
 
 // IsAlive checks whether the backend is currently marked as alive.
-// An alive backend is considered healthy and eligible to receive traffic.
 func (b *Backend) IsAlive() bool {
 	return b.Alive.Load()
 }
@@ -60,7 +59,6 @@ func (b *Backend) SetAlive(alive bool) {
 
 // IncrementConnections attempts to increment the active connection count for the backend.
 // It ensures that the connection count does not exceed the maximum allowed.
-// Returns true if the increment was successful, or false if the backend is at maximum capacity.
 func (b *Backend) IncrementConnections() bool {
 	for {
 		current := atomic.LoadInt32(&b.ConnectionCount)

@@ -136,13 +136,12 @@ func (a *AdminAPI) handleBackends(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Map AddBackendRequest to config.BackendConfig
 		backendCfg := config.Backend{
 			URL:            req.URL,
 			Weight:         req.Weight,
 			MaxConnections: req.MaxConnections,
 			SkipTLSVerify:  req.SkipTLSVerify,
-			HealthCheck:    req.HealthCheck, // May be nil
+			HealthCheck:    req.HealthCheck,
 		}
 
 		// @TODO: Add Redirect from location
@@ -234,6 +233,7 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	healthStatus := make(map[string]interface{})
+
 	services := a.serviceManager.GetServices()
 	for _, service := range services {
 		for _, loc := range service.Locations {
@@ -328,7 +328,6 @@ func (a *AdminAPI) requireAuthStrict(next http.Handler) http.Handler {
 			return
 		}
 
-		// block access if password is expired
 		if a.authService.IsPasswordExpired(authRes.User) {
 			http.Error(w, "Password expired", http.StatusForbidden)
 			return

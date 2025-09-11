@@ -1,4 +1,3 @@
-// auth/validation/password.go
 package validation
 
 import (
@@ -58,7 +57,6 @@ func NewPasswordValidator(policy PasswordPolicy) *PasswordValidator {
 }
 
 func (v *PasswordValidator) ValidatePassword(password string, username string) error {
-	// Check length
 	if len(password) < v.policy.MinLength {
 		return ErrPasswordTooShort
 	}
@@ -73,7 +71,6 @@ func (v *PasswordValidator) ValidatePassword(password string, username string) e
 		hasSpecial bool
 	)
 
-	// Check character requirements
 	for _, char := range password {
 		switch {
 		case unicode.IsUpper(char):
@@ -100,28 +97,24 @@ func (v *PasswordValidator) ValidatePassword(password string, username string) e
 		return ErrMissingSpecial
 	}
 
-	// Check for repeating characters
 	if v.policy.MaxRepeatingChars > 0 {
 		if err := v.checkRepeatingChars(password); err != nil {
 			return err
 		}
 	}
 
-	// Check for sequential characters
 	if v.policy.PreventSequential {
 		if err := v.checkSequentialChars(password); err != nil {
 			return err
 		}
 	}
 
-	// Check for username in password
 	if v.policy.PreventUsernamePart && username != "" {
 		if err := v.checkUsernameInPassword(password, username); err != nil {
 			return err
 		}
 	}
 
-	// Check against common passwords
 	if err := v.checkCommonPasswords(password); err != nil {
 		return err
 	}
@@ -191,8 +184,6 @@ func (v *PasswordValidator) checkUsernameInPassword(password, username string) e
 }
 
 func (v *PasswordValidator) checkCommonPasswords(password string) error {
-	// This is a very small subset of common passwords
-	// In a real implementation, you'd want to use a more comprehensive list
 	commonPasswords := map[string]bool{
 		"password123": true,
 		"12345678":    true,

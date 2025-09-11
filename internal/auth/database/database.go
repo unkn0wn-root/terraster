@@ -97,7 +97,6 @@ func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
 		return nil, err
 	}
 
-	// Create schema
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
@@ -136,7 +135,6 @@ func (s *SQLiteDB) GetUserByUsername(username string) (*models.User, error) {
 
 		return nil, err
 	}
-
 	return &user, nil
 }
 
@@ -165,7 +163,6 @@ func (s *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &user, nil
 }
 
@@ -341,7 +338,6 @@ func (s *SQLiteDB) ListUsers() ([]models.User, error) {
 		}
 		users = append(users, user)
 	}
-
 	return users, nil
 }
 
@@ -410,7 +406,6 @@ func (s *SQLiteDB) GetPasswordHistory(userID int64, limit int) ([]string, error)
 		}
 		passwords = append(passwords, hash)
 	}
-
 	return passwords, nil
 }
 

@@ -27,7 +27,6 @@ func NewCompressionMiddleware() Middleware {
 // If gzip is not supported, it forwards the request to the next handler without modifying the response.
 func (c *CompressionMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if the client accepts gzip encoding by inspecting the "Accept-Encoding" header.
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return
@@ -37,12 +36,11 @@ func (c *CompressionMiddleware) Middleware(next http.Handler) http.Handler {
 		defer gz.Close()
 
 		w.Header().Set("Content-Encoding", "gzip")
-		// Remove the "Content-Length" header since the length of the compressed response is not known.
 		w.Header().Del("Content-Length")
 
 		compressedWriter := compressionWriter{
-			Writer:         gz, // Set the gzip.Writer as the writer to handle compression.
-			ResponseWriter: w,  // Embed the original ResponseWriter to maintain interface compliance.
+			Writer:         gz,
+			ResponseWriter: w,
 		}
 
 		next.ServeHTTP(compressedWriter, r)
@@ -53,8 +51,8 @@ func (c *CompressionMiddleware) Middleware(next http.Handler) http.Handler {
 // and an io.Writer (specifically a gzip.Writer). It overrides the Write method to ensure
 // that data is written through the gzip.Writer, enabling response compression.
 type compressionWriter struct {
-	io.Writer           // Embeds io.Writer to handle the actual writing of compressed data.
-	http.ResponseWriter // Embeds http.ResponseWriter to satisfy the http.ResponseWriter interface.
+	io.Writer
+	http.ResponseWriter
 }
 
 // Write overrides the default Write method to write compressed data.
@@ -65,7 +63,6 @@ func (c compressionWriter) Write(b []byte) (int, error) {
 }
 
 // Flush allows the compressionWriter to support flushing of the response.
-// It delegates the flush operation to the embedded ResponseWriter if it implements the http.Flusher interface.
 func (c compressionWriter) Flush() {
 	if flusher, ok := c.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
@@ -73,7 +70,6 @@ func (c compressionWriter) Flush() {
 }
 
 // Hijack allows the compressionWriter to support connection hijacking.
-// It delegates the hijacking process to the embedded ResponseWriter if it implements the http.Hijacker interface.
 func (c compressionWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := c.ResponseWriter.(http.Hijacker); ok {
 		return hijacker.Hijack()

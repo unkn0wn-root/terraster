@@ -133,11 +133,13 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 			return fmt.Errorf("service %s, location %s: no backends defined",
 				service.Name, location.Path)
 		}
+
 		locationPaths[location.Path] = true
 		serverPool, err := m.createServerPool(service, location, globalHealthCheck)
 		if err != nil {
 			return err
 		}
+
 		locations = append(locations, &LocationInfo{
 			Path:       location.Path,
 			Algorithm:  algorithm.CreateAlgorithm(location.LoadBalancer),
@@ -170,10 +172,10 @@ func (m *Manager) AddService(service config.Service, globalHealthCheck *config.H
 		Host:         service.Host,
 		Port:         service.Port,
 		TLS:          service.TLS,
-		HTTPRedirect: service.HTTPRedirect, // Indicates if HTTP should be redirected to HTTPS.
-		RedirectPort: service.RedirectPort, // Custom port for redirection if applicable.
+		HTTPRedirect: service.HTTPRedirect,
+		RedirectPort: service.RedirectPort,
 		HealthCheck:  serviceHealthCheck,
-		Locations:    locations, // Associated locations with their backends.
+		Locations:    locations,
 		Middleware:   service.Middleware,
 		LogName:      service.LogName,
 		LogOptions:   service.LogOptions,
@@ -215,6 +217,7 @@ func (m *Manager) GetService(
 			matchedLen = len(location.Path)
 		}
 	}
+
 	if matchedLocation == nil {
 		return nil, nil, fmt.Errorf("location not found for path %s", path)
 	}
@@ -264,7 +267,7 @@ func (m *Manager) createServerPool(
 ) (*pool.ServerPool, error) {
 	pm := m.pluginManager
 	if pm != nil && svc.DisablePluginLoad {
-		pm = nil // do not load plugin for service if explicitly disabled in config
+		pm = nil
 	}
 	serverPool := pool.NewServerPool(&svc, pm, m.logger)
 	serverPool.UpdateConfig(pool.PoolConfig{

@@ -14,13 +14,11 @@ type Result struct {
 	Headers      http.Header
 }
 
-// Common static results
 var (
 	ResultContinue = &Result{action: Continue}
 	ResultModify   = &Result{action: Modify}
 )
 
-// Pool for Result objects
 var resultPool = sync.Pool{
 	New: func() interface{} {
 		return &Result{
@@ -41,12 +39,10 @@ func NewResult(action Action, opts ...ResultOption) *Result {
 	r := resultPool.Get().(*Result)
 	r.action = action
 
-	// Clear headers map instead of reallocating
 	for k := range r.Headers {
 		delete(r.Headers, k)
 	}
 
-	// Reset other fields
 	r.StatusCode = 0
 	r.ResponseBody = nil
 

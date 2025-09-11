@@ -23,7 +23,6 @@ func NewHostnameMiddleware(hostname string, logger *zap.Logger) middleware.Middl
 
 func (m *HostnameMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract hostname from request, ignoring port number
 		host, _, err := net.SplitHostPort(r.Host)
 		if err != nil {
 			m.logger.Error("Could not split host", zap.Error(err))
@@ -31,7 +30,6 @@ func (m *HostnameMiddleware) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// If does not match - you shall not pass
 		if host != m.hostname {
 			m.logger.Warn("Invalid hostname",
 				zap.String("expected", m.hostname),

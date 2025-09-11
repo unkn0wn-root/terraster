@@ -52,32 +52,25 @@ func (c *CORS) Middleware(next http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", strings.Join(c.AllowedOrigins, ","))
 			}
 		}
-
 		if len(c.AllowedMethods) > 0 {
 			w.Header().Set("Access-Control-Allow-Methods", strings.Join(c.AllowedMethods, ","))
 		}
-
 		if len(c.AllowedHeaders) > 0 {
 			w.Header().Set("Access-Control-Allow-Headers", strings.Join(c.AllowedHeaders, ","))
 		}
-
 		if len(c.ExposedHeaders) > 0 {
 			w.Header().Set("Access-Control-Expose-Headers", strings.Join(c.ExposedHeaders, ","))
 		}
-
 		if c.AllowCredentials {
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
-
 		if c.MaxAge > 0 {
 			w.Header().Set("Access-Control-Max-Age", strconv.Itoa(c.MaxAge))
 		}
-
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }
