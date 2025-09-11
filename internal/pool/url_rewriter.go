@@ -21,14 +21,14 @@ type URLRewriter struct {
 // RewriteConfig holds configuration settings for URL rewriting and redirection.
 // It defines how incoming request paths should be transformed before being forwarded
 // to the backend services.
-type RewriteConfig struct {
+type Rewrite struct {
 	ProxyPath  string // The path prefix that the proxy should handle and potentially strip from incoming requests.
 	RewriteURL string // The URL to which the incoming request's path should be rewritten.
 	Redirect   string // The URL to redirect the request to, if redirection is enabled.
 }
 
 // NewURLRewriter determines whether the path prefix should be stripped and sets up the necessary rewrite and redirect rules.
-func NewURLRewriter(config RewriteConfig, backendURL *url.URL) *URLRewriter {
+func NewURLRewriter(config Rewrite, backendURL *url.URL) *URLRewriter {
 	backendPath := backendURL.Path
 	if backendPath == "" {
 		backendPath = "/"
