@@ -1,7 +1,7 @@
 # Terraster
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-A high-performance, feature-rich Layer 7 (L7) load balancer with a robust and user-friendly admin API.
+L7 load balancer with admin API.
 
 ## Overview
 
