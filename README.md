@@ -1,6 +1,13 @@
 # Terraster
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
+> [!WARNING]
+> **This repository is archived and no longer maintained.**
+>
+> Terraster was an experiment. It was a fun and good opportunity to learn low-level networking code, performance work in Go, and loading Go plugins at runtime with cgo. It has several known bugs that I don't have time to fix, and it will probably never be production ready.
+>
+> There are many solid, battle-tested load balancers out there, such as nginx, HAProxy, Caddy, Traefik and Envoy. Use one of those instead.
+
 L7 load balancer with admin API.
 
 ## Overview
